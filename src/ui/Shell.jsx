@@ -78,7 +78,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           {onSave && (
             <button
               onClick={onSave}
-              title="Сохранить тренировку в историю"
+              title="Обновить запись в истории (включая графики и карту)"
               style={{
                 background:   saveStatus === 'saved' ? 'rgba(74,222,128,0.12)' : 'rgba(232,168,50,0.08)',
                 border:       `1px solid ${saveStatus === 'saved' ? 'rgba(74,222,128,0.35)' : 'rgba(232,168,50,0.25)'}`,
@@ -93,7 +93,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
                 whiteSpace:   'nowrap',
               }}
             >
-              {saveStatus === 'saved' ? '✓ Сохранено' : '↓ Сохранить'}
+              {saveStatus === 'saved' ? '✓ Обновлено' : '↺ Обновить данные'}
             </button>
           )}
 
