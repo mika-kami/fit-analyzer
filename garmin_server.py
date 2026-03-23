@@ -3,11 +3,14 @@
 Garmin Connect local bridge server.
 Run: python garmin_server.py
 Then open the FIT Analyzer and click "Подключить Garmin".
+
+Handles Garmin SSO rate limiting by caching the session to disk.
 """
 
-import os, sys, subprocess, tempfile
+import os, sys, subprocess, tempfile, json, pickle
+from pathlib import Path
 
-# ── Dependency check with auto-install fallback ───────────────────────────────
+# ── Dependency check ──────────────────────────────────────────────────────────
 REQUIRED = ["garminconnect", "flask", "flask_cors"]
 
 def check_and_install():
@@ -17,65 +20,67 @@ def check_and_install():
             __import__(pkg)
         except ImportError:
             missing.append(pkg)
-
     if not missing:
         return
-
     pip_names = {"flask_cors": "flask-cors"}
     install_names = [pip_names.get(p, p) for p in missing]
-
-    print(f"\n  Missing packages: {', '.join(missing)}")
-    print(f"  Trying: {sys.executable} -m pip install {' '.join(install_names)}\n")
-
+    print(f"\n  Installing: {' '.join(install_names)}")
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install"] + install_names,
         capture_output=True, text=True
     )
-
     if result.returncode != 0:
-        print("  pip failed:")
-        print(result.stdout[-800:] if result.stdout else "")
-        print(result.stderr[-800:] if result.stderr else "")
-        print(f"\n  Fix: {sys.executable} -m pip install {' '.join(install_names)}\n")
-        sys.exit(1)
-
-    still_missing = []
-    for pkg in missing:
-        try:
-            __import__(pkg)
-        except ImportError:
-            still_missing.append(pkg)
-
-    if still_missing:
-        print(f"\n  Import still fails: {still_missing}")
+        print(result.stderr[-600:])
+        print(f"\n  Fix: {sys.executable} -m pip install {' '.join(install_names)}")
         sys.exit(1)
 
 check_and_install()
 
-# ── Imports ───────────────────────────────────────────────────────────────────
 from garminconnect import Garmin
 from flask import Flask, jsonify, request, send_file, make_response
 from flask_cors import CORS
 
 app = Flask(__name__)
-
-# Explicit CORS: allow all origins, all methods, all headers
-# This handles the preflight OPTIONS requests from the browser
 CORS(app, resources={r"/*": {
     "origins": "*",
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"],
 }})
 
-client = None
-
-# ── Helper: add CORS headers to every response ────────────────────────────────
 @app.after_request
 def after_request(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+client = None
+
+# Session cache — avoids re-login on server restart (reduces rate limit risk)
+SESSION_FILE = Path.home() / ".garmin_session"
+
+def save_session(c):
+    """Pickle the Garmin session tokens to disk."""
+    try:
+        SESSION_FILE.write_bytes(pickle.dumps(c.garth.dumps()))
+        print("  Session saved to", SESSION_FILE)
+    except Exception as e:
+        print(f"  Session save failed: {e}")
+
+def load_session(email):
+    """Try to restore a saved session — avoids SSO login."""
+    if not SESSION_FILE.exists():
+        return None
+    try:
+        g = Garmin()
+        g.garth.loads(pickle.loads(SESSION_FILE.read_bytes()))
+        g.display_name  # test the session
+        print("  Restored saved session (no SSO login needed)")
+        return g
+    except Exception as e:
+        print(f"  Saved session invalid ({e}), will re-login")
+        SESSION_FILE.unlink(missing_ok=True)
+        return None
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -95,22 +100,56 @@ def ping():
 def login():
     if request.method == "OPTIONS":
         return make_response("", 204)
+
     global client
     data  = request.get_json()
     email = data.get("email", "")
     pwd   = data.get("password", "")
+
     if not email or not pwd:
         return jsonify({"error": "email and password required"}), 400
+
+    # Try cached session first — avoids hitting Garmin SSO
+    restored = load_session(email)
+    if restored:
+        client = restored
+        try:
+            name = client.get_full_name()
+        except Exception:
+            name = email
+        return jsonify({"ok": True, "name": name, "from_cache": True})
+
+    # Fresh login
     try:
         c = Garmin(email, pwd)
         c.login()
+        save_session(c)
         client = c
-        try:   name = client.get_full_name()
-        except: name = email
+        try:
+            name = client.get_full_name()
+        except Exception:
+            name = email
         return jsonify({"ok": True, "name": name})
     except Exception as e:
+        msg = str(e)
+        # Friendly message for rate limit
+        if "429" in msg or "Too Many Requests" in msg:
+            return jsonify({
+                "error": "Garmin заблокировал попытки входа (429). "
+                         "Подождите 15–30 минут и попробуйте снова. "
+                         "Не повторяйте попытки раньше — это сбрасывает таймер."
+            }), 429
+        if "401" in msg or "Invalid" in msg.lower():
+            return jsonify({"error": "Неверный email или пароль"}), 401
         client = None
-        return jsonify({"error": str(e)}), 401
+        return jsonify({"error": msg}), 401
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    global client
+    client = None
+    SESSION_FILE.unlink(missing_ok=True)
+    return jsonify({"ok": True})
 
 @app.route("/activities")
 def activities():
@@ -137,34 +176,31 @@ def activities():
             })
         return jsonify({"ok": True, "activities": result})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        msg = str(e)
+        if "429" in msg:
+            return jsonify({"error": "Rate limited by Garmin. Wait a few minutes."}), 429
+        return jsonify({"error": msg}), 500
 
 @app.route("/activity/<int:activity_id>/fit")
 def download_fit(activity_id):
     if not client:
         return jsonify({"error": "not logged in"}), 401
     try:
-        # Garmin Connect returns a ZIP file containing the .fit
         data = client.download_activity(
             activity_id,
             dl_fmt=client.ActivityDownloadFormat.ORIGINAL,
         )
-
-        # Extract the .fit from the ZIP
         import zipfile, io
         fit_bytes = None
-
         if data[:2] == b'PK':
-            # It's a ZIP — extract the first .fit file inside
             with zipfile.ZipFile(io.BytesIO(data)) as zf:
                 for name in zf.namelist():
                     if name.lower().endswith('.fit'):
                         fit_bytes = zf.read(name)
                         break
             if fit_bytes is None:
-                return jsonify({"error": "No .fit file found inside ZIP"}), 500
+                return jsonify({"error": "No .fit file inside ZIP"}), 500
         else:
-            # Already raw FIT bytes (some API versions return directly)
             fit_bytes = data
 
         tmp = tempfile.NamedTemporaryFile(suffix=".fit", delete=False)
@@ -184,12 +220,9 @@ if __name__ == "__main__":
 ╠══════════════════════════════════════════════════════╣
 ║  Python:  {sys.executable:<42}║
 ║  Port:    {port:<42}║
+║  Session: {'saved at '+str(SESSION_FILE) if SESSION_FILE.exists() else 'no cached session':<42}║
 ║                                                      ║
-║  Test in browser: http://localhost:{port}/ping          ║
-║  Expected:  {{"ok": true, "status": "no_session"}}     ║
-║                                                      ║
-║  Open FIT Analyzer → click "Подключить Garmin"       ║
-║  Press Ctrl+C to stop                                ║
+║  Test: http://localhost:{port}/ping                     ║
 ╚══════════════════════════════════════════════════════╝
 """)
     app.run(host="127.0.0.1", port=port, debug=False)
