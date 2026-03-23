@@ -13,11 +13,10 @@ const TABS = [
   { id: 'map',      label: 'Карта'   },
   { id: 'zones',    label: 'Зоны'    },
   { id: 'plan',     label: 'План'    },
-  { id: 'history',  label: 'История' },
   { id: 'chat',     label: 'Тренер'  },
 ];
 
-export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, showBack }) {
+export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, showBack, onSave, saveStatus }) {
   return (
     <header style={{
       position:   'sticky',
@@ -73,6 +72,29 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
                 {w.trainingEffect.aerobic.toFixed(1)}
               </div>
             </div>
+          )}
+
+          {/* Save workout button */}
+          {onSave && (
+            <button
+              onClick={onSave}
+              title="Сохранить тренировку в историю"
+              style={{
+                background:   saveStatus === 'saved' ? 'rgba(74,222,128,0.12)' : 'rgba(232,168,50,0.08)',
+                border:       `1px solid ${saveStatus === 'saved' ? 'rgba(74,222,128,0.35)' : 'rgba(232,168,50,0.25)'}`,
+                borderRadius: 'var(--r-md)',
+                padding:      'var(--sp-2) var(--sp-3)',
+                color:        saveStatus === 'saved' ? '#4ade80' : 'var(--accent)',
+                cursor:       'pointer',
+                fontSize:     11,
+                fontWeight:   600,
+                fontFamily:   'var(--font-body)',
+                transition:   'all var(--t-base) var(--ease-snappy)',
+                whiteSpace:   'nowrap',
+              }}
+            >
+              {saveStatus === 'saved' ? '✓ Сохранено' : '↓ Сохранить'}
+            </button>
           )}
 
           {/* Garmin Connect button */}

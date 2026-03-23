@@ -37,6 +37,7 @@ export default function App() {
   const [screen,     setScreen]    = useState('dashboard');
   const [activeTab,  setActiveTab] = useState('overview');
   const [garminOpen, setGarminOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'saved'
 
   const auth     = useAuth();
   const workouts = useWorkouts(auth.user);       // Supabase-backed history
@@ -64,7 +65,16 @@ export default function App() {
   const handleBack = useCallback(() => {
     workout.reset();
     setScreen('dashboard');
+    setSaveStatus(null);
   }, [workout]);
+
+  const handleSave = useCallback(async () => {
+    if (!workout.workout) return;
+    setSaveStatus('saving');
+    const ok = await workouts.saveWorkout(workout.workout);
+    setSaveStatus(ok ? 'saved' : null);
+    setTimeout(() => setSaveStatus(null), 2500);
+  }, [workout.workout, workouts]);
 
   const handleLoadSample = useCallback(() => {
     workout.loadSample();
@@ -118,6 +128,8 @@ export default function App() {
             onGarmin={() => setGarminOpen(true)}
             garminStatus={garmin.status}
             showBack={true}
+            onSave={handleSave}
+            saveStatus={saveStatus}
           />
           <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
             {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}
@@ -131,4 +143,4 @@ export default function App() {
       )}
     </>
   );
-}
+}пше фвв
