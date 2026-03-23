@@ -1,0 +1,134 @@
+/**
+ * App.jsx — Root orchestrator (production).
+ * Screens: 'auth' | 'dashboard' | 'detail'
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth }      from './hooks/useAuth.js';
+import { useWorkouts }  from './hooks/useWorkouts.js';
+import { useWorkout }   from './hooks/useWorkout.js';
+import { useOpenAI }    from './hooks/useOpenAI.js';
+import { useGarmin }    from './hooks/useGarmin.js';
+import { AuthPage }     from './ui/auth/AuthPage.jsx';
+import { Dashboard }    from './ui/Dashboard.jsx';
+import { Shell }        from './ui/Shell.jsx';
+import { GarminPanel }  from './ui/GarminPanel.jsx';
+import { OverviewTab }  from './ui/tabs/OverviewTab.jsx';
+import { ChartsTab }    from './ui/tabs/ChartsTab.jsx';
+import { MapTab }       from './ui/tabs/MapTab.jsx';
+import { ZonesTab }     from './ui/tabs/ZonesTab.jsx';
+import { PlanTab }      from './ui/tabs/PlanTab.jsx';
+import { ChatTab }      from './ui/tabs/ChatTab.jsx';
+import './styles/tokens.css';
+
+const GLOBAL_STYLES = `
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg-base); color: var(--text-primary); }
+  body { font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+  input::placeholder { color: var(--text-dim); }
+  @keyframes spin    { to { transform: rotate(360deg); } }
+  @keyframes pulse   { 0%,80%,100%{opacity:.15} 40%{opacity:1} }
+  @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  @keyframes slideIn { from{transform:translateX(100%)} to{transform:none} }
+`;
+
+export default function App() {
+  const [screen,     setScreen]    = useState('dashboard');
+  const [activeTab,  setActiveTab] = useState('overview');
+  const [garminOpen, setGarminOpen] = useState(false);
+
+  const auth     = useAuth();
+  const workouts = useWorkouts(auth.user);       // Supabase-backed history
+  const workout  = useWorkout();                  // current open workout
+  const chat     = useOpenAI(workout.workout, workouts.recentWorkouts);
+  const garmin   = useGarmin(workout.loadFile);
+
+  // When file loaded successfully → save + open detail
+  useEffect(() => {
+    if (workout.status === 'ready' && workout.workout && screen === 'dashboard') {
+      setScreen('detail');
+      setActiveTab('overview');
+      if (auth.user) {
+        workouts.saveWorkout(workout.workout);
+      }
+    }
+  }, [workout.status]);
+
+  const handleSelectFromHistory = useCallback((summary) => {
+    workout.loadFromSummary(summary);
+    setScreen('detail');
+    setActiveTab('overview');
+  }, [workout]);
+
+  const handleBack = useCallback(() => {
+    workout.reset();
+    setScreen('dashboard');
+  }, [workout]);
+
+  const handleLoadSample = useCallback(() => {
+    workout.loadSample();
+    setScreen('detail');
+    setActiveTab('overview');
+  }, [workout]);
+
+  // Show loading spinner while checking auth
+  if (auth.loading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <style>{GLOBAL_STYLES}</style>
+      <div style={{ width: 28, height: 28, border: '2px solid var(--border-mid)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  );
+
+  // Not logged in → Auth screen
+  if (!auth.user) return (
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+      <style>{GLOBAL_STYLES}</style>
+      <AuthPage onSignIn={auth.signIn} onSignUp={auth.signUp} />
+    </>
+  );
+
+  return (
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+      <style>{GLOBAL_STYLES}</style>
+
+      {garminOpen && <GarminPanel garmin={garmin} onClose={() => setGarminOpen(false)} />}
+
+      {screen === 'dashboard' ? (
+        <Dashboard
+          history={workouts}
+          user={auth.user}
+          onFile={workout.loadFile}
+          onSample={handleLoadSample}
+          onGarmin={() => setGarminOpen(true)}
+          onSelectWorkout={handleSelectFromHistory}
+          onSignOut={auth.signOut}
+          isLoading={workout.status === 'loading'}
+          loadError={workout.status === 'error' ? workout.error : null}
+        />
+      ) : (
+        <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
+          <Shell
+            workout={workout.workout}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onReset={handleBack}
+            onGarmin={() => setGarminOpen(true)}
+            garminStatus={garmin.status}
+            showBack={true}
+          />
+          <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
+            {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}
+            {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
+            {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
+            {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
+            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
+            {activeTab === 'chat'     && <ChatTab     chat={chat} />}
+          </main>
+        </div>
+      )}
+    </>
+  );
+}

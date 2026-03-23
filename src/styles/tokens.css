@@ -1,0 +1,70 @@
+/* tokens.css
+   Single source of truth for the design system.
+   All components reference these variables — never hardcode colors or radii.
+   Aesthetic: precision instrument / flight computer — dark field,
+   amber-white data, surgical grid lines.
+*/
+
+:root {
+  /* ── Palette ─────────────────────────────────────────────────── */
+  --bg-base:        #07080c;
+  --bg-surface:     #0d0f16;
+  --bg-raised:      #13161f;
+  --bg-overlay:     rgba(255, 255, 255, 0.03);
+
+  --border-subtle:  rgba(255, 255, 255, 0.07);
+  --border-mid:     rgba(255, 255, 255, 0.12);
+  --border-strong:  rgba(255, 255, 255, 0.22);
+
+  --text-primary:   #ecedf0;
+  --text-secondary: #8b909e;
+  --text-muted:     #4b5063;
+  --text-dim:       #2e3141;
+
+  /* Accent: amber — instrument glow */
+  --accent:         #e8a832;
+  --accent-dim:     rgba(232, 168, 50, 0.15);
+  --accent-glow:    0 0 16px rgba(232, 168, 50, 0.25);
+
+  /* Semantic */
+  --success:        #4ade80;
+  --warning:        #f97316;
+  --danger:         #ef4444;
+  --info:           #60a5fa;
+
+  /* HR Zone colours */
+  --z1: #4ade80;
+  --z2: #a3e635;
+  --z3: #fbbf24;
+  --z4: #f97316;
+  --z5: #ef4444;
+
+  /* ── Typography ──────────────────────────────────────────────── */
+  --font-display: 'DM Mono', 'IBM Plex Mono', monospace;
+  --font-body:    'DM Sans', 'IBM Plex Sans', sans-serif;
+  --font-mono:    'DM Mono', 'IBM Plex Mono', monospace;
+
+  /* ── Spacing scale (4px base) ────────────────────────────────── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+
+  /* ── Radii ───────────────────────────────────────────────────── */
+  --r-sm:  6px;
+  --r-md:  10px;
+  --r-lg:  14px;
+  --r-xl:  20px;
+
+  /* ── Transitions ─────────────────────────────────────────────── */
+  --ease-snappy: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast:   120ms;
+  --t-base:   220ms;
+  --t-slow:   400ms;
+  --t-reveal: 600ms;
+}
