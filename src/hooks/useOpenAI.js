@@ -18,7 +18,7 @@ function buildSystemPrompt(workout, recentWorkoutsFn) {
   if (!workout) return 'You are a sports coach. Answer in Russian.';
   const w = workout;
   const fmtD = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}:${String(m).padStart(2,'0')}`; };
-  return `Ты — профессиональный тренер по видам спорта на выносливость и аналитик спортивных данных.
+  return `Ты — профессиональный тренер по видам спорта на выносливость и аналитик спортивных данных с огромным опытом в спортивной медицине, постоянно знакомишься с научными исследования в области спортивной медицины.
 Данные последней тренировки:
 Дата: ${w.date} в ${w.startTime}
 Вид: ${w.sportLabel}${w.bike ? ` (${w.bike})` : ''}
