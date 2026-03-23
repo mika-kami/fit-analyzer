@@ -93,11 +93,11 @@ export function useWorkouts(user) {
       }
 
       // Upsert workout (update if same date+source exists)
-      const { data, error: dbErr } = await supabase
-        .from('workouts')
-        .upsert(row, { onConflict: 'user_id,workout_date' })
-        .select()
-        .single();
+      // Insert new workout; if same date already exists, update it
+      const existing = history.find(h => h.date === workout.date);
+      const { data, error: dbErr } = existing?.id
+        ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
+        : await supabase.from('workouts').insert(row).select().single();
 
       if (dbErr) throw dbErr;
 
