@@ -69,10 +69,16 @@ export function useWorkout() {
   // Tabs that need timeSeries (Charts, Map) will show a graceful empty state
   const loadFromSummary = useCallback((summary) => {
     if (!summary) return;
-    // Augment summary with empty timeSeries if missing
+    // summary from DB already contains timeSeries (downsampled)
+    // Ensure all required fields have defaults
     const model = {
-      timeSeries: [],
-      ...summary,
+      timeSeries:   [],          // default: empty
+      hrZones:      [],
+      multiZones:   {},
+      recommendations: [],
+      ...summary,                // DB values override defaults
+      // Always ensure timeSeries is an array
+      timeSeries: Array.isArray(summary.timeSeries) ? summary.timeSeries : [],
     };
     setWorkout(model);
     setStatus('ready');

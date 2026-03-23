@@ -29,7 +29,9 @@ function toRow(workout, userId) {
       date:            workout.date,
       startTime:       workout.startTime,
       sport:           workout.sportLabel,
+      sportLabel:      workout.sportLabel,
       bike:            workout.bike,
+      fileName:        workout.fileName,
       distance:        workout.distance,
       duration:        workout.duration,
       calories:        workout.calories,
@@ -42,6 +44,8 @@ function toRow(workout, userId) {
       load:            workout.load,
       thresholdHr:     workout.thresholdHr,
       recommendations: workout.recommendations,
+      // Downsample timeSeries to every 4th point (~60KB) for Charts + Map
+      timeSeries: (workout.timeSeries ?? []).filter((_, i) => i % 4 === 0),
     },
   };
 }
@@ -50,8 +54,10 @@ function toRow(workout, userId) {
 function fromRow(row) {
   return {
     ...row.summary_json,
-    id:   row.id,
-    date: row.workout_date,
+    id:           row.id,
+    date:         row.workout_date,
+    // Ensure timeSeries is always an array (old rows may not have it)
+    timeSeries:   row.summary_json?.timeSeries ?? [],
   };
 }
 
