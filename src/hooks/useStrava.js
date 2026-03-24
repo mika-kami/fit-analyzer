@@ -4,7 +4,7 @@
  * full activity import with streams (GPS for maps, HR for zones).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { analyzeHrZones, buildMultiZones, assessLoad, generateRecommendations } from '../core/workoutAnalyzer.js';
+import { analyzeHrZones, buildMultiZones, assessLoad, generateRecommendations, getAthleteMaxHr, setAthleteMaxHr as persistAthleteMaxHr } from '../core/workoutAnalyzer.js';
 import { generateTrainingPlan } from '../core/trainingEngine.js';
 
 const CLIENT_ID    = import.meta.env.VITE_STRAVA_CLIENT_ID;
@@ -91,9 +91,10 @@ function buildStravaWorkout(activity, streams, athleteMaxHr) {
   const startDate = new Date(activity.start_date);
   const sport     = SPORT_MAP[activity.type] ?? activity.type ?? 'Activity';
 
-  // Max HR priority: athlete profile zones > activity max > stream max
+  // Max HR priority: athlete profile zones > stored persistent > activity max > stream max
   const streamMaxHr  = hrArr.length ? Math.max(...hrArr.filter(h => h > 0)) : 0;
-  const maxHr        = athleteMaxHr || activity.max_heartrate || streamMaxHr;
+  const storedMaxHr  = getAthleteMaxHr();
+  const maxHr        = athleteMaxHr || storedMaxHr || activity.max_heartrate || streamMaxHr;
   const thresholdHr  = maxHr ? Math.round(maxHr * 0.88) : 0;
 
   // Compute zones from actual HR stream (same logic as FIT-parsed workouts)
@@ -209,7 +210,10 @@ export function useStrava() {
       const hrZones = data?.heart_rate?.zones ?? [];
       if (hrZones.length) {
         const maxBpm = Math.max(...hrZones.map(z => z.max).filter(v => v > 0 && v < 300));
-        if (maxBpm > 0) setAthleteMaxHr(maxBpm);
+        if (maxBpm > 0) {
+          persistAthleteMaxHr(maxBpm);
+          setAthleteMaxHr(maxBpm);
+        }
       }
     } catch { /* non-critical — zones will use activity max HR */ }
   }, []);

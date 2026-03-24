@@ -344,6 +344,20 @@ export function generateRecommendations(workout) {
   }];
 }
 
+// ─── Persistent athlete max HR ───────────────────────────────────────────────
+// Stored in localStorage so zones use the true physiological max across all
+// workouts, not the peak HR of a single session.
+const ATHLETE_MAX_HR_KEY = 'athlete_max_hr';
+
+export function getAthleteMaxHr() {
+  const v = parseInt(localStorage.getItem(ATHLETE_MAX_HR_KEY), 10);
+  return v > 0 ? v : 0;
+}
+
+export function setAthleteMaxHr(hr) {
+  if (hr > 0) localStorage.setItem(ATHLETE_MAX_HR_KEY, String(hr));
+}
+
 // ─── Main export: build complete WorkoutModel ────────────────────────────────
 export function buildWorkoutModel(fitData, fileName = '') {
   const { sessions, laps, records, sports } = fitData;
@@ -371,15 +385,20 @@ export function buildWorkoutModel(fitData, fileName = '') {
     if (pt.speed    != null) pt.speedKmh = parseFloat((pt.speed * 3.6).toFixed(2));
   }
 
-  // maxHr priority: zones_target profile HR > hr_zone boundaries > session peak > computed from records
+  // maxHr priority: zones_target > hr_zone boundaries > stored athlete profile > session peak > computed
   const profileMaxHr  = fitData.zonesTarget?.[1] ?? 0;
   const thresholdHr   = fitData.zonesTarget?.[2] ?? 0;  // LT2 / lactate threshold
   // hr_zone messages (mesg 8) contain zone boundaries; the highest high_bpm (field 1) = athlete's max HR
   const hrZoneBpms    = (fitData.hrZones || []).map(z => z[1]).filter(v => v && v > 0 && v < 255);
   const hrZoneMaxHr   = hrZoneBpms.length ? Math.max(...hrZoneBpms) : 0;
+  const storedMaxHr   = getAthleteMaxHr();
   const validHr       = timeSeries.map(p => p.hr).filter(Boolean);
   const computedMaxHr = validHr.length ? validHr.reduce((a,b) => a>b?a:b) : 0;
-  const maxHr = profileMaxHr || hrZoneMaxHr || sess.maxHr || computedMaxHr;
+  const maxHr = profileMaxHr || hrZoneMaxHr || storedMaxHr || computedMaxHr;
+
+  // Persist athlete max HR from device profile for future workouts
+  if (profileMaxHr > 0) setAthleteMaxHr(profileMaxHr);
+  else if (hrZoneMaxHr > 0) setAthleteMaxHr(hrZoneMaxHr);
 
   // HR Zone analysis
   const hrZones = analyzeHrZones(timeSeries, maxHr);
