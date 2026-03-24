@@ -24,12 +24,14 @@ export function StravaPanel({ strava, onClose, onImport }) {
     connect, disconnect, fetchActivities, importActivity,
   } = strava;
 
-  // Fetch activities when panel opens and connected
+  // Fetch activities once when panel opens and connected
+  const [fetched, setFetched] = useState(false);
   useEffect(() => {
-    if (status === 'connected' && activities.length === 0) {
+    if (status === 'connected' && !fetched) {
+      setFetched(true);
       fetchActivities();
     }
-  }, [status]);
+  }, [status, fetched]);
 
   const handleImport = async (id) => {
     const workout = await importActivity(id);
