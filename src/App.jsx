@@ -8,10 +8,12 @@ import { useWorkouts }  from './hooks/useWorkouts.js';
 import { useWorkout }   from './hooks/useWorkout.js';
 import { useOpenAI }    from './hooks/useOpenAI.js';
 import { useGarmin }    from './hooks/useGarmin.js';
+import { useStrava }    from './hooks/useStrava.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
 import { GarminPanel }  from './ui/GarminPanel.jsx';
+import { StravaPanel }  from './ui/StravaPanel.jsx';
 import { OverviewTab }  from './ui/tabs/OverviewTab.jsx';
 import { ChartsTab }    from './ui/tabs/ChartsTab.jsx';
 import { MapTab }       from './ui/tabs/MapTab.jsx';
@@ -37,6 +39,7 @@ export default function App() {
   const [screen,     setScreen]    = useState('dashboard');
   const [activeTab,  setActiveTab] = useState('overview');
   const [garminOpen, setGarminOpen] = useState(false);
+  const [stravaOpen, setStravaOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'saved'
 
   const auth     = useAuth();
@@ -44,6 +47,7 @@ export default function App() {
   const workout  = useWorkout();                  // current open workout
   const chat     = useOpenAI(workout.workout, workouts.recentWorkouts);
   const garmin   = useGarmin(workout.loadFile);
+  const strava   = useStrava();
 
   // When file loaded successfully → save + open detail
   useEffect(() => {
@@ -82,6 +86,14 @@ export default function App() {
     setActiveTab('overview');
   }, [workout]);
 
+  const handleStravaImport = useCallback((model) => {
+    workout.loadFromSummary(model);
+    setScreen('detail');
+    setActiveTab('overview');
+    setStravaOpen(false);
+    if (auth.user) workouts.saveWorkout(model);
+  }, [workout, auth.user, workouts]);
+
   // Show loading spinner while checking auth
   if (auth.loading) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -105,6 +117,7 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
 
       {garminOpen && <GarminPanel garmin={garmin} onClose={() => setGarminOpen(false)} />}
+      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={handleStravaImport} />}
 
       {screen === 'dashboard' ? (
         <Dashboard
@@ -113,6 +126,8 @@ export default function App() {
           onFile={workout.loadFile}
           onSample={handleLoadSample}
           onGarmin={() => setGarminOpen(true)}
+          onStrava={() => setStravaOpen(true)}
+          stravaStatus={strava.status}
           onSelectWorkout={handleSelectFromHistory}
           onSignOut={auth.signOut}
           isLoading={workout.status === 'loading'}
@@ -127,6 +142,8 @@ export default function App() {
             onReset={handleBack}
             onGarmin={() => setGarminOpen(true)}
             garminStatus={garmin.status}
+            onStrava={() => setStravaOpen(true)}
+            stravaStatus={strava.status}
             showBack={true}
             onSave={handleSave}
             saveStatus={saveStatus}

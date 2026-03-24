@@ -218,6 +218,8 @@ export function Dashboard({
   onFile,
   onSample,
   onGarmin,
+  onStrava,
+  stravaStatus,
   onSelectWorkout,
   onSignOut,
   isLoading,
@@ -258,6 +260,16 @@ export function Dashboard({
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                 {user.email}
               </span>
+            )}
+            {onStrava && (
+              <button onClick={onStrava} style={{
+                background: stravaStatus === 'connected' ? 'rgba(252,76,2,0.1)' : 'var(--bg-overlay)',
+                border: `1px solid ${stravaStatus === 'connected' ? 'rgba(252,76,2,0.35)' : 'var(--border-subtle)'}`,
+                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
+                color: stravaStatus === 'connected' ? '#fc4c02' : 'var(--text-secondary)',
+                fontSize: 11, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}>{stravaStatus === 'connected' ? '◈ Strava' : '⊕ Strava'}</button>
             )}
             {onGarmin && (
               <button onClick={onGarmin} style={{

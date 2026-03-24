@@ -16,7 +16,7 @@ const TABS = [
   { id: 'chat',     label: 'Тренер'  },
 ];
 
-export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, showBack, onSave, saveStatus }) {
+export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus }) {
   return (
     <header style={{
       position:   'sticky',
@@ -96,6 +96,28 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
               {saveStatus === 'saved' ? '✓ Обновлено' : '↺ Обновить данные'}
             </button>
           )}
+
+          {/* Strava button */}
+          <button
+            onClick={onStrava}
+            title="Import from Strava"
+            style={{
+              background:   stravaStatus === 'connected' ? 'rgba(252,76,2,0.1)' : 'var(--bg-overlay)',
+              border:       `1px solid ${stravaStatus === 'connected' ? 'rgba(252,76,2,0.35)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-md)',
+              padding:      'var(--sp-2) var(--sp-3)',
+              color:        stravaStatus === 'connected' ? '#fc4c02' : 'var(--text-secondary)',
+              cursor:       'pointer',
+              fontSize:     11,
+              fontFamily:   'var(--font-body)',
+              transition:   `all var(--t-base) var(--ease-snappy)`,
+              whiteSpace:   'nowrap',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = stravaStatus === 'connected' ? 'rgba(252,76,2,0.35)' : 'var(--border-subtle)'; }}
+          >
+            {stravaStatus === 'connected' ? '◈ Strava' : '⊕ Strava'}
+          </button>
 
           {/* Garmin Connect button */}
           <button
