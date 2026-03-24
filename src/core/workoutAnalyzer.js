@@ -371,12 +371,15 @@ export function buildWorkoutModel(fitData, fileName = '') {
     if (pt.speed    != null) pt.speedKmh = parseFloat((pt.speed * 3.6).toFixed(2));
   }
 
-  // maxHr priority: zones_target profile HR > session peak > computed from records
+  // maxHr priority: zones_target profile HR > hr_zone boundaries > session peak > computed from records
   const profileMaxHr  = fitData.zonesTarget?.[1] ?? 0;
   const thresholdHr   = fitData.zonesTarget?.[2] ?? 0;  // LT2 / lactate threshold
+  // hr_zone messages (mesg 8) contain zone boundaries; the highest high_bpm (field 1) = athlete's max HR
+  const hrZoneBpms    = (fitData.hrZones || []).map(z => z[1]).filter(v => v && v > 0 && v < 255);
+  const hrZoneMaxHr   = hrZoneBpms.length ? Math.max(...hrZoneBpms) : 0;
   const validHr       = timeSeries.map(p => p.hr).filter(Boolean);
   const computedMaxHr = validHr.length ? validHr.reduce((a,b) => a>b?a:b) : 0;
-  const maxHr = profileMaxHr || sess.maxHr || computedMaxHr;
+  const maxHr = profileMaxHr || hrZoneMaxHr || sess.maxHr || computedMaxHr;
 
   // HR Zone analysis
   const hrZones = analyzeHrZones(timeSeries, maxHr);

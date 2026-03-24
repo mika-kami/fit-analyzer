@@ -42,7 +42,7 @@ const BASE_TYPE = {
 };
 
 // Global message numbers we care about
-const MESG = { FILE_ID: 0, SPORT: 12, ZONES_TARGET: 7, SESSION: 18, LAP: 19, RECORD: 20 };
+const MESG = { FILE_ID: 0, HR_ZONE: 8, SPORT: 12, ZONES_TARGET: 7, SESSION: 18, LAP: 19, RECORD: 20 };
 
 // FIT epoch: seconds since 1989-12-31 00:00:00 UTC
 export const FIT_EPOCH_MS = Date.UTC(1989, 11, 31, 0, 0, 0);
@@ -134,7 +134,7 @@ export function parseFit(buffer) {
   const dataEnd  = headerSize + dataSize;
 
   const localDefs = {}; // local message number → definition
-  const result = { sessions: [], laps: [], records: [], sports: [], fileId: null, zonesTarget: null };
+  const result = { sessions: [], laps: [], records: [], sports: [], hrZones: [], fileId: null, zonesTarget: null };
 
   while (pos < dataEnd) {
     if (pos >= bytes.length) break;
@@ -204,6 +204,7 @@ export function parseFit(buffer) {
         case MESG.LAP:          result.laps.push(row);       break;
         case MESG.RECORD:       result.records.push(row);    break;
         case MESG.SPORT:        result.sports.push(row);     break;
+        case MESG.HR_ZONE:      result.hrZones.push(row);    break;
         case MESG.FILE_ID:      result.fileId = row;         break;
         case MESG.ZONES_TARGET: result.zonesTarget = row;    break;
       }
