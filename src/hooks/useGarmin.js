@@ -1,6 +1,7 @@
 /** useGarmin.js — Bridge to garmin_server.py on localhost:8765. */
 
 import { useState, useEffect, useCallback } from 'react';
+import { buildGarminWorkout } from '../core/garminWorkoutBuilder.js';
 
 const BRIDGE_URL = 'http://localhost:8765';
 
@@ -100,6 +101,51 @@ export function useGarmin(onFitLoaded) {
     }
   }, [onFitLoaded]);
 
+  const sendPlanToGarmin = useCallback(async (planDays, sport, maxHr) => {
+    const results = [];
+    for (const day of planDays) {
+      if (day.type === 'rest') {
+        results.push({ date: day.date, status: 'skipped' });
+        continue;
+      }
+
+      const workoutJson = buildGarminWorkout({ ...day, sport }, maxHr);
+      if (!workoutJson) {
+        results.push({ date: day.date, status: 'skipped' });
+        continue;
+      }
+
+      try {
+        const createRes = await fetch(`${BRIDGE_URL}/workout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(workoutJson),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) throw new Error(createData.error ?? `HTTP ${createRes.status}`);
+
+        const now = new Date();
+        const [month, dayNum] = day.date.split('/');
+        const targetMonth = parseInt(month);
+        const year = targetMonth < now.getMonth() + 1 ? now.getFullYear() + 1 : now.getFullYear();
+        const isoDate = `${year}-${month}-${dayNum}`;
+
+        const schedRes = await fetch(`${BRIDGE_URL}/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workoutId: createData.workoutId, date: isoDate }),
+        });
+        const schedData = await schedRes.json();
+        if (!schedRes.ok) throw new Error(schedData.error ?? `HTTP ${schedRes.status}`);
+
+        results.push({ date: day.date, status: 'sent', workoutId: createData.workoutId });
+      } catch (e) {
+        results.push({ date: day.date, status: 'error', error: e.message });
+      }
+    }
+    return results;
+  }, []);
+
   return { status, serverFound, probeError, userName, activities, loadingId, error,
-           probe, login, loadActivities, downloadActivity };
+           probe, login, loadActivities, downloadActivity, sendPlanToGarmin };
 }

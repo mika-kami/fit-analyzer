@@ -86,7 +86,7 @@ export function PlanContextBanner({ meta, workout }) {
   );
 }
 
-export function PlanTab({ workout: w, history }) {
+export function PlanTab({ workout: w, history, garmin }) {
   // Today and tomorrow as start options (0=Mon..6=Sun)
   const todayDow    = (new Date().getDay() + 6) % 7;
   const tomorrowDow = (todayDow + 1) % 7;
@@ -99,6 +99,40 @@ export function PlanTab({ workout: w, history }) {
   const planMeta     = livePlan.meta;
 
   const DAY_FULL = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
+  const [sending,    setSending]    = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+  const [sendDetail, setSendDetail] = useState('');
+
+  const handleSendToGarmin = async () => {
+    if (!garmin?.serverFound || garmin?.status !== 'connected') return;
+    setSending(true);
+    setSendResult(null);
+
+    const sport = w?.sport?.toLowerCase().includes('run') ? 'running' : 'cycling';
+    const maxHr = w?.heartRate?.max || 180;
+    const days  = livePlan?.days ?? [];
+
+    try {
+      const results = await garmin.sendPlanToGarmin(days, sport, maxHr);
+      const sent   = results.filter(r => r.status === 'sent').length;
+      const errors = results.filter(r => r.status === 'error').length;
+
+      if (errors === 0) {
+        setSendResult('success');
+        setSendDetail(`${sent} тренировок отправлено в Garmin Connect`);
+      } else {
+        setSendResult('partial');
+        setSendDetail(`${sent} отправлено, ${errors} ошибок`);
+      }
+    } catch (e) {
+      setSendResult('error');
+      setSendDetail(e.message);
+    } finally {
+      setSending(false);
+      setTimeout(() => { setSendResult(null); setSendDetail(''); }, 5000);
+    }
+  };
+
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRevealed(true), 80); return () => clearTimeout(t); }, []);
   return (
@@ -133,6 +167,60 @@ export function PlanTab({ workout: w, history }) {
           ))}
         </div>
       </div>
+
+      {/* Garmin export button */}
+      {garmin && garmin.serverFound && (
+        <div style={{ marginBottom: 'var(--sp-4)' }}>
+          {garmin.status === 'connected' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+              <button
+                onClick={handleSendToGarmin}
+                disabled={sending}
+                style={{
+                  width: '100%',
+                  background: sendResult === 'success' ? 'rgba(74,222,128,0.1)'
+                            : sendResult === 'error'   ? 'rgba(239,68,68,0.1)'
+                            : 'rgba(232,168,50,0.08)',
+                  border: `1px solid ${
+                    sendResult === 'success' ? 'rgba(74,222,128,0.35)'
+                  : sendResult === 'error'   ? 'rgba(239,68,68,0.35)'
+                  : 'rgba(232,168,50,0.25)'}`,
+                  borderRadius: 'var(--r-md)',
+                  padding: 'var(--sp-3) var(--sp-4)',
+                  color: sendResult === 'success' ? '#4ade80'
+                       : sendResult === 'error'   ? '#ef4444'
+                       : 'var(--accent)',
+                  fontSize: 13, fontWeight: 600, cursor: sending ? 'wait' : 'pointer',
+                  fontFamily: 'var(--font-body)',
+                  transition: 'all var(--t-base) var(--ease-snappy)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                {sending && (
+                  <div style={{ width: 12, height: 12, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                )}
+                {sending              ? 'Отправка в Garmin…'
+                 : sendResult === 'success' ? '✓ Отправлено в Garmin Connect'
+                 : sendResult === 'error'   ? '✗ Ошибка отправки'
+                 : sendResult === 'partial' ? '⚠ Частично отправлено'
+                 : '◈ Отправить план в Garmin Connect'}
+              </button>
+              {sendDetail && (
+                <div style={{ fontSize: 11, color: sendResult === 'error' ? '#f87171' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+                  {sendDetail}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+                Тренировки появятся на устройстве после синхронизации
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--sp-3)' }}>
+              Войдите в Garmin Connect для отправки плана
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
         {plan.map((day, i) => <DayCard key={day.day} day={day} index={i} revealed={revealed} />)}

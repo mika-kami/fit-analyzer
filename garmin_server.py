@@ -237,6 +237,58 @@ def download_fit(activity_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/workout", methods=["POST", "OPTIONS"])
+def create_workout():
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    if not client:
+        return jsonify({"error": "not logged in"}), 401
+
+    workout_data = request.get_json()
+    if not workout_data:
+        return jsonify({"error": "workout JSON required"}), 400
+
+    try:
+        response = client.garth.post(
+            "connect",
+            "/workout-service/workout",
+            json=workout_data,
+            headers={"Content-Type": "application/json"},
+        )
+        return jsonify({"ok": True, "workoutId": response.get("workoutId")})
+    except Exception as e:
+        msg = str(e)
+        if "429" in msg:
+            return jsonify({"error": "Rate limited. Wait 30 min."}), 429
+        return jsonify({"error": msg}), 500
+
+
+@app.route("/schedule", methods=["POST", "OPTIONS"])
+def schedule_workout():
+    if request.method == "OPTIONS":
+        return make_response("", 204)
+    if not client:
+        return jsonify({"error": "not logged in"}), 401
+
+    data = request.get_json()
+    workout_id = data.get("workoutId")
+    date_str = data.get("date")  # 'YYYY-MM-DD'
+
+    if not workout_id or not date_str:
+        return jsonify({"error": "workoutId and date required"}), 400
+
+    try:
+        client.garth.post(
+            "connect",
+            f"/workout-service/schedule/{workout_id}",
+            json={"date": date_str},
+            headers={"Content-Type": "application/json"},
+        )
+        return jsonify({"ok": True, "workoutId": workout_id, "date": date_str})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8765))
     print(f"""

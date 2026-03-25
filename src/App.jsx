@@ -159,7 +159,7 @@ export default function App() {
             {activeTab === 'analytics' && <AnalyticsTab history={workouts} onSelectWorkout={handleSelectFromHistory} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
             {activeTab === 'laps'     && <LapsTab     workout={workout.workout} />}
-            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
+            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} garmin={garmin} />}
             {activeTab === 'chat'     && <ChatTab     chat={chat} />}
           </main>
         </div>
