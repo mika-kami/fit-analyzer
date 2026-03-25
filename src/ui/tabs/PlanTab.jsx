@@ -7,6 +7,7 @@ import { useState, useEffect }                                           from 'r
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateTrainingPlan } from '../../core/trainingEngine.js';
 import { Card, CardLabel }      from './OverviewTab.jsx';
+import { downloadFitWorkout }  from '../../core/fitWorkoutDownload.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Plan
@@ -223,7 +224,16 @@ export function PlanTab({ workout: w, history, garmin }) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-        {plan.map((day, i) => <DayCard key={day.day} day={day} index={i} revealed={revealed} />)}
+        {plan.map((day, i) => (
+          <DayCard
+            key={day.day}
+            day={day}
+            index={i}
+            revealed={revealed}
+            sport={w?.sport ?? w?.sportLabel ?? 'cycling'}
+            maxHr={w?.heartRate?.max || 180}
+          />
+        ))}
       </div>
 
       <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
@@ -264,7 +274,7 @@ export function PlanTab({ workout: w, history, garmin }) {
   );
 }
 
-export function DayCard({ day, index, revealed }) {
+export function DayCard({ day, index, revealed, sport, maxHr }) {
   const [show, setShow] = useState(false);
   useEffect(() => { const t = setTimeout(() => setShow(true), revealed ? index*60 : 0); return () => clearTimeout(t); }, [revealed, index]);
 
@@ -326,6 +336,24 @@ export function DayCard({ day, index, revealed }) {
           boxShadow: highlight ? `0 0 6px ${day.color}55` : 'none',
         }} />
       </div>
+      {day.type !== 'rest' && (
+        <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadFitWorkout(day, sport, maxHr); }}
+            title={`Скачать ${day.label} как .fit для Garmin`}
+            style={{
+              background: 'none', border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--r-sm)', padding: '3px 10px',
+              color: 'var(--text-dim)', fontSize: 10, cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', transition: 'all 120ms ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = day.color + '80'; e.currentTarget.style.color = day.color; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-dim)'; }}
+          >
+            ↓ .fit
+          </button>
+        </div>
+      )}
     </div>
   );
 }
