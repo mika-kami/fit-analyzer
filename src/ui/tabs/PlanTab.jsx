@@ -145,7 +145,7 @@ export function PlanTab({ workout: w, history }) {
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
             <XAxis dataKey="day" tick={{ fill:'#3a3d4e', fontSize:11, fontFamily:'var(--font-mono)' }} axisLine={false} tickLine={false} />
             <YAxis domain={[0,100]} tick={{ fill:'#3a3d4e', fontSize:10 }} axisLine={false} tickLine={false} width={24} />
-            <Tooltip contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)' }} formatter={(v,_,p) => [`${v}%`, p.payload.label]} />
+            <Tooltip contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)', color:'var(--text-primary)' }} labelStyle={{ color:'var(--text-muted)' }} itemStyle={{ color:'var(--text-secondary)' }} formatter={(v,_,p) => [`${v}%`, p.payload.label]} />
             <Bar dataKey="intensity" radius={[3,3,0,0]}>
               {plan.map((d,i) => <Cell key={i} fill={d.current ? '#e8a832' : d.color} opacity={d.current ? 1 : 0.75} />)}
             </Bar>

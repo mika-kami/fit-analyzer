@@ -101,7 +101,9 @@ export function ZonesTab({ workout: w }) {
             <XAxis dataKey="id" tick={{ fill:'#3a3d4e', fontSize:10, fontFamily:'var(--font-mono)' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill:'#3a3d4e', fontSize:10 }} axisLine={false} tickLine={false} width={28} />
             <Tooltip
-              contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)' }}
+              contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)', color:'var(--text-primary)' }}
+              labelStyle={{ color:'var(--text-muted)' }}
+              itemStyle={{ color:'var(--text-secondary)' }}
               formatter={(v,_,p) => [`${v} мин`, p.payload.name]}
             />
             <Bar dataKey="minutes" radius={[3,3,0,0]}>
