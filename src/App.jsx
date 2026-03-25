@@ -9,6 +9,7 @@ import { useWorkout }   from './hooks/useWorkout.js';
 import { useOpenAI }    from './hooks/useOpenAI.js';
 import { useGarmin }    from './hooks/useGarmin.js';
 import { useStrava }    from './hooks/useStrava.js';
+import { downloadWorkoutPDF } from './core/pdfReport.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
@@ -149,6 +150,7 @@ export default function App() {
             showBack={true}
             onSave={handleSave}
             saveStatus={saveStatus}
+            onPDF={() => workout.workout && downloadWorkoutPDF(workout.workout)}
           />
           <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
             {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}

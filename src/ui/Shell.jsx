@@ -18,7 +18,7 @@ const TABS = [
   { id: 'chat',     label: 'Тренер'  },
 ];
 
-export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus }) {
+export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus, onPDF }) {
   return (
     <header style={{
       position:   'sticky',
@@ -98,6 +98,28 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
               {saveStatus === 'saved' ? '✓ Обновлено' : '↺ Обновить данные'}
             </button>
           )}
+
+          {/* PDF Report button */}
+          <button
+            onClick={onPDF}
+            title="Скачать отчёт о тренировке (PDF)"
+            style={{
+              background:   'var(--bg-overlay)',
+              border:       '1px solid var(--border-subtle)',
+              borderRadius: 'var(--r-md)',
+              padding:      'var(--sp-2) var(--sp-3)',
+              color:        'var(--text-secondary)',
+              cursor:       'pointer',
+              fontSize:     11,
+              fontFamily:   'var(--font-body)',
+              transition:   `all var(--t-base) var(--ease-snappy)`,
+              whiteSpace:   'nowrap',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >
+            ↓ PDF
+          </button>
 
           {/* Strava button */}
           <button
