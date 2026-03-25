@@ -67,7 +67,7 @@ def save_session(c):
     except Exception as e:
         print(f"  Session save failed: {e}")
 
-def load_session(email):
+def load_session():
     """Try to restore a saved session — avoids SSO login."""
     if not SESSION_FILE.exists():
         return None
@@ -81,6 +81,9 @@ def load_session(email):
         print(f"  Saved session invalid ({e}), will re-login")
         SESSION_FILE.unlink(missing_ok=True)
         return None
+
+# Auto-restore session on startup — so /ping returns "connected" immediately
+client = load_session()
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -110,14 +113,11 @@ def login():
         return jsonify({"error": "email and password required"}), 400
 
     # Try cached session first — avoids hitting Garmin SSO
-    restored = load_session(email)
+    restored = load_session()
     if restored:
         client = restored
-        try:
-            name = client.get_full_name()
-        except Exception:
-            name = email
-        return jsonify({"ok": True, "name": name, "from_cache": True})
+        # Session already validated by load_session — skip extra API call
+        return jsonify({"ok": True, "name": email, "from_cache": True})
 
     # Fresh login
     try:

@@ -28,12 +28,17 @@ export function useGarmin(onFitLoaded) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       setServerFound(true);
-      setStatus(d.status === 'connected' ? 'connected' : 'disconnected');
+      if (d.status === 'connected') {
+        setStatus('connected');
+        // Session was auto-restored on server — fetch activities directly
+        loadActivities();
+      } else {
+        setStatus('disconnected');
+      }
     } catch (e) {
       clearTimeout(tid);
       setServerFound(false);
       setStatus('idle');
-      // Capture the actual error for display
       const msg = e.name === 'AbortError'
         ? 'Timeout — сервер не ответил за 4 сек'
         : (e.message || String(e));

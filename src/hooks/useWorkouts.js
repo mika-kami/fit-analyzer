@@ -3,7 +3,7 @@
  * Stores workouts in Supabase instead of window.storage.
  * API is compatible with useHistory so Dashboard/HistoryTab need no changes.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { parseFit } from '../core/fitParser.js';
 import { buildWorkoutModel } from '../core/workoutAnalyzer.js';
@@ -84,6 +84,9 @@ export function useWorkouts(user) {
   }, [user?.id]);
 
   // Save a parsed WorkoutModel + optionally upload the FIT file
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
   const saveWorkout = useCallback(async (workout, fitFile = null) => {
     if (!user) return false;
     try {
@@ -98,9 +101,10 @@ export function useWorkouts(user) {
         if (!uploadErr) row.fit_path = path;
       }
 
-      // Upsert workout (update if same date+source exists)
-      // Insert new workout; if same date already exists, update it
-      const existing = history.find(h => h.date === workout.date);
+      // Upsert: match by fileName (unique per source) or fall back to date
+      const cur = historyRef.current;
+      const existing = cur.find(h => h.fileName && h.fileName === workout.fileName)
+                    || cur.find(h => h.date === workout.date && !h.fileName?.startsWith('strava_'));
       const { data, error: dbErr } = existing?.id
         ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
         : await supabase.from('workouts').insert(row).select().single();
@@ -108,7 +112,7 @@ export function useWorkouts(user) {
       if (dbErr) throw dbErr;
 
       setHistory(prev => {
-        const filtered = prev.filter(w => w.date !== workout.date);
+        const filtered = prev.filter(w => w.id !== (existing?.id ?? data.id));
         return [fromRow(data), ...filtered].sort((a, b) =>
           b.date.localeCompare(a.date)
         );
@@ -124,7 +128,7 @@ export function useWorkouts(user) {
   // Delete a workout
   const deleteWorkout = useCallback(async (date) => {
     if (!user) return;
-    const w = history.find(h => h.date === date);
+    const w = historyRef.current.find(h => h.date === date);
     if (!w) return;
 
     // Delete FIT file from storage if exists
@@ -138,8 +142,8 @@ export function useWorkouts(user) {
       .eq('id', w.id)
       .eq('user_id', user.id);
 
-    if (!dbErr) setHistory(prev => prev.filter(h => h.date !== date));
-  }, [user, history]);
+    if (!dbErr) setHistory(prev => prev.filter(h => h.id !== w.id));
+  }, [user]);
 
   // Parse and save a new FIT file directly
   const uploadFit = useCallback(async (file) => {
