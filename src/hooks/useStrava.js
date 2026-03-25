@@ -91,10 +91,10 @@ function buildStravaWorkout(activity, streams, athleteMaxHr) {
   const startDate = new Date(activity.start_date);
   const sport     = SPORT_MAP[activity.type] ?? activity.type ?? 'Activity';
 
-  // Max HR priority: athlete profile zones > stored persistent > activity max > stream max
-  const streamMaxHr  = hrArr.length ? Math.max(...hrArr.filter(h => h > 0)) : 0;
-  const storedMaxHr  = getAthleteMaxHr();
-  const maxHr        = athleteMaxHr || storedMaxHr || activity.max_heartrate || streamMaxHr;
+  // Max HR: athlete HR zones (from Strava API) or persisted value from a FIT file.
+  // Never use the activity peak — that's the max reached in one workout, not the athlete's max.
+  const storedMaxHr = getAthleteMaxHr();
+  const maxHr       = athleteMaxHr || storedMaxHr || 0;
   const thresholdHr  = maxHr ? Math.round(maxHr * 0.88) : 0;
 
   // Compute zones from actual HR stream (same logic as FIT-parsed workouts)
@@ -215,7 +215,7 @@ export function useStrava() {
           setAthleteMaxHr(maxBpm);
         }
       }
-    } catch { /* non-critical — zones will use activity max HR */ }
+    } catch { /* non-critical — zones require a FIT file or Strava zones API */ }
   }, []);
 
   // On mount: check URL for OAuth callback code, or restore session
