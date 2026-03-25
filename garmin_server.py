@@ -57,7 +57,14 @@ def after_request(response):
 client = None
 
 # Session cache — avoids re-login on server restart (reduces rate limit risk)
-SESSION_FILE = Path.home() / ".garmin_session"
+SESSION_FILE  = Path.home() / ".garmin_session"
+
+# ── Login rate-limit state ─────────────────────────────────────────────────────
+import time as _time
+_last_login_attempt = 0.0   # epoch seconds of last attempt
+_rate_limited_until = 0.0   # epoch seconds when Garmin 429 cooldown expires
+_LOGIN_DEBOUNCE_S   = 10    # min seconds between any two login calls
+_RATE_LIMIT_WAIT_S  = 1800  # 30 min cooldown after a 429 from Garmin
 
 def save_session(c):
     """Pickle the Garmin session tokens to disk."""
@@ -104,7 +111,26 @@ def login():
     if request.method == "OPTIONS":
         return make_response("", 204)
 
-    global client
+    global client, _last_login_attempt, _rate_limited_until
+    now = _time.time()
+
+    # Block if Garmin previously returned 429 and cooldown hasn't expired
+    if now < _rate_limited_until:
+        wait = int(_rate_limited_until - now)
+        return jsonify({
+            "error": f"Garmin rate limit active. Wait {wait // 60}m {wait % 60}s before retrying."
+        }), 429
+
+    # Debounce — prevent rapid repeated calls
+    since_last = now - _last_login_attempt
+    if since_last < _LOGIN_DEBOUNCE_S:
+        wait = int(_LOGIN_DEBOUNCE_S - since_last)
+        return jsonify({
+            "error": f"Too fast — wait {wait}s before trying again."
+        }), 429
+
+    _last_login_attempt = now
+
     data  = request.get_json()
     email = data.get("email", "")
     pwd   = data.get("password", "")
@@ -116,7 +142,6 @@ def login():
     restored = load_session()
     if restored:
         client = restored
-        # Session already validated by load_session — skip extra API call
         return jsonify({"ok": True, "name": email, "from_cache": True})
 
     # Fresh login
@@ -132,11 +157,11 @@ def login():
         return jsonify({"ok": True, "name": name})
     except Exception as e:
         msg = str(e)
-        # Friendly message for rate limit
         if "429" in msg or "Too Many Requests" in msg:
+            _rate_limited_until = now + _RATE_LIMIT_WAIT_S
             return jsonify({
                 "error": "Garmin заблокировал попытки входа (429). "
-                         "Подождите 15–30 минут и попробуйте снова. "
+                         "Подождите 30 минут и попробуйте снова. "
                          "Не повторяйте попытки раньше — это сбрасывает таймер."
             }), 429
         if "401" in msg or "Invalid" in msg.lower():
