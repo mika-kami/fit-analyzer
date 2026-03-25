@@ -18,6 +18,7 @@ import { OverviewTab }  from './ui/tabs/OverviewTab.jsx';
 import { ChartsTab }    from './ui/tabs/ChartsTab.jsx';
 import { MapTab }       from './ui/tabs/MapTab.jsx';
 import { ZonesTab }     from './ui/tabs/ZonesTab.jsx';
+import { LapsTab }      from './ui/tabs/LapsTab.jsx';
 import { PlanTab }      from './ui/tabs/PlanTab.jsx';
 import { ChatTab }      from './ui/tabs/ChatTab.jsx';
 import './styles/tokens.css';
@@ -153,6 +154,7 @@ export default function App() {
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
             {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
+            {activeTab === 'laps'     && <LapsTab     workout={workout.workout} />}
             {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
             {activeTab === 'chat'     && <ChatTab     chat={chat} />}
           </main>

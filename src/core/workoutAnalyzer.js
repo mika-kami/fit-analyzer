@@ -85,6 +85,35 @@ export const SESSION_FIELDS = [
   [15,  'maxSpeed',       0.001,  0],   // → m/s
 ];
 
+// ─── Lap field decode ─────────────────────────────────────────────────────────
+// FIT LAP message (global 19) — field numbers differ from SESSION (18).
+// Key differences: speed is at 13 (not 14), ascent/descent at 17/18 (not 22/23).
+export const LAP_FIELDS = [
+  [253, 'timestamp',   1,      0],    // FIT timestamp
+  [7,   'elapsed',     0.001,  0],    // total seconds (incl. pauses)
+  [8,   'timer',       0.001,  0],    // active seconds
+  [9,   'distance',    0.01,   0],    // meters
+  [11,  'calories',    1,      0],
+  [13,  'avgSpeed',    0.001,  0],    // m/s (uint16, standard)
+  [14,  'maxSpeed',    0.001,  0],    // m/s
+  [17,  'ascent',      1,      0],    // meters
+  [18,  'descent',     1,      0],    // meters
+  [40,  'avgTemp',     1,      0],    // °C
+  [88,  'avgSpeedEnh', 0.001,  0],    // m/s (uint32 enhanced, preferred)
+];
+
+export function decodeLap(raw) {
+  const out = {};
+  for (const [num, key, scale, offset] of LAP_FIELDS) {
+    const v = raw[num];
+    if (v === null || v === undefined) continue;
+    out[key] = safe(v, scale, offset);
+  }
+  if (out.avgSpeedEnh != null) out.avgSpeed = out.avgSpeedEnh;
+  delete out.avgSpeedEnh;
+  return out;
+}
+
 // ─── Record field decode ──────────────────────────────────────────────────────
 export const RECORD_FIELDS = [
   [0,   'lat',        1 / 11930465, 0],    // semicircles → degrees
@@ -494,6 +523,7 @@ export function buildWorkoutModel(fitData, fileName = '') {
 
     // Laps
     lapCount: laps.length,
+    laps: laps.map((raw, i) => ({ n: i + 1, ...decodeLap(raw) })),
   };
 
   // Attach derived analysis

@@ -44,6 +44,7 @@ function toRow(workout, userId) {
       load:            workout.load,
       thresholdHr:     workout.thresholdHr,
       recommendations: workout.recommendations,
+      laps:            workout.laps ?? [],
       // Downsample timeSeries to every 4th point (~60KB) for Charts + Map
       timeSeries: (workout.timeSeries ?? []).filter((_, i) => i % 4 === 0),
     },

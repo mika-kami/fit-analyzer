@@ -12,6 +12,7 @@ const TABS = [
   { id: 'charts',   label: 'Графики' },
   { id: 'map',      label: 'Карта'   },
   { id: 'zones',    label: 'Зоны'    },
+  { id: 'laps',     label: 'Круги'   },
   { id: 'plan',     label: 'План'    },
   { id: 'chat',     label: 'Тренер'  },
 ];
