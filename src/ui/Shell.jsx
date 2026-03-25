@@ -10,8 +10,9 @@ import { fmtKm, fmtDurationShort } from '../core/format.js';
 const TABS = [
   { id: 'overview', label: 'Обзор'   },
   { id: 'charts',   label: 'Графики' },
-  { id: 'map',      label: 'Карта'   },
-  { id: 'zones',    label: 'Зоны'    },
+  { id: 'map',       label: 'Карта'     },
+  { id: 'analytics', label: 'Аналитика' },
+  { id: 'zones',     label: 'Зоны'      },
   { id: 'laps',     label: 'Круги'   },
   { id: 'plan',     label: 'План'    },
   { id: 'chat',     label: 'Тренер'  },

@@ -21,6 +21,7 @@ import { ZonesTab }     from './ui/tabs/ZonesTab.jsx';
 import { LapsTab }      from './ui/tabs/LapsTab.jsx';
 import { PlanTab }      from './ui/tabs/PlanTab.jsx';
 import { ChatTab }      from './ui/tabs/ChatTab.jsx';
+import { AnalyticsTab } from './ui/tabs/AnalyticsTab.jsx';
 import './styles/tokens.css';
 
 const GLOBAL_STYLES = `
@@ -153,6 +154,7 @@ export default function App() {
             {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
             {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
+            {activeTab === 'analytics' && <AnalyticsTab history={workouts} onSelectWorkout={handleSelectFromHistory} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
             {activeTab === 'laps'     && <LapsTab     workout={workout.workout} />}
             {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
