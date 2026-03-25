@@ -3,7 +3,8 @@
  * Primary entry point of the app. Replaces the upload-first flow.
  * Shows saved workouts, quick stats, and load options.
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
+import { BulkUploadModal } from './BulkUploadModal.jsx';
 
 const LOAD_COLOR = {
   high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151'
@@ -144,17 +145,17 @@ function WorkoutCard({ w, onSelect, onDelete }) {
 }
 
 // ── Drop zone for file upload ─────────────────────────────────────────────────
-function DropZone({ onFile, isLoading, compact }) {
+function DropZone({ onFile, onBulk, isLoading, compact }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef();
 
-  const handleFile = useCallback(file => {
-    if (file?.name?.toLowerCase().endsWith('.fit')) onFile(file);
-  }, [onFile]);
-
   const onDrop = e => {
     e.preventDefault(); setDrag(false);
-    const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+    const fitFiles = Array.from(e.dataTransfer.files).filter(
+      f => f.name.toLowerCase().endsWith('.fit')
+    );
+    if (fitFiles.length === 1) onFile(fitFiles[0]);
+    else if (fitFiles.length > 1) onBulk(fitFiles);
   };
 
   if (compact) {
@@ -175,9 +176,14 @@ function DropZone({ onFile, isLoading, compact }) {
           transition: 'all var(--t-base) var(--ease-snappy)',
         }}
       >
-        {isLoading ? '⏳ Загрузка…' : '↑ Загрузить FIT файл'}
-        <input ref={inputRef} type="file" accept=".fit" style={{ display: 'none' }}
-          onChange={e => handleFile(e.target.files[0])} />
+        {isLoading ? '⏳ Загрузка…' : '↑ Загрузить FIT (можно несколько)'}
+        <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
+          onChange={e => {
+            const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
+            if (fitFiles.length === 1) onFile(fitFiles[0]);
+            else if (fitFiles.length > 1) onBulk(fitFiles);
+            e.target.value = '';
+          }} />
       </button>
     );
   }
@@ -205,8 +211,13 @@ function DropZone({ onFile, isLoading, compact }) {
       <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
         Garmin · Wahoo · Polar · Suunto
       </div>
-      <input ref={inputRef} type="file" accept=".fit" style={{ display: 'none' }}
-        onChange={e => handleFile(e.target.files[0])} />
+      <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
+        onChange={e => {
+          const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
+          if (fitFiles.length === 1) onFile(fitFiles[0]);
+          else if (fitFiles.length > 1) onBulk(fitFiles);
+          e.target.value = '';
+        }} />
     </div>
   );
 }
@@ -226,6 +237,7 @@ export function Dashboard({
   loadError,
 }) {
   const [period, setPeriod] = useState(30);
+  const [bulkFiles, setBulkFiles] = useState(null);
 
   const workouts = history.history ?? [];
   const now      = new Date();
@@ -319,7 +331,7 @@ export function Dashboard({
                 Загрузите FIT файл из Garmin, Wahoo, Polar или Suunto
               </div>
             </div>
-            <DropZone onFile={onFile} isLoading={isLoading} compact={false} />
+            <DropZone onFile={onFile} onBulk={files => setBulkFiles(files)} isLoading={isLoading} compact={false} />
             <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
               <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
               <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>или</span>
@@ -360,7 +372,7 @@ export function Dashboard({
             </div>
 
             {/* Upload strip */}
-            <DropZone onFile={onFile} isLoading={isLoading} compact={true} />
+            <DropZone onFile={onFile} onBulk={files => setBulkFiles(files)} isLoading={isLoading} compact={true} />
 
             {/* Workout list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
@@ -388,6 +400,17 @@ export function Dashboard({
           </div>
         )}
       </div>
+
+      {bulkFiles && (
+        <BulkUploadModal
+          files={bulkFiles}
+          uploadFit={history.uploadFit}
+          onDone={() => {
+            setBulkFiles(null);
+            history.reload?.();
+          }}
+        />
+      )}
     </div>
   );
 }
