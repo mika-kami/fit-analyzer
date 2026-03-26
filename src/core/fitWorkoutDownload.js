@@ -1,14 +1,29 @@
 /**
  * fitWorkoutDownload.js
- * Triggers browser download of a FIT workout file.
+ * Downloads a training plan day as a structured workout file.
  *
- * To import to Garmin device:
- * 1. Go to connect.garmin.com -> Training -> Workouts
- * 2. Click Import -> drag the .fit file
- * 3. The workout appears in "My Workouts"
- * 4. Click "Schedule" to add to calendar, or sync to device
- * 5. On device: Training -> Workouts -> find by name
+ * IMPORTANT — Import instructions:
+ *
+ * For Garmin devices via USB (recommended):
+ *   1. Connect Garmin device to computer via USB
+ *   2. Open device storage (appears as USB drive)
+ *   3. Copy .fit file to the /GARMIN/WORKOUTS/ folder
+ *   4. Safely eject and disconnect
+ *   5. On device: Training → Workouts → find by name
+ *
+ * For Garmin Connect Web:
+ *   NOTE: The regular "Import" button on Garmin Connect only accepts
+ *   ACTIVITY files (recorded rides/runs), not workout plan files.
+ *   Use the "Отправить в Garmin" button in this app instead —
+ *   it uses the Workout API which correctly creates structured workouts.
+ *
+ * For Wahoo ELEMNT:
+ *   Wahoo app → More → Workouts → Import → select .fit file
+ *
+ * For Hammerhead Karoo:
+ *   Copy .fit to device storage under /Android/data/...workouts/
  */
+
 import { buildFitWorkout } from './fitWorkoutBuilder.js';
 
 export function downloadFitWorkout(day, sport, maxHr = 180) {
@@ -19,11 +34,11 @@ export function downloadFitWorkout(day, sport, maxHr = 180) {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
 
-  const now = new Date();
-  const [mm, dd] = (day.date ?? '01/01').split('/');
-  const targetMonth = parseInt(mm, 10);
-  const year = targetMonth < now.getMonth() + 1 ? now.getFullYear() + 1 : now.getFullYear();
-  const fname = `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}_${day.type}.fit`;
+  const now          = new Date();
+  const [mm, dd]     = (day.date ?? '01/01').split('/');
+  const targetMonth  = parseInt(mm, 10);
+  const year         = targetMonth < now.getMonth() + 1 ? now.getFullYear() + 1 : now.getFullYear();
+  const fname        = `${year}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}_${day.type}.fit`;
 
   a.href     = url;
   a.download = fname;
