@@ -28,7 +28,7 @@ export function useWorkout() {
   const [status,  setStatus]    = useState('idle');   // 'idle'|'loading'|'ready'|'error'
   const [error,   setError]     = useState(null);
 
-  const loadFile = useCallback(async (file) => {
+  const loadFile = useCallback(async (file, userMaxHr = 0) => {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.fit')) {
@@ -43,7 +43,7 @@ export function useWorkout() {
     try {
       const buffer  = await file.arrayBuffer();
       const fitData = parseFit(buffer);
-      const model   = buildWorkoutModel(fitData, file.name);
+      const model   = buildWorkoutModel(fitData, file.name, userMaxHr);
       setWorkout(model);
       setStatus('ready');
     } catch (e) {

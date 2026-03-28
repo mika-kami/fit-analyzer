@@ -178,7 +178,7 @@ export function useWorkouts(user) {
     if (!user) throw new Error('Not logged in');
     const buffer  = await file.arrayBuffer();
     const fitData = parseFit(buffer);
-    const model   = buildWorkoutModel(fitData, file.name);
+    const model   = buildWorkoutModel(fitData, file.name, historicalMaxHr);
     await saveWorkout(model, file);
     return model;
   }, [user, saveWorkout]);
@@ -270,7 +270,7 @@ export function useWorkouts(user) {
 
         // Parse FIT → WorkoutModel
         const fitData = parseFit(buffer);
-        const model   = buildWorkoutModel(fitData, `${item.garmin_activity_id}.fit`);
+        const model   = buildWorkoutModel(fitData, `${item.garmin_activity_id}.fit`, historicalMaxHr);
 
         // Attach garmin metadata
         model.garminActivityId = item.garmin_activity_id;

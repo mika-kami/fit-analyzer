@@ -345,7 +345,7 @@ export function generateRecommendations(workout) {
 }
 
 // ─── Main export: build complete WorkoutModel ────────────────────────────────
-export function buildWorkoutModel(fitData, fileName = '') {
+export function buildWorkoutModel(fitData, fileName = '', userMaxHr = 0) {
   const { sessions, laps, records, sports } = fitData;
   const rawSession = sessions[0];
   const sess = decodeSession(rawSession);
