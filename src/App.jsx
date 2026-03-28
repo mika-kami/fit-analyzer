@@ -128,7 +128,12 @@ export default function App() {
           onClose={() => setGarminOpen(false)}
         />
       )}
-      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} />}
+      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={(w) => {
+        workout.loadFromSummary(w);
+        setScreen('detail');
+        setActiveTab('overview');
+        setStravaOpen(false);
+      }} />}
 
       {screen === 'dashboard' ? (
         <Dashboard
