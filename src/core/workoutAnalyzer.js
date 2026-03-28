@@ -100,6 +100,22 @@ export const RECORD_FIELDS = [
   [253, 'timestamp',  1,            0],
 ];
 
+// ─── Lap field decode ────────────────────────────────────────────────────────
+// LAP message (mesg 19) shares most field numbers with SESSION
+export const LAP_FIELDS = [
+  [7,   'elapsed',     0.001,  0],   // total elapsed (seconds)
+  [8,   'timer',       0.001,  0],   // timer time (excluding pauses)
+  [9,   'distance',    0.01,   0],   // meters
+  [11,  'calories',     1,     0],
+  [15,  'avgHr',        1,     0],
+  [16,  'maxHr',        1,     0],
+  [17,  'avgCadence',   1,     0],
+  [21,  'ascent',       1,     0],   // total_ascent
+  [22,  'descent',      1,     0],   // total_descent
+  [13,  'avgSpeed',     0.001, 0],   // m/s (enhanced: 110)
+  [110, 'enhAvgSpeed',  0.001, 0],
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const safe = (v, scale = 1, offset = 0) =>
   v !== null && v !== undefined ? v * scale + offset : null;
@@ -131,6 +147,19 @@ export function decodeRecord(raw) {
   delete pt.speedStd;
   delete pt.altitudeStd;
   return pt;
+}
+
+// ─── Decode a raw lap row ────────────────────────────────────────────────────
+export function decodeLap(raw) {
+  const lap = {};
+  for (const [num, key, scale, offset] of LAP_FIELDS) {
+    const v = raw[num];
+    if (v === null || v === undefined) continue;
+    lap[key] = safe(v, scale, offset);
+  }
+  if (lap.enhAvgSpeed != null && lap.avgSpeed == null) lap.avgSpeed = lap.enhAvgSpeed;
+  delete lap.enhAvgSpeed;
+  return lap;
 }
 
 // ─── HR Zone analysis ─────────────────────────────────────────────────────────
@@ -480,6 +509,7 @@ export function buildWorkoutModel(fitData, fileName = '', userMaxHr = 0) {
 
     // Laps
     lapCount: laps.length,
+    laps: laps.map((raw, i) => ({ n: i + 1, ...decodeLap(raw) })),
   };
 
   // Attach derived analysis
