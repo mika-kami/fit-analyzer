@@ -19,9 +19,9 @@ function toRow(workout, userId) {
     distance_m:   Math.round(workout.distance ?? 0),
     duration_s:   Math.round(workout.duration?.active ?? 0),
     calories:     workout.calories ?? 0,
-    avg_hr:       workout.heartRate?.avg ?? null,
-    max_hr:       workout.heartRate?.max ?? null,
-    ascent_m:     workout.elevation?.ascent ?? null,
+    avg_hr:       workout.heartRate?.avg != null ? Math.round(workout.heartRate.avg) : null,
+    max_hr:       workout.heartRate?.max != null ? Math.round(workout.heartRate.max) : null,
+    ascent_m:     workout.elevation?.ascent != null ? Math.round(workout.elevation.ascent) : null,
     aerobic_te:   workout.trainingEffect?.aerobic ?? null,
     load_level:   workout.load?.level ?? null,
     summary_json: {
