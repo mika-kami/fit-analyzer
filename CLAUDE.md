@@ -1,52 +1,62 @@
 # CLAUDE.md — Project map
 
 When asking Claude to modify this project, provide **only the relevant file(s)**.
-Each file is self-contained and ≤ 350 lines. Typical edit = 1–2 files.
+Each file is self-contained. Typical edit = 1–2 files.
 
 ## Architecture
 
 ```
 src/
 ├── core/                     ← Pure logic, no React, fully testable
-│   ├── fitParser.js          # FIT binary parser (~220 lines) — rarely changes
+│   ├── fitParser.js          # FIT binary parser (~225 lines) — rarely changes
 │   ├── format.js             # fmtKm, fmtDuration, fmtNum (~60 lines)
-│   ├── workoutAnalyzer.js    # Zones, metrics, buildWorkoutModel (~480 lines)
+│   ├── workoutAnalyzer.js    # Zones, metrics, laps, buildWorkoutModel (~700 lines)
+│   ├── analyticsEngine.js    # CTL/ATL/TSB, aerobic efficiency, TE trend (~190 lines)
 │   ├── trainingEngine.js     # Plan generator, ATL/CTL/TSB (~280 lines) ← changes often
-│   ├── sampleWorkout.js      # Demo data (~110 lines)
-│   └── gpxExport.js          # GPX file export functionality (~100 lines)
+│   ├── sampleWorkout.js      # Demo data (~135 lines)
+│   ├── gpxExport.js          # GPX file export (~100 lines)
+│   ├── pdfReport.js          # PDF report generation (~190 lines)
+│   ├── fitWorkoutBuilder.js  # FIT workout file builder (~210 lines)
+│   ├── fitWorkoutDownload.js # FIT workout download helper (~50 lines)
+│   └── garminWorkoutBuilder.js # Garmin workout format builder (~155 lines)
 │
 ├── hooks/                    ← React state, one concern each
-│   ├── useWorkout.js         # File-load state machine (~65 lines)
-│   ├── useHistory.js         # Storage + in-memory fallback (~165 lines)
-│   ├── useOpenAI.js          # Chat: OpenAI → Anthropic fallback (~135 lines)
-│   ├── useGarmin.js          # Garmin bridge, localhost:8765 (~85 lines)
-│   ├── useAuth.js            # Authentication state management (~120 lines)
-│   └── useWorkouts.js        # Supabase workout storage (~180 lines)
+│   ├── useWorkout.js         # File-load state machine (~90 lines)
+│   ├── useWorkouts.js        # Supabase workout storage, duplicate resolution (~360 lines)
+│   ├── useOpenAI.js          # Chat: OpenAI GPT, key from env (~120 lines)
+│   ├── useGarmin.js          # Garmin bridge, localhost:8765 (~100 lines)
+│   ├── useStrava.js          # Strava OAuth + activity import (~320 lines)
+│   ├── useAuth.js            # Authentication state management (~75 lines)
+│   └── useHistory.js         # Legacy storage + in-memory fallback (~170 lines)
 │
 ├── lib/                      ← External service clients
-│   └── supabase.js           # Supabase client configuration (~50 lines)
+│   └── supabase.js           # Supabase client configuration (~20 lines)
 │
 ├── ui/                       ← React components, no business logic
 │   ├── MetricCard.jsx        # Single metric display (~65 lines)
 │   ├── ZoneBar.jsx           # Animated zone bar (~75 lines)
-│   ├── TimeSeriesChart.jsx   # Recharts wrapper (~100 lines)
-│   ├── Upload.jsx            # Drag-drop entry screen (~230 lines)
-│   ├── Shell.jsx             # Sticky header + tabs (~155 lines)
-│   ├── GarminPanel.jsx       # Garmin slide-in panel (~200 lines)
-│   ├── Dashboard.jsx         # Main dashboard view (~150 lines)
+│   ├── TimeSeriesChart.jsx   # Recharts wrapper (~110 lines)
+│   ├── Upload.jsx            # Drag-drop entry screen (~235 lines)
+│   ├── Shell.jsx             # Sticky header + tabs (~225 lines)
+│   ├── Dashboard.jsx         # Main dashboard view (~415 lines)
+│   ├── GarminPanel.jsx       # Garmin sync slide-in panel (~260 lines)
+│   ├── StravaPanel.jsx       # Strava connect + import panel (~265 lines)
+│   ├── BulkUploadModal.jsx   # Bulk FIT file upload (~175 lines)
 │   ├── auth/
-│   │   └── AuthPage.jsx      # Login/signup screen (~200 lines)
+│   │   └── AuthPage.jsx      # Login/signup screen (~160 lines)
 │   └── tabs/
-│       ├── OverviewTab.jsx   # Metrics, TE, zones, recs (~90 lines)
-│       ├── ChartsTab.jsx     # Time-series graphs (~200 lines)
-│       ├── ZonesTab.jsx      # Multi-model zone analysis (~280 lines)
-│       ├── PlanTab.jsx       # Training plan + day picker (~320 lines)
-│       ├── HistoryTab.jsx    # Heatmap + period stats (~510 lines)
-│       ├── ChatTab.jsx       # AI coach chat (~245 lines)
-│       └── MapTab.jsx        # Workout map visualization (~180 lines)
+│       ├── OverviewTab.jsx   # Metrics, TE, zones, recs (~360 lines)
+│       ├── ChartsTab.jsx     # Time-series graphs (~150 lines)
+│       ├── ZonesTab.jsx      # Multi-model zone analysis (~215 lines)
+│       ├── PlanTab.jsx       # Training plan + day picker (~360 lines)
+│       ├── HistoryTab.jsx    # Heatmap + period stats (~320 lines)
+│       ├── ChatTab.jsx       # AI coach chat with markdown rendering (~290 lines)
+│       ├── MapTab.jsx        # Workout map visualization (~245 lines)
+│       ├── LapsTab.jsx       # Per-lap breakdown table (~145 lines)
+│       └── AnalyticsTab.jsx  # CTL/ATL/TSB charts, form state (~380 lines)
 │
 ├── styles/tokens.css         # CSS variables — single source of truth
-├── App.jsx                   # Orchestrator only — 75 lines, touch rarely
+├── App.jsx                   # Orchestrator — wires hooks to views (~180 lines)
 └── main.jsx                  # React entry point
 ```
 
@@ -55,19 +65,28 @@ src/
 | Change | Files to provide |
 |--------|-----------------|
 | Plan algorithm (detraining, ATL/CTL) | `core/trainingEngine.js` |
+| Analytics (CTL/ATL/TSB, AET, TE trend) | `core/analyticsEngine.js` |
 | Zone model (Seiler/Coggan) | `core/workoutAnalyzer.js` |
 | FIT parsing bug | `core/fitParser.js` |
+| Lap decoding | `core/workoutAnalyzer.js` (LAP_FIELDS, decodeLap) |
 | Format utilities | `core/format.js` |
-| GPX export functionality | `core/gpxExport.js` |
+| GPX export | `core/gpxExport.js` |
+| PDF report | `core/pdfReport.js` |
+| FIT workout builder | `core/fitWorkoutBuilder.js` + `core/fitWorkoutDownload.js` |
+| Garmin workout format | `core/garminWorkoutBuilder.js` |
 | Zone tab UI | `ui/tabs/ZonesTab.jsx` |
 | Plan tab UI | `ui/tabs/PlanTab.jsx` |
 | History calendar | `ui/tabs/HistoryTab.jsx` |
 | Map visualization | `ui/tabs/MapTab.jsx` |
+| Laps tab UI | `ui/tabs/LapsTab.jsx` |
+| Analytics tab UI | `ui/tabs/AnalyticsTab.jsx` |
 | AI coach chat | `ui/tabs/ChatTab.jsx` + `hooks/useOpenAI.js` |
-| Garmin integration | `ui/GarminPanel.jsx` + `hooks/useGarmin.js` |
+| LLM config (model, URL, tokens) | `.env_llm` |
+| Garmin sync integration | `ui/GarminPanel.jsx` + `hooks/useGarmin.js` |
+| Strava integration | `ui/StravaPanel.jsx` + `hooks/useStrava.js` |
 | Authentication | `ui/auth/AuthPage.jsx` + `hooks/useAuth.js` |
 | Dashboard layout | `ui/Dashboard.jsx` |
-| Supabase storage | `hooks/useWorkouts.js` + `src/lib/supabase.js` |
+| Supabase storage / duplicates | `hooks/useWorkouts.js` + `src/lib/supabase.js` |
 | New tab | new `ui/tabs/XTab.jsx` + 3 lines in `App.jsx` + 1 line in `ui/Shell.jsx` |
 | Shared atom component | `ui/MetricCard.jsx` or `ui/ZoneBar.jsx` |
 
@@ -78,25 +97,42 @@ src/
 - `App.jsx` wires hooks to views — zero business logic
 - `tokens.css` is the only source of colors, spacing, radii
 
+## Data flow: workout saving & duplicate resolution
+- `useWorkouts.saveGarminActivities()` — checks for same-date or same-garmin-id duplicates; updates existing if new data is richer (garmin FIT > upload > strava) using `dataRichness()` scoring
+- `useWorkouts.saveWorkout()` — upserts by date match
+- `summary_json` stores all fields needed for offline display including `laps` and downsampled `timeSeries`
+
+## Environment files
+
+| File | Tracked | Purpose |
+|------|---------|---------|
+| `.env.example` | yes | Template: Supabase keys, Strava OAuth, OpenAI key |
+| `.env` | no (.gitignore) | Actual secrets: Supabase, Strava, `VITE_OPENAI_API_KEY` |
+| `.env_llm` | yes | LLM config: `VITE_LLM_URL`, `VITE_LLM_MODEL`, `VITE_LLM_MAX_TOKENS` |
+| `garmin_config.json` | no | Garmin sync settings (auto-created on first run) |
+
 ## Production (Supabase) files
 
 | File | Purpose |
 |------|---------|
 | `src/lib/supabase.js` | Supabase client (reads .env) |
-| `src/hooks/useAuth.js` | Auth: signIn, signUp, signOut, GDPR export |
-| `src/hooks/useWorkouts.js` | Replaces useHistory — stores in PostgreSQL |
+| `src/hooks/useAuth.js` | Auth: signIn, signUp, signOut |
+| `src/hooks/useWorkouts.js` | Stores workouts in PostgreSQL, handles duplicates |
 | `src/ui/auth/AuthPage.jsx` | Login / signup screen |
-| `.env.example` | Copy to .env, fill Supabase keys |
 | `vercel.json` | SPA routing for Vercel deploy |
-| `garmin_server.py` | Local Garmin Connect bridge (localhost:8765) |
+| `garmin_server.py` | Local Garmin Connect bridge — Playwright scraping (localhost:8765) |
+| `vite.config.js` | Vite config — loads `.env_llm` for LLM constants |
 
 ## Deployment steps
 1. Create Supabase project (Frankfurt region)
 2. Set up database tables manually in Supabase SQL Editor
-3. Copy .env.example → .env, fill Supabase keys
-4. npm install
-5. vercel deploy (or: npm run build → upload dist/)
+3. Copy .env.example → .env, fill Supabase + Strava + OpenAI keys
+4. Edit `.env_llm` if needed (model, URL, token limit)
+5. npm install
+6. vercel deploy (or: npm run build → upload dist/)
 
 ## Local development
 - Garmin integration requires: `python garmin_server.py` (runs on localhost:8765)
 - Garmin features only work locally (CORS restrictions prevent remote access)
+- Strava OAuth requires callback domain configured at strava.com/settings/api
+- AI chat requires `VITE_OPENAI_API_KEY` in `.env`

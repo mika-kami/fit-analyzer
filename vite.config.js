@@ -1,3 +1,37 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-export default defineConfig({ plugins: [react()], server: { port: 5173 } });
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+function loadEnvFile(filePath) {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const vars = {};
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq < 0) continue;
+      vars[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+    return vars;
+  } catch { return {}; }
+}
+
+export default defineConfig(({ mode }) => {
+  const llmVars = loadEnvFile(resolve(__dirname, '.env_llm'));
+
+  // Inject VITE_* vars from .env_llm as define replacements
+  const define = {};
+  for (const [key, value] of Object.entries(llmVars)) {
+    if (key.startsWith('VITE_')) {
+      define[`import.meta.env.${key}`] = JSON.stringify(value);
+    }
+  }
+
+  return {
+    plugins: [react()],
+    server: { port: 5173 },
+    define,
+  };
+});
