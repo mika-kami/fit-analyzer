@@ -3,7 +3,7 @@
  * Stores workouts in Supabase instead of window.storage.
  * API is compatible with useHistory so Dashboard/HistoryTab need no changes.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { parseFit } from '../core/fitParser.js';
 import { buildWorkoutModel } from '../core/workoutAnalyzer.js';
@@ -19,8 +19,8 @@ function toRow(workout, userId) {
     distance_m:   Math.round(workout.distance ?? 0),
     duration_s:   Math.round(workout.duration?.active ?? 0),
     calories:     workout.calories ?? 0,
-    avg_hr:       workout.heartRate?.avg != null ? Math.round(workout.heartRate.avg) : null,
-    max_hr:       workout.heartRate?.max != null ? Math.round(workout.heartRate.max) : null,
+    avg_hr:       workout.heartRate?.avg ?? null,
+    max_hr:       workout.heartRate?.max ?? null,
     ascent_m:     workout.elevation?.ascent ?? null,
     aerobic_te:   workout.trainingEffect?.aerobic ?? null,
     load_level:   workout.load?.level ?? null,
@@ -44,7 +44,6 @@ function toRow(workout, userId) {
       load:            workout.load,
       thresholdHr:     workout.thresholdHr,
       recommendations: workout.recommendations,
-      laps:            workout.laps ?? [],
       // Downsample timeSeries to every 4th point (~60KB) for Charts + Map
       timeSeries: (workout.timeSeries ?? []).filter((_, i) => i % 4 === 0),
     },
@@ -52,14 +51,42 @@ function toRow(workout, userId) {
 }
 
 // Convert DB row → WorkoutSummary (for cards + plan)
+// Estimate aerobic TE from intensity × duration (for Strava workouts without TE)
+function estimateTE(avgHr, maxHr, durationSec) {
+  if (!avgHr || avgHr < 60 || !maxHr || maxHr < 100 || !durationSec || durationSec < 300) return 0;
+  const durationH = durationSec / 3600;
+  const intensity = Math.min(1.0, avgHr / maxHr);
+  const stress    = durationH * Math.pow(intensity, 2) * 100;
+  let te;
+  if      (stress < 15)  te = 1.0 + (stress / 15) * 0.5;
+  else if (stress < 40)  te = 1.5 + ((stress - 15) / 25) * 1.0;
+  else if (stress < 80)  te = 2.5 + ((stress - 40) / 40) * 1.0;
+  else if (stress < 150) te = 3.5 + ((stress - 80) / 70) * 0.7;
+  else                   te = Math.min(5.0, 4.2 + ((stress - 150) / 150) * 0.8);
+  return parseFloat(te.toFixed(1));
+}
+
 function fromRow(row) {
-  return {
+  const base = {
     ...row.summary_json,
-    id:           row.id,
-    date:         row.workout_date,
-    // Ensure timeSeries is always an array (old rows may not have it)
-    timeSeries:   row.summary_json?.timeSeries ?? [],
+    id:         row.id,
+    date:       row.workout_date,
+    timeSeries: row.summary_json?.timeSeries ?? [],
   };
+
+  // Fix TE for Strava workouts: edge function may have saved wrong value (0 or 5).
+  // Recalculate client-side from DB columns which are always correct.
+  if (row.source === 'strava') {
+    const te = estimateTE(row.avg_hr, row.max_hr, row.duration_s);
+    // Always override — don't keep a wrong value (0 or 5) from the edge function
+    base.trainingEffect = {
+      aerobic:   te,          // 0 if no HR data (cycling without monitor)
+      anaerobic: 0,
+      estimated: te > 0,      // only flag as estimated when we have HR to work with
+    };
+  }
+
+  return base;
 }
 
 export function useWorkouts(user) {
@@ -85,9 +112,6 @@ export function useWorkouts(user) {
   }, [user?.id]);
 
   // Save a parsed WorkoutModel + optionally upload the FIT file
-  const historyRef = useRef(history);
-  historyRef.current = history;
-
   const saveWorkout = useCallback(async (workout, fitFile = null) => {
     if (!user) return false;
     try {
@@ -102,10 +126,9 @@ export function useWorkouts(user) {
         if (!uploadErr) row.fit_path = path;
       }
 
-      // Upsert: match by fileName (unique per source) or fall back to date
-      const cur = historyRef.current;
-      const existing = cur.find(h => h.fileName && h.fileName === workout.fileName)
-                    || cur.find(h => h.date === workout.date && !h.fileName?.startsWith('strava_'));
+      // Find existing workout for this date (any source).
+      // FIT file upload always wins — richer data than Strava import.
+      const existing = history.find(h => h.date === workout.date);
       const { data, error: dbErr } = existing?.id
         ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
         : await supabase.from('workouts').insert(row).select().single();
@@ -113,7 +136,7 @@ export function useWorkouts(user) {
       if (dbErr) throw dbErr;
 
       setHistory(prev => {
-        const filtered = prev.filter(w => w.id !== (existing?.id ?? data.id));
+        const filtered = prev.filter(w => w.date !== workout.date);
         return [fromRow(data), ...filtered].sort((a, b) =>
           b.date.localeCompare(a.date)
         );
@@ -129,7 +152,7 @@ export function useWorkouts(user) {
   // Delete a workout
   const deleteWorkout = useCallback(async (date) => {
     if (!user) return;
-    const w = historyRef.current.find(h => h.date === date);
+    const w = history.find(h => h.date === date);
     if (!w) return;
 
     // Delete FIT file from storage if exists
@@ -143,8 +166,8 @@ export function useWorkouts(user) {
       .eq('id', w.id)
       .eq('user_id', user.id);
 
-    if (!dbErr) setHistory(prev => prev.filter(h => h.id !== w.id));
-  }, [user]);
+    if (!dbErr) setHistory(prev => prev.filter(h => h.date !== date));
+  }, [user, history]);
 
   // Parse and save a new FIT file directly
   const uploadFit = useCallback(async (file) => {
@@ -199,11 +222,38 @@ export function useWorkouts(user) {
     });
   }, [user]);
 
+  // Force reload from DB (called after Strava sync)
+  const reload = useCallback(() => {
+    if (!user) return;
+    supabase
+      .from('workouts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('workout_date', { ascending: false })
+      .then(({ data }) => {
+        if (data) setHistory(data.map(fromRow));
+      });
+  }, [user?.id]);
+
+  // Best guess at athlete's true max HR from history
+  // Uses 95th percentile of session peaks to avoid outliers
+  const historicalMaxHr = (() => {
+    const peaks = history
+      .map(w => w.heartRate?.peakInWorkout || w.heartRate?.max || 0)
+      .filter(hr => hr > 100)
+      .sort((a, b) => b - a);
+    if (!peaks.length) return 0;
+    // 95th percentile index
+    const idx = Math.max(0, Math.floor(peaks.length * 0.05));
+    return peaks[idx] || 0;
+  })();
+
   return {
     // Same API as useHistory:
     history, loadingDb, storageOk: !!user,
     saveWorkout, deleteWorkout, recentWorkouts, aggregateStats,
     // New:
-    uploadFit, error, getChatHistory, saveChatMessage,
+    uploadFit, reload, error, getChatHistory, saveChatMessage,
+    historicalMaxHr,
   };
 }
