@@ -93,6 +93,20 @@ function fromRow(row) {
   return base;
 }
 
+// Source priority: garmin FIT > upload FIT > strava (API streams, no laps/TE)
+const SOURCE_RANK = { garmin: 3, upload: 2, strava: 1 };
+
+// Score how "rich" a workout's data is — higher = more data
+function dataRichness(w) {
+  let score = SOURCE_RANK[w.source] ?? 0;
+  if (w.laps?.length)                    score += 2;
+  if (w.timeSeries?.length > 10)         score += 2;
+  if (w.trainingEffect?.aerobic > 0 && !w.trainingEffect?.estimated) score += 1;
+  if (w.heartRate?.avg > 0)              score += 1;
+  if (w.elevation?.ascent > 0)           score += 1;
+  return score;
+}
+
 export function useWorkouts(user) {
   const [history,   setHistory]   = useState([]);
   const [loadingDb, setLoadingDb] = useState(true);
@@ -130,8 +144,7 @@ export function useWorkouts(user) {
         if (!uploadErr) row.fit_path = path;
       }
 
-      // Find existing workout for this date (any source).
-      // FIT file upload always wins — richer data than Strava import.
+      // Find existing workout for this date (any source) — update if new data is at least as rich
       const existing = history.find(h => h.date === workout.date);
       const { data, error: dbErr } = existing?.id
         ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
@@ -277,31 +290,55 @@ export function useWorkouts(user) {
         model.source           = 'garmin';
         if (!model.fileName) model.fileName = item.activity_name;
 
-        // Check for existing by garmin_activity_id to avoid duplicates
-        const exists = history.find(h => h.garminActivityId === item.garmin_activity_id);
-        if (exists) continue;
-
         const row = {
           ...toRow(model, user.id),
           garmin_activity_id: item.garmin_activity_id,
           source: 'garmin',
         };
 
-        const { data, error: dbErr } = await supabase
-          .from('workouts')
-          .insert(row)
-          .select()
-          .single();
+        // Check for existing: exact garmin_activity_id match, or same date (Strava duplicate)
+        const exactMatch = history.find(h => h.garminActivityId === item.garmin_activity_id);
+        const dateMatch  = !exactMatch && history.find(h => h.date === model.date);
+        const existing   = exactMatch || dateMatch;
 
-        if (dbErr) {
-          console.error('[saveGarminActivities] insert failed', dbErr);
-          continue;
+        if (existing) {
+          // Only update if new data is richer (e.g. Garmin FIT replacing Strava)
+          if (dataRichness(model) <= dataRichness(existing)) continue;
+
+          const { data, error: dbErr } = await supabase
+            .from('workouts')
+            .update(row)
+            .eq('id', existing.id)
+            .select()
+            .single();
+
+          if (dbErr) {
+            console.error('[saveGarminActivities] update failed', dbErr);
+            continue;
+          }
+
+          console.log(`[saveGarminActivities] upgraded ${existing.source} → garmin for ${model.date}`);
+          setHistory(prev =>
+            prev.map(w => w.id === existing.id ? fromRow(data) : w)
+          );
+          saved++;
+        } else {
+          const { data, error: dbErr } = await supabase
+            .from('workouts')
+            .insert(row)
+            .select()
+            .single();
+
+          if (dbErr) {
+            console.error('[saveGarminActivities] insert failed', dbErr);
+            continue;
+          }
+
+          setHistory(prev =>
+            [fromRow(data), ...prev].sort((a,b) => b.date.localeCompare(a.date))
+          );
+          saved++;
         }
-
-        setHistory(prev =>
-          [fromRow(data), ...prev].sort((a,b) => b.date.localeCompare(a.date))
-        );
-        saved++;
       } catch (e) {
         console.error('[saveGarminActivities] parse/save failed', e);
       }
