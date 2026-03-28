@@ -8,6 +8,7 @@ import { MetricCard }                                     from '../MetricCard.js
 import { ZoneBar }                                       from '../ZoneBar.jsx';
 import { fmtKm, fmtDuration, fmtDurationShort, fmtNum } from '../../core/format.js';
 import { downloadGPX } from '../../core/gpxExport.js';
+import { computeAerobicEfficiency, computeVAM, detectClimbs } from '../../core/workoutAnalyzer.js';
 
 // ─── Shared card wrapper ─────────────────────────────────────────────────────
 export function Card({ children, style = {} }) {
@@ -134,6 +135,9 @@ export function OverviewTab({ workout: w }) {
         </div>
         {w.recommendations.map((r, i) => <RecCard key={i} rec={r} />)}
       </div>
+
+      {/* ── Cycling-specific analytics ── */}
+      {isCycling(w) && <CyclingAnalytics workout={w} />}
     </div>
   );
 }
@@ -159,5 +163,196 @@ export function OverviewGPXButton({ workout }) {
     >
       {status === 'ok' ? '✓ GPX сохранён' : '↓ Экспорт GPX'}
     </button>
+  );
+}
+
+
+// ─── Cycling helpers ─────────────────────────────────────────────────────────
+
+function isCycling(w) {
+  const s = (w.sport ?? w.sportLabel ?? '').toLowerCase();
+  return s.includes('cycl') || s.includes('bike') || s.includes('велос') || s.includes('ebik');
+}
+
+// ─── Cycling Analytics section ───────────────────────────────────────────────
+export function CyclingAnalytics({ workout: w }) {
+  const ts      = w.timeSeries ?? [];
+  const ascent  = w.elevation?.ascent ?? 0;
+  const vam     = computeVAM(ascent, ts);
+  const effIdx  = computeAerobicEfficiency(w.speed?.avgMoving || w.speed?.avg, w.heartRate?.avg);
+  const climbs  = ts.length > 10 ? detectClimbs(ts) : [];
+  const hasPow  = w.power?.avg > 0;
+
+  // Average gradient
+  const distM   = w.distance ?? 0;
+  const avgGrade = distM > 0 && ascent > 0
+    ? parseFloat(((ascent / distM) * 100).toFixed(1))
+    : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+
+      {/* Section header */}
+      <div style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.12em',
+                    textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+        Аналитика · Велосипед
+      </div>
+
+      {/* Key cycling metrics */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 'var(--sp-3)' }}>
+        {w.cadence?.avg > 0 && (
+          <MetricCard
+            label="Каданс"
+            value={w.cadence.avg}
+            unit="об/мин"
+            sub={w.cadence.max ? `макс ${w.cadence.max}` : undefined}
+            accent="#a78bfa"
+          />
+        )}
+        {hasPow && (
+          <MetricCard
+            label="Мощность"
+            value={w.power.avg}
+            unit="Вт"
+            sub={`макс ${w.power.max} Вт`}
+            accent="#f97316"
+          />
+        )}
+        {vam != null && (
+          <MetricCard
+            label="VAM"
+            value={vam}
+            unit="м/ч"
+            sub="скорость подъёма"
+            accent="#fbbf24"
+          />
+        )}
+        {avgGrade != null && (
+          <MetricCard
+            label="Ср. уклон"
+            value={avgGrade}
+            unit="%"
+            sub={`набор ${ascent} м`}
+            accent="#34d399"
+          />
+        )}
+        {effIdx != null && (
+          <MetricCard
+            label="Эфф-ть"
+            value={effIdx}
+            unit=""
+            sub="скорость/пульс"
+            accent="#60a5fa"
+          />
+        )}
+      </div>
+
+      {/* Power zones — if power meter data present */}
+      {hasPow && <PowerSummary workout={w} />}
+
+      {/* Climb segments */}
+      {climbs.length > 0 && (
+        <Card>
+          <CardLabel>Подъёмы ({climbs.length})</CardLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+            {climbs.slice(0, 5).map((c, i) => (
+              <ClimbRow key={i} climb={c} rank={i + 1} />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Efficiency context */}
+      {effIdx != null && (
+        <div style={{
+          background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)',
+          borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
+          fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6,
+        }}>
+          <b style={{ color: '#60a5fa' }}>Аэробная эффективность {effIdx}</b> = средняя скорость / средний пульс × 100.
+          Выше — лучше. Сравнивай между похожими маршрутами для отслеживания адаптации.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PowerSummary({ workout: w }) {
+  const ts = w.timeSeries ?? [];
+  // Compute power distribution from timeSeries if available
+  // Otherwise just show avg/max
+  return (
+    <Card>
+      <CardLabel>Мощность</CardLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
+            СРЕДНЯЯ
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 600, color: '#f97316', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+            {w.power.avg}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Вт</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
+            МАКСИМУМ
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 600, color: '#ef4444', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+            {w.power.max}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Вт</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ClimbRow({ climb, rank }) {
+  const gradeColor = climb.avgGrade > 10 ? '#ef4444'
+                   : climb.avgGrade > 7  ? '#f97316'
+                   : climb.avgGrade > 4  ? '#fbbf24'
+                   : '#4ade80';
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '24px 1fr auto',
+      gap: 'var(--sp-3)',
+      alignItems: 'center',
+      padding: 'var(--sp-2) 0',
+      borderBottom: rank < 5 ? '1px solid var(--border-subtle)' : 'none',
+    }}>
+      <div style={{
+        width: 24, height: 24, borderRadius: '50%',
+        background: `${gradeColor}20`, border: `1px solid ${gradeColor}40`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 10, fontWeight: 600, color: gradeColor, fontFamily: 'var(--font-mono)',
+      }}>
+        {rank}
+      </div>
+      <div>
+        <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>
+          +{climb.ascentM} м · {climb.distKm} км
+          <span style={{ marginLeft: 8, fontSize: 11, color: gradeColor, fontWeight: 600 }}>
+            {climb.avgGrade}%
+          </span>
+          {climb.maxGrade > climb.avgGrade + 3 && (
+            <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>
+              макс {climb.maxGrade}%
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+          км {climb.startDistKm}–{climb.endDistKm}
+          {climb.vam > 0 && <span style={{ marginLeft: 8, color: '#fbbf24' }}>VAM {climb.vam} м/ч</span>}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>УКЛОН</div>
+        <div style={{ fontSize: 18, fontWeight: 600, color: gradeColor, fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+          {climb.avgGrade}%
+        </div>
+      </div>
+    </div>
   );
 }

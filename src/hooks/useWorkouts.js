@@ -22,8 +22,9 @@ function toRow(workout, userId) {
     avg_hr:       workout.heartRate?.avg != null ? Math.round(workout.heartRate.avg) : null,
     max_hr:       workout.heartRate?.max != null ? Math.round(workout.heartRate.max) : null,
     ascent_m:     workout.elevation?.ascent != null ? Math.round(workout.elevation.ascent) : null,
-    aerobic_te:   workout.trainingEffect?.aerobic ?? null,
-    load_level:   workout.load?.level ?? null,
+    aerobic_te:         workout.trainingEffect?.aerobic ?? null,
+    load_level:         workout.load?.level ?? null,
+    garmin_activity_id: workout.garminActivityId ?? null,
     summary_json: {
       // Store everything needed for Dashboard cards + Plan
       date:            workout.date,
@@ -44,6 +45,7 @@ function toRow(workout, userId) {
       load:            workout.load,
       thresholdHr:     workout.thresholdHr,
       recommendations: workout.recommendations,
+      laps:            workout.laps ?? [],
       // Downsample timeSeries to every 4th point (~60KB) for Charts + Map
       timeSeries: (workout.timeSeries ?? []).filter((_, i) => i % 4 === 0),
     },
@@ -69,9 +71,11 @@ function estimateTE(avgHr, maxHr, durationSec) {
 function fromRow(row) {
   const base = {
     ...row.summary_json,
-    id:         row.id,
-    date:       row.workout_date,
-    timeSeries: row.summary_json?.timeSeries ?? [],
+    id:               row.id,
+    date:             row.workout_date,
+    timeSeries:       row.summary_json?.timeSeries ?? [],
+    garminActivityId: row.garmin_activity_id ?? null,
+    source:           row.source ?? 'upload',
   };
 
   // Fix TE for Strava workouts: edge function may have saved wrong value (0 or 5).
@@ -248,12 +252,69 @@ export function useWorkouts(user) {
     return peaks[idx] || 0;
   })();
 
+  /**
+   * Save activities received from garmin_server.py /sync.
+   * Each item: { garmin_activity_id, activity_name, fit_b64 }
+   * Parses FIT client-side, saves to DB with garmin_activity_id set.
+   */
+  const saveGarminActivities = useCallback(async (results) => {
+    if (!user || !results?.length) return 0;
+    let saved = 0;
+    for (const item of results) {
+      try {
+        // Decode base64 FIT
+        const binary  = atob(item.fit_b64);
+        const bytes   = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const buffer  = bytes.buffer;
+
+        // Parse FIT → WorkoutModel
+        const fitData = parseFit(buffer);
+        const model   = buildWorkoutModel(fitData, `${item.garmin_activity_id}.fit`);
+
+        // Attach garmin metadata
+        model.garminActivityId = item.garmin_activity_id;
+        model.source           = 'garmin';
+        if (!model.fileName) model.fileName = item.activity_name;
+
+        // Check for existing by garmin_activity_id to avoid duplicates
+        const exists = history.find(h => h.garminActivityId === item.garmin_activity_id);
+        if (exists) continue;
+
+        const row = {
+          ...toRow(model, user.id),
+          garmin_activity_id: item.garmin_activity_id,
+          source: 'garmin',
+        };
+
+        const { data, error: dbErr } = await supabase
+          .from('workouts')
+          .insert(row)
+          .select()
+          .single();
+
+        if (dbErr) {
+          console.error('[saveGarminActivities] insert failed', dbErr);
+          continue;
+        }
+
+        setHistory(prev =>
+          [fromRow(data), ...prev].sort((a,b) => b.date.localeCompare(a.date))
+        );
+        saved++;
+      } catch (e) {
+        console.error('[saveGarminActivities] parse/save failed', e);
+      }
+    }
+    return saved;
+  }, [user, history]);
+
   return {
     // Same API as useHistory:
     history, loadingDb, storageOk: !!user,
     saveWorkout, deleteWorkout, recentWorkouts, aggregateStats,
     // New:
-    uploadFit, reload, error, getChatHistory, saveChatMessage,
+    uploadFit, reload, error, getChatHistory, saveChatMessage, saveGarminActivities,
     historicalMaxHr,
   };
 }

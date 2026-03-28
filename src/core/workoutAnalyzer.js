@@ -85,35 +85,6 @@ export const SESSION_FIELDS = [
   [15,  'maxSpeed',       0.001,  0],   // → m/s
 ];
 
-// ─── Lap field decode ─────────────────────────────────────────────────────────
-// FIT LAP message (global 19) — field numbers differ from SESSION (18).
-// Key differences: speed is at 13 (not 14), ascent/descent at 17/18 (not 22/23).
-export const LAP_FIELDS = [
-  [253, 'timestamp',   1,      0],    // FIT timestamp
-  [7,   'elapsed',     0.001,  0],    // total seconds (incl. pauses)
-  [8,   'timer',       0.001,  0],    // active seconds
-  [9,   'distance',    0.01,   0],    // meters
-  [11,  'calories',    1,      0],
-  [13,  'avgSpeed',    0.001,  0],    // m/s (uint16, standard)
-  [14,  'maxSpeed',    0.001,  0],    // m/s
-  [17,  'ascent',      1,      0],    // meters
-  [18,  'descent',     1,      0],    // meters
-  [40,  'avgTemp',     1,      0],    // °C
-  [88,  'avgSpeedEnh', 0.001,  0],    // m/s (uint32 enhanced, preferred)
-];
-
-export function decodeLap(raw) {
-  const out = {};
-  for (const [num, key, scale, offset] of LAP_FIELDS) {
-    const v = raw[num];
-    if (v === null || v === undefined) continue;
-    out[key] = safe(v, scale, offset);
-  }
-  if (out.avgSpeedEnh != null) out.avgSpeed = out.avgSpeedEnh;
-  delete out.avgSpeedEnh;
-  return out;
-}
-
 // ─── Record field decode ──────────────────────────────────────────────────────
 export const RECORD_FIELDS = [
   [0,   'lat',        1 / 11930465, 0],    // semicircles → degrees
@@ -373,20 +344,6 @@ export function generateRecommendations(workout) {
   }];
 }
 
-// ─── Persistent athlete max HR ───────────────────────────────────────────────
-// Stored in localStorage so zones use the true physiological max across all
-// workouts, not the peak HR of a single session.
-const ATHLETE_MAX_HR_KEY = 'athlete_max_hr';
-
-export function getAthleteMaxHr() {
-  const v = parseInt(localStorage.getItem(ATHLETE_MAX_HR_KEY), 10);
-  return v > 0 ? v : 0;
-}
-
-export function setAthleteMaxHr(hr) {
-  if (hr > 0) localStorage.setItem(ATHLETE_MAX_HR_KEY, String(hr));
-}
-
 // ─── Main export: build complete WorkoutModel ────────────────────────────────
 export function buildWorkoutModel(fitData, fileName = '') {
   const { sessions, laps, records, sports } = fitData;
@@ -414,20 +371,20 @@ export function buildWorkoutModel(fitData, fileName = '') {
     if (pt.speed    != null) pt.speedKmh = parseFloat((pt.speed * 3.6).toFixed(2));
   }
 
-  // maxHr priority: zones_target > hr_zone boundaries > stored athlete profile > session peak > computed
+  // maxHr priority (highest to lowest):
+  // 1. userMaxHr — set by user in profile or manually in ZonesTab (most accurate)
+  // 2. profileMaxHr — from Garmin device zones_target message (reliable if set on device)
+  // 3. userMaxHr fallback via 220-age (if profile has age)
+  // 4. Session peak HR — ONLY as last resort, may be far below true max
   const profileMaxHr  = fitData.zonesTarget?.[1] ?? 0;
   const thresholdHr   = fitData.zonesTarget?.[2] ?? 0;  // LT2 / lactate threshold
-  // hr_zone messages (mesg 8) contain zone boundaries; the highest high_bpm (field 1) = athlete's max HR
-  const hrZoneBpms    = (fitData.hrZones || []).map(z => z[1]).filter(v => v && v > 0 && v < 255);
-  const hrZoneMaxHr   = hrZoneBpms.length ? Math.max(...hrZoneBpms) : 0;
-  const storedMaxHr   = getAthleteMaxHr();
   const validHr       = timeSeries.map(p => p.hr).filter(Boolean);
-  const computedMaxHr = validHr.length ? validHr.reduce((a,b) => a>b?a:b) : 0;
-  const maxHr = profileMaxHr || hrZoneMaxHr || storedMaxHr || computedMaxHr;
-
-  // Persist athlete max HR from device profile for future workouts
-  if (profileMaxHr > 0) setAthleteMaxHr(profileMaxHr);
-  else if (hrZoneMaxHr > 0) setAthleteMaxHr(hrZoneMaxHr);
+  const sessionPeakHr = validHr.length ? validHr.reduce((a,b) => a>b?a:b) : 0;
+  // Never use session peak as maxHr unless no better source exists
+  // A Z2 run hitting 131 bpm should NOT set maxHr = 131
+  const maxHr = userMaxHr > 100 ? userMaxHr
+              : profileMaxHr > 100 ? profileMaxHr
+              : sessionPeakHr;  // fallback — zones will show a warning in UI
 
   // HR Zone analysis
   const hrZones = analyzeHrZones(timeSeries, maxHr);
@@ -523,7 +480,6 @@ export function buildWorkoutModel(fitData, fileName = '') {
 
     // Laps
     lapCount: laps.length,
-    laps: laps.map((raw, i) => ({ n: i + 1, ...decodeLap(raw) })),
   };
 
   // Attach derived analysis
@@ -536,3 +492,179 @@ export function buildWorkoutModel(fitData, fileName = '') {
 
 
 // ────────────────────────────────────────────────────────────
+
+// ─── Cycling-specific analytics ──────────────────────────────────────────────
+
+/**
+ * Compute gradient series from timeSeries altitude + distance points.
+ * Returns array of { distKm, gradient } suitable for charting.
+ * Smoothed over a rolling window to reduce GPS noise.
+ */
+export function computeGradientSeries(timeSeries, windowM = 50) {
+  // Use points that have both altitude and distance
+  const pts = timeSeries
+    .filter(p => p.altitude != null && p.distance != null)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (pts.length < 2) return [];
+
+  const result = [];
+  for (let i = 1; i < pts.length; i++) {
+    const dDist = pts[i].distance - pts[i - 1].distance;
+    const dAlt  = pts[i].altitude  - pts[i - 1].altitude;
+    if (dDist < 1) continue; // skip GPS noise / stationary points
+    const grade = parseFloat(((dAlt / dDist) * 100).toFixed(1));
+    result.push({
+      distKm:   parseFloat((pts[i].distance / 1000).toFixed(3)),
+      gradient: Math.max(-30, Math.min(30, grade)), // clamp to ±30%
+      altitude: parseFloat(pts[i].altitude.toFixed(1)),
+    });
+  }
+
+  // Rolling average smoothing
+  const win = [], smoothed = [];
+  for (const pt of result) {
+    win.push(pt.gradient);
+    if (win.length > 5) win.shift();
+    smoothed.push({ ...pt, gradient: parseFloat((win.reduce((a,b)=>a+b,0)/win.length).toFixed(1)) });
+  }
+  return smoothed;
+}
+
+/**
+ * Detect climb segments from gradient series.
+ * A climb starts when gradient > minGrade% for minDistM meters,
+ * ends when gradient drops below 0% for dropOffM meters.
+ *
+ * Returns array of { startDistKm, endDistKm, distKm, ascentM, avgGrade, maxGrade, vam }
+ */
+export function detectClimbs(timeSeries, { minGrade = 2, minAscentM = 20, dropOffM = 100 } = {}) {
+  const pts = timeSeries
+    .filter(p => p.altitude != null && p.distance != null && p.timestamp != null)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (pts.length < 2) return [];
+
+  const climbs = [];
+  let inClimb   = false;
+  let climbStart = null;
+  let flatCount  = 0;
+  const FLAT_THRESH = dropOffM;
+
+  for (let i = 1; i < pts.length; i++) {
+    const dDist = pts[i].distance - pts[i-1].distance;
+    const dAlt  = pts[i].altitude  - pts[i-1].altitude;
+    if (dDist < 1) continue;
+    const grade = (dAlt / dDist) * 100;
+
+    if (!inClimb) {
+      if (grade >= minGrade) {
+        inClimb    = true;
+        climbStart = i - 1;
+        flatCount  = 0;
+      }
+    } else {
+      if (grade < 0) {
+        flatCount += dDist;
+        if (flatCount >= FLAT_THRESH) {
+          // End of climb
+          const seg = pts.slice(climbStart, i - 1);
+          const ascent = Math.max(0, seg[seg.length-1].altitude - seg[0].altitude);
+          if (ascent >= minAscentM) {
+            const distM   = seg[seg.length-1].distance - seg[0].distance;
+            const timeSec = (seg[seg.length-1].timestamp - seg[0].timestamp);
+            const grades  = [];
+            for (let j = 1; j < seg.length; j++) {
+              const dd = seg[j].distance - seg[j-1].distance;
+              const da = seg[j].altitude  - seg[j-1].altitude;
+              if (dd > 1) grades.push((da/dd)*100);
+            }
+            climbs.push({
+              startDistKm: parseFloat((seg[0].distance / 1000).toFixed(2)),
+              endDistKm:   parseFloat((seg[seg.length-1].distance / 1000).toFixed(2)),
+              distKm:      parseFloat((distM / 1000).toFixed(2)),
+              ascentM:     Math.round(ascent),
+              avgGrade:    grades.length ? parseFloat((grades.reduce((a,b)=>a+b,0)/grades.length).toFixed(1)) : 0,
+              maxGrade:    grades.length ? parseFloat(Math.max(...grades).toFixed(1)) : 0,
+              vam:         timeSec > 0 ? Math.round((ascent / timeSec) * 3600) : 0,
+            });
+          }
+          inClimb   = false;
+          climbStart = null;
+          flatCount  = 0;
+        }
+      } else {
+        flatCount = 0;
+      }
+    }
+  }
+
+  // Handle climb that extends to end of ride
+  if (inClimb && climbStart != null) {
+    const seg    = pts.slice(climbStart);
+    const ascent = Math.max(0, seg[seg.length-1].altitude - seg[0].altitude);
+    if (ascent >= minAscentM) {
+      const distM   = seg[seg.length-1].distance - seg[0].distance;
+      const timeSec = seg[seg.length-1].timestamp - seg[0].timestamp;
+      const grades  = [];
+      for (let j = 1; j < seg.length; j++) {
+        const dd = seg[j].distance - seg[j-1].distance;
+        const da = seg[j].altitude  - seg[j-1].altitude;
+        if (dd > 1) grades.push((da/dd)*100);
+      }
+      climbs.push({
+        startDistKm: parseFloat((seg[0].distance / 1000).toFixed(2)),
+        endDistKm:   parseFloat((seg[seg.length-1].distance / 1000).toFixed(2)),
+        distKm:      parseFloat((distM / 1000).toFixed(2)),
+        ascentM:     Math.round(ascent),
+        avgGrade:    grades.length ? parseFloat((grades.reduce((a,b)=>a+b,0)/grades.length).toFixed(1)) : 0,
+        maxGrade:    grades.length ? parseFloat(Math.max(...grades).toFixed(1)) : 0,
+        vam:         timeSec > 0 ? Math.round((ascent / timeSec) * 3600) : 0,
+      });
+    }
+  }
+
+  return climbs.sort((a, b) => b.ascentM - a.ascentM); // biggest climb first
+}
+
+/**
+ * Aerobic efficiency = avg speed (km/h) / avg HR.
+ * Higher = more efficient (faster for same HR cost).
+ * Only meaningful if HR data available.
+ */
+export function computeAerobicEfficiency(avgSpeedKmh, avgHr) {
+  if (!avgHr || avgHr < 60 || !avgSpeedKmh) return null;
+  return parseFloat((avgSpeedKmh / avgHr * 100).toFixed(2)); // ×100 for readability
+}
+
+/**
+ * Compute VAM (Velocità Ascensionale Media) for the whole ride.
+ * Only meaningful if total ascent > 200m.
+ * VAM = (ascent_m / climbing_time_h)
+ */
+export function computeVAM(ascentM, timeSeries) {
+  if (ascentM < 50) return null;
+  // Estimate climbing time: time spent with positive gradient
+  const pts = timeSeries
+    .filter(p => p.altitude != null && p.timestamp != null)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  let climbSec = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dAlt = pts[i].altitude - pts[i-1].altitude;
+    const dT   = Math.min(pts[i].timestamp - pts[i-1].timestamp, 10);
+    if (dAlt > 0) climbSec += dT;
+  }
+  if (climbSec < 60) return null;
+  return Math.round((ascentM / climbSec) * 3600);
+}
+
+// ─── Athlete max HR persistence (legacy compat) ───────────────────────────────
+// These were used in an older version. Kept as no-ops for import compatibility.
+const _maxHrKey = 'fit_athlete_max_hr';
+export function getAthleteMaxHr() {
+  const v = parseInt(localStorage.getItem(_maxHrKey) ?? '0');
+  return v > 100 ? v : 0;
+}
+export function setAthleteMaxHr(hr) {
+  if (hr > 100) localStorage.setItem(_maxHrKey, String(hr));
+}

@@ -4,12 +4,11 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth }      from './hooks/useAuth.js';
+import { useStrava }    from './hooks/useStrava.js';
 import { useWorkouts }  from './hooks/useWorkouts.js';
 import { useWorkout }   from './hooks/useWorkout.js';
 import { useOpenAI }    from './hooks/useOpenAI.js';
 import { useGarmin }    from './hooks/useGarmin.js';
-import { useStrava }    from './hooks/useStrava.js';
-import { downloadWorkoutPDF } from './core/pdfReport.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
@@ -19,10 +18,10 @@ import { OverviewTab }  from './ui/tabs/OverviewTab.jsx';
 import { ChartsTab }    from './ui/tabs/ChartsTab.jsx';
 import { MapTab }       from './ui/tabs/MapTab.jsx';
 import { ZonesTab }     from './ui/tabs/ZonesTab.jsx';
-import { LapsTab }      from './ui/tabs/LapsTab.jsx';
 import { PlanTab }      from './ui/tabs/PlanTab.jsx';
 import { ChatTab }      from './ui/tabs/ChatTab.jsx';
 import { AnalyticsTab } from './ui/tabs/AnalyticsTab.jsx';
+import { LapsTab }      from './ui/tabs/LapsTab.jsx';
 import './styles/tokens.css';
 
 const GLOBAL_STYLES = `
@@ -49,8 +48,14 @@ export default function App() {
   const workouts = useWorkouts(auth.user);       // Supabase-backed history
   const workout  = useWorkout();                  // current open workout
   const chat     = useOpenAI(workout.workout, workouts.recentWorkouts);
-  const garmin   = useGarmin(workout.loadFile);
-  const strava   = useStrava();
+  const garmin   = useGarmin(async (results) => {
+    // Called by useGarmin after /sync — save all new FIT files to DB
+    await workouts.saveGarminActivities?.(results);
+  });
+  const strava   = useStrava(auth.user, () => {
+    // Refresh workouts list after Strava sync
+    if (auth.user) workouts.reload?.();
+  });
 
   // When file loaded successfully → save + open detail
   useEffect(() => {
@@ -89,14 +94,6 @@ export default function App() {
     setActiveTab('overview');
   }, [workout]);
 
-  const handleStravaImport = useCallback((model) => {
-    workout.loadFromSummary(model);
-    setScreen('detail');
-    setActiveTab('overview');
-    setStravaOpen(false);
-    if (auth.user) workouts.saveWorkout(model);
-  }, [workout, auth.user, workouts]);
-
   // Show loading spinner while checking auth
   if (auth.loading) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -119,18 +116,29 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <style>{GLOBAL_STYLES}</style>
 
-      {garminOpen && <GarminPanel garmin={garmin} onClose={() => setGarminOpen(false)} />}
-      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={handleStravaImport} />}
+      {garminOpen && (
+        <GarminPanel
+          garmin={{
+            ...garmin,
+            // Pass existing garmin_activity_ids so /sync can skip them
+            knownGarminIds: workouts.history
+              .map(w => w.garminActivityId)
+              .filter(Boolean),
+          }}
+          onClose={() => setGarminOpen(false)}
+        />
+      )}
+      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} />}
 
       {screen === 'dashboard' ? (
         <Dashboard
           history={workouts}
           user={auth.user}
-          onFile={workout.loadFile}
+          onFile={(f) => workout.loadFile(f, workouts.historicalMaxHr)}
           onSample={handleLoadSample}
           onGarmin={() => setGarminOpen(true)}
           onStrava={() => setStravaOpen(true)}
-          stravaStatus={strava.status}
+          stravaConnected={strava.isConnected}
           onSelectWorkout={handleSelectFromHistory}
           onSignOut={auth.signOut}
           isLoading={workout.status === 'loading'}
@@ -145,22 +153,19 @@ export default function App() {
             onReset={handleBack}
             onGarmin={() => setGarminOpen(true)}
             garminStatus={garmin.status}
-            onStrava={() => setStravaOpen(true)}
-            stravaStatus={strava.status}
             showBack={true}
             onSave={handleSave}
             saveStatus={saveStatus}
-            onPDF={() => workout.workout && downloadWorkoutPDF(workout.workout)}
           />
           <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
             {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
             {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
-            {activeTab === 'analytics' && <AnalyticsTab history={workouts} onSelectWorkout={handleSelectFromHistory} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
-            {activeTab === 'laps'     && <LapsTab     workout={workout.workout} />}
-            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} garmin={garmin} />}
+            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
             {activeTab === 'chat'     && <ChatTab     chat={chat} />}
+            {activeTab === 'analytics' && <AnalyticsTab history={workouts} onSelectWorkout={handleSelectFromHistory} />}
+            {activeTab === 'laps'      && <LapsTab      workout={workout.workout} />}
           </main>
         </div>
       )}
