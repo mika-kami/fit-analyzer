@@ -22,6 +22,7 @@ import { PlanTab }      from './ui/tabs/PlanTab.jsx';
 import { ChatTab }      from './ui/tabs/ChatTab.jsx';
 import { AnalyticsTab } from './ui/tabs/AnalyticsTab.jsx';
 import { LapsTab }      from './ui/tabs/LapsTab.jsx';
+import { downloadWorkoutPDF } from './core/pdfReport.js';
 import './styles/tokens.css';
 
 const GLOBAL_STYLES = `
@@ -94,6 +95,11 @@ export default function App() {
     setActiveTab('overview');
   }, [workout]);
 
+  const handleDownloadPdf = useCallback(() => {
+    if (!workout.workout) return;
+    downloadWorkoutPDF(workout.workout);
+  }, [workout.workout]);
+
   // Show loading spinner while checking auth
   if (auth.loading) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -128,7 +134,10 @@ export default function App() {
           onClose={() => setGarminOpen(false)}
         />
       )}
-      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={(w) => {
+     {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={async (w) => {
+        if (auth.user) {
+          await workouts.saveWorkout(w);
+        }
         workout.loadFromSummary(w);
         setScreen('detail');
         setActiveTab('overview');
@@ -143,7 +152,7 @@ export default function App() {
           onSample={handleLoadSample}
           onGarmin={() => setGarminOpen(true)}
           onStrava={() => setStravaOpen(true)}
-          stravaConnected={strava.isConnected}
+          stravaStatus={strava.status}
           onSelectWorkout={handleSelectFromHistory}
           onSignOut={auth.signOut}
           isLoading={workout.status === 'loading'}
@@ -158,9 +167,12 @@ export default function App() {
             onReset={handleBack}
             onGarmin={() => setGarminOpen(true)}
             garminStatus={garmin.status}
+            onStrava={() => setStravaOpen(true)}
+            stravaStatus={strava.status}
             showBack={true}
             onSave={handleSave}
             saveStatus={saveStatus}
+            onPDF={handleDownloadPdf}
           />
           <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
             {activeTab === 'overview' && <OverviewTab workout={workout.workout} />}

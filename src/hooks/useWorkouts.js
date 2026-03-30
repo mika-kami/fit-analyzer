@@ -76,6 +76,7 @@ function fromRow(row) {
     timeSeries:       row.summary_json?.timeSeries ?? [],
     garminActivityId: row.garmin_activity_id ?? null,
     source:           row.source ?? 'upload',
+    fit_path:         row.fit_path ?? null,
   };
 
   // Fix TE for Strava workouts: edge function may have saved wrong value (0 or 5).
@@ -98,7 +99,7 @@ const SOURCE_RANK = { garmin: 3, upload: 2, strava: 1 };
 
 // Score how "rich" a workout's data is — higher = more data
 function dataRichness(w) {
-  let score = SOURCE_RANK[w.source] ?? 0;
+  let score = SOURCE_RANK[w.source ?? 'upload'] ?? 0;
   if (w.laps?.length)                    score += 2;
   if (w.timeSeries?.length > 10)         score += 2;
   if (w.trainingEffect?.aerobic > 0 && !w.trainingEffect?.estimated) score += 1;
@@ -144,8 +145,11 @@ export function useWorkouts(user) {
         if (!uploadErr) row.fit_path = path;
       }
 
-      // Find existing workout for this date (any source) — update if new data is at least as rich
-      const existing = history.find(h => h.date === workout.date);
+     // Find existing workout for this date (any source) — never downgrade richer data
+     const existing = history.find(h => h.date === workout.date);
+     if (existing && dataRichness(workout) < dataRichness(existing)) {
+       return true; // keep existing richer record
+     }
       const { data, error: dbErr } = existing?.id
         ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
         : await supabase.from('workouts').insert(row).select().single();
@@ -164,7 +168,7 @@ export function useWorkouts(user) {
       setError(e.message);
       return false;
     }
-  }, [user]);
+  }, [user, history]);
 
   // Delete a workout
   const deleteWorkout = useCallback(async (date) => {
