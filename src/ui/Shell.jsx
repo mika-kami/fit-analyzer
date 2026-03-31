@@ -14,7 +14,6 @@ const TABS = [
   { id: 'analytics', label: 'Аналитика' },
   { id: 'zones',     label: 'Зоны'      },
   { id: 'laps',     label: 'Круги'   },
-  { id: 'plan',     label: 'План'    },
   { id: 'chat',     label: 'Тренер'  },
 ];
 
@@ -75,6 +74,27 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
               </div>
             </div>
           )}
+
+          {/* Plans button (moved to header action row) */}
+          <button
+            onClick={() => onTabChange('plan')}
+            title="Открыть недельные планы"
+            style={{
+              background:   activeTab === 'plan' ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
+              border:       `1px solid ${activeTab === 'plan' ? 'rgba(232,168,50,0.35)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-md)',
+              padding:      'var(--sp-2) var(--sp-3)',
+              color:        activeTab === 'plan' ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor:       'pointer',
+              fontSize:     11,
+              fontWeight:   600,
+              fontFamily:   'var(--font-body)',
+              transition:   'all var(--t-base) var(--ease-snappy)',
+              whiteSpace:   'nowrap',
+            }}
+          >
+            Планы
+          </button>
 
           {/* Save workout button */}
           {onSave && (

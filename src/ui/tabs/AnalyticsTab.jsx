@@ -2,7 +2,7 @@
  * AnalyticsTab.jsx — Training analytics: CTL/ATL/TSB, Aerobic Efficiency, TE trend.
  * Props: { history, onSelectWorkout }
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ComposedChart, Area, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
@@ -12,6 +12,13 @@ import {
   buildDailyStress, computeATL, computeCTL, computeTSB,
   detectFormState, predictPeakForm, computeAET, computeTETrend,
 } from '../../core/analyticsEngine.js';
+import {
+  computeReadinessScore,
+  computeTrainingStatus,
+  analyzePerformanceLimiters,
+  prescribeNextWorkout,
+  defaultWorkoutReflection,
+} from '../../core/coachEngine.js';
 
 const GRID_COLOR = 'rgba(255,255,255,0.04)';
 const TICK_COLOR = '#3a3d4e';
@@ -30,7 +37,7 @@ function fmtShortDate(dateStr) {
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
-export function AnalyticsTab({ history, onSelectWorkout }) {
+export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }) {
   const [period, setPeriod] = useState(90);
   const workouts = history?.history ?? [];
   const loading = history?.loadingDb;
@@ -62,6 +69,67 @@ export function AnalyticsTab({ history, onSelectWorkout }) {
     return { points: computeAET(workouts, lo, hi), lo, hi };
   }, [workouts]);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const lastTSB = tsbSeries.length ? tsbSeries[tsbSeries.length - 1] : null;
+  const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
+
+  const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
+  const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
+  const [noteDraft, setNoteDraft] = useState(() => {
+    if (!coach || !currentWorkout) return defaultWorkoutReflection(currentWorkout);
+    return coach.getWorkoutNote(currentWorkout);
+  });
+
+  useEffect(() => {
+    setProfileDraft(coach?.profile ?? {});
+  }, [coach?.profile]);
+
+  useEffect(() => {
+    if (!coach?.getDailyCheckin) return;
+    setCheckinDraft(coach.getDailyCheckin(todayIso));
+  }, [coach, todayIso]);
+
+  useEffect(() => {
+    if (!currentWorkout) {
+      setNoteDraft(defaultWorkoutReflection(currentWorkout));
+      return;
+    }
+    if (!coach?.getWorkoutNote) {
+      setNoteDraft(defaultWorkoutReflection(currentWorkout));
+      return;
+    }
+    setNoteDraft(coach.getWorkoutNote(currentWorkout));
+  }, [coach, currentWorkout?.id, currentWorkout?.date]);
+
+  const readiness = useMemo(
+    () => computeReadinessScore(checkinDraft),
+    [checkinDraft]
+  );
+  const trainingStatus = useMemo(
+    () => computeTrainingStatus({ lastTSB, readiness }),
+    [lastTSB, readiness]
+  );
+  const insights = useMemo(
+    () => analyzePerformanceLimiters({ workouts, profile: profileDraft, readiness, lastTSB }),
+    [workouts, profileDraft, readiness, lastTSB]
+  );
+  const nextWorkout = useMemo(
+    () => prescribeNextWorkout({
+      profile: profileDraft,
+      readiness,
+      trainingStatus,
+      insights,
+      weatherScore: checkinDraft?.weatherScore ?? 70,
+    }),
+    [profileDraft, readiness, trainingStatus, insights, checkinDraft?.weatherScore]
+  );
+
+  const workoutNoteKey = currentWorkout?.id
+    ? String(currentWorkout.id)
+    : currentWorkout?.date
+      ? `date:${currentWorkout.date}`
+      : null;
+
   // ── Loading / empty states ─────────────────────────────────────────────────
   if (loading) {
     return (
@@ -75,11 +143,32 @@ export function AnalyticsTab({ history, onSelectWorkout }) {
     );
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  const lastTSB = tsbSeries.length ? tsbSeries[tsbSeries.length - 1] : null;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+      <CoachStatusCard readiness={readiness} trainingStatus={trainingStatus} />
+      <AthleteProfileCard
+        profile={profileDraft}
+        onChange={setProfileDraft}
+        onSave={() => coach?.saveProfile?.(profileDraft)}
+      />
+      <ReadinessCheckinCard
+        checkin={checkinDraft}
+        onChange={setCheckinDraft}
+        onSave={() => coach?.saveDailyCheckin?.(todayIso, checkinDraft)}
+      />
+      <WorkoutReflectionCard
+        workout={currentWorkout}
+        note={noteDraft}
+        onChange={setNoteDraft}
+        onSave={() => {
+          if (!workoutNoteKey) return;
+          coach?.saveWorkoutNote?.(workoutNoteKey, noteDraft);
+        }}
+      />
+      <InsightsCard title="Key Limiters" items={insights.limiters} />
+      <InsightsCard title="Performance Opportunities" items={insights.opportunities} />
+      <WorkoutPrescriptionCard workout={nextWorkout} />
+
       {/* Period selector */}
       <div style={{ display: 'flex', gap: 6 }}>
         {[30, 60, 90, 180].map(d => (
@@ -114,6 +203,246 @@ export function AnalyticsTab({ history, onSelectWorkout }) {
         <TETrendChart data={teTrend} workouts={workouts} onSelectWorkout={onSelectWorkout} />
       </Card>
     </div>
+  );
+}
+
+function CoachStatusCard({ readiness, trainingStatus }) {
+  return (
+    <Card>
+      <CardLabel>Coach Intelligence · Today</CardLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
+        <div style={{
+          background: `${readiness.color}14`,
+          border: `1px solid ${readiness.color}35`,
+          borderRadius: 'var(--r-md)',
+          padding: 'var(--sp-3)',
+        }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>READINESS</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 28, lineHeight: 1, color: readiness.color, fontFamily: 'var(--font-display)', fontWeight: 600 }}>{readiness.score}</span>
+            <span style={{ fontSize: 12, color: readiness.color, fontFamily: 'var(--font-mono)' }}>{readiness.label}</span>
+          </div>
+          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>{readiness.reason}</div>
+        </div>
+
+        <div style={{
+          background: `${trainingStatus.color}12`,
+          border: `1px solid ${trainingStatus.color}35`,
+          borderRadius: 'var(--r-md)',
+          padding: 'var(--sp-3)',
+        }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>TRAINING STATUS</div>
+          <div style={{ fontSize: 16, color: trainingStatus.color, fontWeight: 600 }}>{trainingStatus.label}</div>
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{trainingStatus.summary}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AthleteProfileCard({ profile, onChange, onSave }) {
+  return (
+    <Card>
+      <CardLabel>Athlete Profile</CardLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)' }}>
+        <Field label="Target Sport">
+          <select value={profile.targetSport ?? 'mixed'} onChange={e => onChange(p => ({ ...p, targetSport: e.target.value }))} style={inputStyle}>
+            <option value="mixed">Mixed</option>
+            <option value="running">Running</option>
+            <option value="cycling">Cycling</option>
+          </select>
+        </Field>
+        <Field label="Weekly Hours">
+          <input type="number" min="1" max="30" value={profile.weeklyHours ?? 6} onChange={e => onChange(p => ({ ...p, weeklyHours: Number(e.target.value || 0) }))} style={inputStyle} />
+        </Field>
+        <Field label="Primary Goal">
+          <input value={profile.primaryGoal ?? ''} onChange={e => onChange(p => ({ ...p, primaryGoal: e.target.value }))} style={inputStyle} placeholder="Half marathon, 100km ride..." />
+        </Field>
+        <Field label="Goal Date">
+          <input type="date" value={profile.goalDate ?? ''} onChange={e => onChange(p => ({ ...p, goalDate: e.target.value }))} style={inputStyle} />
+        </Field>
+      </div>
+      <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-2)' }}>
+        <Field label="Constraints">
+          <input value={profile.constraints ?? ''} onChange={e => onChange(p => ({ ...p, constraints: e.target.value }))} style={inputStyle} placeholder="Travel, limited weekdays, etc." />
+        </Field>
+        <Field label="Injury Notes">
+          <input value={profile.injuryNotes ?? ''} onChange={e => onChange(p => ({ ...p, injuryNotes: e.target.value }))} style={inputStyle} placeholder="Achilles, knee, lower back..." />
+        </Field>
+      </div>
+      <SaveRow onSave={onSave} />
+    </Card>
+  );
+}
+
+function ReadinessCheckinCard({ checkin, onChange, onSave }) {
+  const set = (k, v) => onChange(prev => ({ ...prev, [k]: v }));
+  return (
+    <Card>
+      <CardLabel>Daily Readiness Check-in</CardLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)' }}>
+        <Field label="Sleep Score (0-100)">
+          <input type="number" min="0" max="100" value={checkin.sleepScore ?? 70} onChange={e => set('sleepScore', Number(e.target.value || 0))} style={inputStyle} />
+        </Field>
+        <Field label="Health Score (0-100)">
+          <input type="number" min="0" max="100" value={checkin.healthScore ?? 75} onChange={e => set('healthScore', Number(e.target.value || 0))} style={inputStyle} />
+        </Field>
+        <Field label="Weather Score (0-100)">
+          <input type="number" min="0" max="100" value={checkin.weatherScore ?? 70} onChange={e => set('weatherScore', Number(e.target.value || 0))} style={inputStyle} />
+        </Field>
+        <Field label="Energy (1-10)">
+          <input type="number" min="1" max="10" value={checkin.energy ?? 6} onChange={e => set('energy', Number(e.target.value || 1))} style={inputStyle} />
+        </Field>
+        <Field label="Motivation (1-10)">
+          <input type="number" min="1" max="10" value={checkin.motivation ?? 7} onChange={e => set('motivation', Number(e.target.value || 1))} style={inputStyle} />
+        </Field>
+        <Field label="Sleep Hours">
+          <input type="number" min="0" max="14" step="0.1" value={checkin.sleepHours ?? 7.5} onChange={e => set('sleepHours', Number(e.target.value || 0))} style={inputStyle} />
+        </Field>
+        <Field label="Soreness (1-10)">
+          <input type="number" min="1" max="10" value={checkin.soreness ?? 3} onChange={e => set('soreness', Number(e.target.value || 1))} style={inputStyle} />
+        </Field>
+        <Field label="Stress (1-10)">
+          <input type="number" min="1" max="10" value={checkin.stress ?? 4} onChange={e => set('stress', Number(e.target.value || 1))} style={inputStyle} />
+        </Field>
+        <Field label="Resting HR Delta (bpm)">
+          <input type="number" min="-20" max="30" value={checkin.restingHrDelta ?? 0} onChange={e => set('restingHrDelta', Number(e.target.value || 0))} style={inputStyle} />
+        </Field>
+      </div>
+      <SaveRow onSave={onSave} />
+    </Card>
+  );
+}
+
+function WorkoutReflectionCard({ workout, note, onChange, onSave }) {
+  const disabled = !workout;
+  const set = (k, v) => onChange(prev => ({ ...prev, [k]: v }));
+  return (
+    <Card>
+      <CardLabel>Post-Workout Reflection</CardLabel>
+      {!workout && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Open a workout to add reflection notes.
+        </div>
+      )}
+      {workout && (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--sp-2)' }}>
+            {workout.date} · {workout.sportLabel}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)' }}>
+            <Field label="Purpose">
+              <input value={note.purpose ?? ''} onChange={e => set('purpose', e.target.value)} style={inputStyle} placeholder="Recovery, threshold, long endurance..." />
+            </Field>
+            <Field label="RPE (1-10)">
+              <input type="number" min="1" max="10" value={note.rpe ?? 6} onChange={e => set('rpe', Number(e.target.value || 1))} style={inputStyle} />
+            </Field>
+            <Field label="Pain (1-10)">
+              <input type="number" min="1" max="10" value={note.pain ?? 1} onChange={e => set('pain', Number(e.target.value || 1))} style={inputStyle} />
+            </Field>
+          </div>
+          <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-2)' }}>
+            <Field label="How it felt">
+              <input value={note.felt ?? ''} onChange={e => set('felt', e.target.value)} style={inputStyle} placeholder="Legs heavy after 40 min, stable HR, etc." />
+            </Field>
+            <Field label="Coach Notes">
+              <textarea value={note.notes ?? ''} onChange={e => set('notes', e.target.value)} style={{ ...inputStyle, minHeight: 72, resize: 'vertical' }} placeholder="Any symptoms, fueling issues, terrain notes..." />
+            </Field>
+          </div>
+        </>
+      )}
+      <SaveRow onSave={onSave} disabled={disabled} />
+    </Card>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display: 'grid', gap: 4 }}>
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputStyle = {
+  width: '100%',
+  background: 'var(--bg-raised)',
+  border: '1px solid var(--border-subtle)',
+  color: 'var(--text-primary)',
+  borderRadius: 'var(--r-sm)',
+  padding: '6px 8px',
+  fontSize: 12,
+  fontFamily: 'var(--font-body)',
+};
+
+function SaveRow({ onSave, disabled = false }) {
+  return (
+    <div style={{ marginTop: 'var(--sp-3)', display: 'flex', justifyContent: 'flex-end' }}>
+      <button
+        onClick={onSave}
+        disabled={disabled}
+        style={{
+          background: disabled ? 'var(--bg-raised)' : 'rgba(232,168,50,0.12)',
+          border: `1px solid ${disabled ? 'var(--border-subtle)' : 'rgba(232,168,50,0.4)'}`,
+          borderRadius: 'var(--r-sm)',
+          color: disabled ? 'var(--text-muted)' : 'var(--accent)',
+          fontSize: 11,
+          fontFamily: 'var(--font-mono)',
+          padding: '5px 10px',
+          cursor: disabled ? 'default' : 'pointer',
+        }}
+      >
+        Save
+      </button>
+    </div>
+  );
+}
+
+function InsightsCard({ title, items = [] }) {
+  return (
+    <Card>
+      <CardLabel>{title}</CardLabel>
+      <div style={{ display: 'grid', gap: 'var(--sp-2)' }}>
+        {items.map((item, i) => (
+          <div key={`${item.key || item.title}-${i}`} style={{
+            background: 'var(--bg-overlay)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--r-sm)',
+            padding: 'var(--sp-3)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{item.title}</div>
+            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>{item.evidence}</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{item.action}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function WorkoutPrescriptionCard({ workout }) {
+  if (!workout) return null;
+  return (
+    <Card>
+      <CardLabel>Workout Prescription (Phase 2)</CardLabel>
+      <div style={{
+        background: 'rgba(74,222,128,0.08)',
+        border: '1px solid rgba(74,222,128,0.3)',
+        borderRadius: 'var(--r-md)',
+        padding: 'var(--sp-3)',
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#4ade80', marginBottom: 4 }}>{workout.title}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{workout.objective}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.6 }}>{workout.session}</div>
+      </div>
+      <div style={{ marginTop: 'var(--sp-3)', display: 'grid', gap: 6 }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>WHY THIS SESSION</div>
+        {(workout.why || []).map((w, i) => (
+          <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>• {w}</div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

@@ -9,6 +9,7 @@ import { useWorkouts }  from './hooks/useWorkouts.js';
 import { useWorkout }   from './hooks/useWorkout.js';
 import { useOpenAI }    from './hooks/useOpenAI.js';
 import { useGarmin }    from './hooks/useGarmin.js';
+import { useCoachState } from './hooks/useCoachState.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
@@ -48,6 +49,7 @@ export default function App() {
   const auth     = useAuth();
   const workouts = useWorkouts(auth.user);       // Supabase-backed history
   const workout  = useWorkout();                  // current open workout
+  const coach    = useCoachState(auth.user?.id);
   const chat     = useOpenAI(workout.workout, workouts.recentWorkouts);
   const garmin   = useGarmin(async (results) => {
     // Called by useGarmin after /sync — save all new FIT files to DB
@@ -179,9 +181,16 @@ export default function App() {
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
             {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
-            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} />}
+            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} coach={coach} />}
             {activeTab === 'chat'     && <ChatTab     chat={chat} />}
-            {activeTab === 'analytics' && <AnalyticsTab history={workouts} onSelectWorkout={handleSelectFromHistory} />}
+            {activeTab === 'analytics' && (
+              <AnalyticsTab
+                history={workouts}
+                onSelectWorkout={handleSelectFromHistory}
+                coach={coach}
+                currentWorkout={workout.workout}
+              />
+            )}
             {activeTab === 'laps'      && <LapsTab      workout={workout.workout} />}
           </main>
         </div>

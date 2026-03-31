@@ -1,6 +1,6 @@
 /**
- * ChartsTab.jsx — Time-series charts: HR, speed, altitude, cadence.
- * For cycling activities: adds gradient and power charts.
+ * ChartsTab.jsx — Time-series charts from FIT data.
+ * Renders all supported metrics that are present in the workout stream.
  * Props: { workout }
  */
 import { useMemo }                          from 'react';
@@ -16,6 +16,7 @@ function isCycling(w) {
 export function ChartsTab({ workout: w }) {
   const ts       = w.timeSeries ?? [];
   const cycling  = isCycling(w);
+  const running  = isRunning(w);
 
   // Gradient series — computed from altitude + distance
   const gradientSeries = useMemo(() => {
@@ -32,43 +33,47 @@ export function ChartsTab({ workout: w }) {
     </div>
   );
 
-  const baseCharts = [
-    { key: 'hr',       label: 'Пульс',    unit: 'уд/мин', color: '#ef4444' },
-    { key: 'speedKmh', label: 'Скорость', unit: 'км/ч',   color: '#60a5fa' },
-    { key: 'altitude', label: 'Высота',   unit: 'м',       color: '#fbbf24' },
-    ...(ts.some(p => p.cadence) ? [{ key: 'cadence', label: 'Каданс', unit: 'об/мин', color: '#a78bfa' }] : []),
+  const maybeCharts = [
+    { key: 'altitude',             label: 'Elevation',            unit: 'м',      color: '#fbbf24' },
+    { key: 'paceMinKm',            label: 'Pace',                 unit: 'мин/км', color: '#22c55e', yDomain: ['auto', 'auto'], showWhen: () => running },
+    { key: 'hr',                   label: 'Heart Rate',           unit: 'уд/мин', color: '#ef4444' },
+    { key: 'stepLengthM',          label: 'Stride Length',        unit: 'м',      color: '#14b8a6' },
+    { key: 'cadence',              label: running ? 'Run Cadence' : 'Cadence', unit: 'spm', color: '#a78bfa' },
+    { key: 'power',                label: 'Power',                unit: 'Вт',     color: '#f97316' },
+    { key: 'verticalRatio',        label: 'Vertical Ratio',       unit: '%',      color: '#f43f5e' },
+    { key: 'groundContactTimeMs',  label: 'Ground Contact Time',  unit: 'мс',     color: '#0ea5e9' },
+    { key: 'stamina',              label: 'Stamina',              unit: '%',      color: '#84cc16', yDomain: [0, 100] },
+    { key: 'staminaPotential',     label: 'Stamina Potential',    unit: '%',      color: '#65a30d', yDomain: [0, 100] },
+    { key: 'runWalkState',         label: 'Run/Walk',             unit: '',       color: '#eab308', yDomain: [-0.1, 1.1] },
+    // Keep speed for cycling and generic activities
+    { key: 'speedKmh',             label: 'Скорость',             unit: 'км/ч',   color: '#60a5fa' },
   ];
+
+  const chartDefs = maybeCharts.filter(c => {
+    if (c.showWhen && !c.showWhen()) return false;
+    return ts.some(p => p[c.key] != null);
+  });
+
+  // Prefer pace over speed for runs (Garmin style)
+  const finalCharts = chartDefs.filter(c => !(running && c.key === 'speedKmh' && chartDefs.some(x => x.key === 'paceMinKm')));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
 
-      {/* Standard charts */}
-      {baseCharts.map(c => (
+      {/* Render all available series */}
+      {finalCharts.map(c => (
         <Card key={c.key} style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-          <CardLabel>{c.label} ({c.unit})</CardLabel>
+          <CardLabel>{c.unit ? `${c.label} (${c.unit})` : c.label}</CardLabel>
           <TimeSeriesChart
             data={ts}
             dataKey={c.key}
             color={c.color}
             unit={c.unit}
             height={130}
+            yDomain={c.yDomain ?? ['auto', 'auto']}
           />
         </Card>
       ))}
-
-      {/* Power chart — cycling with power meter */}
-      {cycling && ts.some(p => p.power != null) && (
-        <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-          <CardLabel>Мощность (Вт)</CardLabel>
-          <TimeSeriesChart
-            data={ts}
-            dataKey="power"
-            color="#f97316"
-            unit="Вт"
-            height={130}
-          />
-        </Card>
-      )}
 
       {/* Gradient chart — cycling only, needs altitude + distance data */}
       {cycling && gradientSeries.length > 10 && (
@@ -147,4 +152,9 @@ function GradientChart({ data, height = 140 }) {
       </div>
     </div>
   );
+}
+
+function isRunning(w) {
+  const s = (w.sport ?? w.sportLabel ?? '').toLowerCase();
+  return s.includes('run') || s.includes('бег');
 }

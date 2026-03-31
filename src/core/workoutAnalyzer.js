@@ -92,7 +92,17 @@ export const RECORD_FIELDS = [
   [3,   'hr',         1,            0],
   [4,   'cadence',    1,            0],
   [5,   'distance',   0.01,         0],    // cm → m
+  [7,   'power',      1,            0],    // watts
   [13,  'temp',       1,            0],
+  // Running dynamics
+  [39,  'verticalOscillationCm', 0.1, 0],  // raw mm → cm
+  [41,  'groundContactTimeMs',   0.1, 0],  // Garmin scale 10 → ms
+  [83,  'verticalRatio',         0.01, 0], // % (typically 6–12)
+  [85,  'stepLengthM',           0.01, 0], // step length in meters
+  [42,  'activityType',          1,    0], // run/walk state enum
+  // Garmin stamina (newer devices)
+  [139, 'stamina',               1,    0],
+  [140, 'staminaPotential',      1,    0],
   [6,   'speedStd',   0.001,        0],    // standard speed (uint16, fallback)
   [73,  'speed',      0.001,        0],    // enhanced speed (uint32, preferred)
   [2,   'altitudeStd',0.2,        -500],   // standard altitude (fallback)
@@ -146,6 +156,14 @@ export function decodeRecord(raw) {
   if (pt.altitude == null && pt.altitudeStd != null) pt.altitude = pt.altitudeStd;
   delete pt.speedStd;
   delete pt.altitudeStd;
+
+  // Run/Walk normalized for charts:
+  // FIT activity_type enum: 1=running, 6=walking.
+  if (pt.activityType != null) {
+    if (pt.activityType === 1) pt.runWalkState = 1;
+    else if (pt.activityType === 6) pt.runWalkState = 0;
+    else pt.runWalkState = null;
+  }
   return pt;
 }
 
@@ -398,6 +416,9 @@ export function buildWorkoutModel(fitData, fileName = '', userMaxHr = 0) {
   for (const pt of timeSeries) {
     if (pt.distance != null) pt.distKm = parseFloat((pt.distance / 1000).toFixed(3));
     if (pt.speed    != null) pt.speedKmh = parseFloat((pt.speed * 3.6).toFixed(2));
+    if (pt.speedKmh != null && pt.speedKmh > 0.5) {
+      pt.paceMinKm = parseFloat((60 / pt.speedKmh).toFixed(2)); // min/km
+    }
   }
 
   // maxHr priority (highest to lowest):

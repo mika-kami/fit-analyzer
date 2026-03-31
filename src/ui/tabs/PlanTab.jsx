@@ -3,11 +3,75 @@
  * Recomputes live from history. Start-day picker (Today / Tomorrow).
  * Props: { workout, history }
  */
-import { useState, useEffect }                                           from 'react';
+import { useState, useEffect, useMemo }                                  from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateTrainingPlan } from '../../core/trainingEngine.js';
+import {
+  computeReadinessScore,
+  computeTrainingStatus,
+  analyzePerformanceLimiters,
+  prescribeNextWorkout,
+  buildWeeklyReadinessForecast,
+  alignPrescriptionToWeekPlan,
+} from '../../core/coachEngine.js';
 import { Card, CardLabel }      from './OverviewTab.jsx';
-import { downloadFitWorkout }  from '../../core/fitWorkoutDownload.js';
+
+const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
+
+function windDirection(deg) {
+  if (deg == null || Number.isNaN(deg)) return '—';
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const idx = Math.round((((deg % 360) + 360) % 360) / 22.5) % 16;
+  return dirs[idx];
+}
+
+function extractWorkoutCoords(workout) {
+  const points = workout?.timeSeries ?? [];
+  const point = points.find(p =>
+    Number.isFinite(p?.lat) &&
+    Number.isFinite(p?.lon)
+  );
+  return point ? { lat: point.lat, lon: point.lon } : null;
+}
+
+function pickDailyForecastFrom3h(list = [], dayIndex = 0) {
+  if (!list.length) return null;
+  const target = new Date();
+  target.setHours(12, 0, 0, 0);
+  target.setDate(target.getDate() + dayIndex);
+  const targetMs = target.getTime();
+
+  const sameDay = list.filter(item => {
+    const dt = new Date((item.dt ?? 0) * 1000);
+    return (
+      dt.getFullYear() === target.getFullYear() &&
+      dt.getMonth() === target.getMonth() &&
+      dt.getDate() === target.getDate()
+    );
+  });
+
+  if (!sameDay.length) return null;
+
+  let best = sameDay[0];
+  let bestDiff = Math.abs(((best.dt ?? 0) * 1000) - targetMs);
+  for (let i = 1; i < sameDay.length; i++) {
+    const diff = Math.abs(((sameDay[i].dt ?? 0) * 1000) - targetMs);
+    if (diff < bestDiff) {
+      best = sameDay[i];
+      bestDiff = diff;
+    }
+  }
+
+  const windMs = Number(best?.wind?.speed ?? 0);
+  return {
+    tempC: Math.round(best?.main?.temp ?? 0),
+    windMs: parseFloat(windMs.toFixed(1)),
+    windKmh: Math.round(windMs * 3.6),
+    windDeg: best?.wind?.deg ?? null,
+    windDir: windDirection(best?.wind?.deg),
+    weatherLabel: best?.weather?.[0]?.main ?? '',
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Plan
@@ -87,51 +151,165 @@ export function PlanContextBanner({ meta, workout }) {
   );
 }
 
-export function PlanTab({ workout: w, history, garmin }) {
+export function PlanTab({ workout: w, history, coach }) {
   // Today and tomorrow as start options (0=Mon..6=Sun)
   const todayDow    = (new Date().getDay() + 6) % 7;
   const tomorrowDow = (todayDow + 1) % 7;
   const [startDow, setStartDow] = useState(todayDow);
+  const [planSport, setPlanSport] = useState(() => {
+    const t = coach?.profile?.targetSport;
+    return (t === 'running' || t === 'cycling' || t === 'mixed') ? t : 'mixed';
+  });
 
   // Recompute plan live: changes when history or startDow changes
   const histWorkouts = history?.history ?? [];
-  const livePlan     = generateTrainingPlan(w, histWorkouts, startDow);
+  const planWorkout  = useMemo(() => {
+    if (!w) return w;
+    if (planSport === 'running') {
+      return { ...w, sport: 'Running', sportLabel: 'Running' };
+    }
+    if (planSport === 'cycling') {
+      return { ...w, sport: 'Cycling', sportLabel: 'Cycling' };
+    }
+    return w;
+  }, [w, planSport]);
+  const livePlan     = generateTrainingPlan(planWorkout, histWorkouts, startDow);
   const plan         = livePlan.days ?? [];
   const planMeta     = livePlan.meta;
+  const coords       = extractWorkoutCoords(w);
+  const lastTSB      = planMeta?.load ? { ...planMeta.load, tsb: planMeta.load.tsb ?? 0 } : null;
+  const todayIso     = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
+  const checkin      = coach?.getDailyCheckin?.(todayIso);
+  const readiness    = useMemo(() => computeReadinessScore(checkin), [checkin]);
+  const trainingStatus = useMemo(
+    () => computeTrainingStatus({ lastTSB, readiness }),
+    [lastTSB?.tsb, lastTSB?.ctl, readiness?.score]
+  );
+  const insights = useMemo(
+    () => analyzePerformanceLimiters({
+      workouts: histWorkouts,
+      profile: { ...(coach?.profile || {}), targetSport: planSport },
+      readiness,
+      lastTSB,
+    }),
+    [histWorkouts, coach?.profile, planSport, readiness?.score, lastTSB?.tsb, lastTSB?.ctl]
+  );
+  const coachPrescription = useMemo(
+    () => prescribeNextWorkout({
+      profile: { ...(coach?.profile || {}), targetSport: planSport },
+      readiness,
+      trainingStatus,
+      insights,
+      weatherScore: checkin?.weatherScore ?? 70,
+    }),
+    [coach?.profile, planSport, readiness?.score, trainingStatus?.label, insights, checkin?.weatherScore]
+  );
+  const readinessForecast = useMemo(
+    () => buildWeeklyReadinessForecast(checkin),
+    [checkin]
+  );
+  const profileTarget = coach?.profile?.targetSport || 'mixed';
+  const shouldAttachCoachSession =
+    profileTarget === 'mixed'
+      ? planSport === 'mixed'
+      : planSport === profileTarget;
+
+  const coachAligned = useMemo(() => {
+    if (!shouldAttachCoachSession) {
+      return {
+        alignedDays: plan,
+        chosenIndex: null,
+        coherence: 0,
+        fallbackUsed: false,
+        reason: `Coach workout hidden for ${planSport} plan. Target sport is ${profileTarget}.`,
+        requiredReadiness: 0,
+        chosenReadiness: 0,
+      };
+    }
+    return alignPrescriptionToWeekPlan({
+      weekDays: plan,
+      prescription: coachPrescription,
+      readinessForecast,
+    });
+  }, [plan, coachPrescription, readinessForecast, shouldAttachCoachSession, planSport, profileTarget]);
+  const alignedPlan = coachAligned?.alignedDays?.length ? coachAligned.alignedDays : plan;
 
   const DAY_FULL = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
-  const [sending,    setSending]    = useState(false);
-  const [sendResult, setSendResult] = useState(null);
-  const [sendDetail, setSendDetail] = useState('');
-
-  const handleSendToGarmin = async () => {
-    if (!garmin?.serverFound || garmin?.status !== 'connected') return;
-    setSending(true);
-    setSendResult(null);
-
-    const sport = w?.sport?.toLowerCase().includes('run') ? 'running' : 'cycling';
-    const maxHr = w?.heartRate?.max || 180;
-    const days  = livePlan?.days ?? [];
-
+  const [weatherSource, setWeatherSource] = useState('workout'); // 'workout' | 'city'
+  const [cityInput, setCityInput] = useState(() => {
     try {
-      const results = await garmin.sendPlanToGarmin(days, sport, maxHr);
-      const sent   = results.filter(r => r.status === 'sent').length;
-      const errors = results.filter(r => r.status === 'error').length;
-
-      if (errors === 0) {
-        setSendResult('success');
-        setSendDetail(`${sent} тренировок отправлено в Garmin Connect`);
-      } else {
-        setSendResult('partial');
-        setSendDetail(`${sent} отправлено, ${errors} ошибок`);
-      }
-    } catch (e) {
-      setSendResult('error');
-      setSendDetail(e.message);
-    } finally {
-      setSending(false);
-      setTimeout(() => { setSendResult(null); setSendDetail(''); }, 5000);
+      return localStorage.getItem('plan_weather_city') || 'Prague';
+    } catch {
+      return 'Prague';
     }
+  });
+  const [cityQuery, setCityQuery] = useState(() => {
+    try {
+      return localStorage.getItem('plan_weather_city') || 'Prague';
+    } catch {
+      return 'Prague';
+    }
+  });
+  const [weather, setWeather] = useState({ loading: false, error: '', days: [], location: '' });
+
+  useEffect(() => {
+    if (!OPENWEATHER_API_KEY) {
+      setWeather({ loading: false, error: 'VITE_OPENWEATHER_API_KEY не задан', days: [], location: '' });
+      return;
+    }
+    if (weatherSource === 'workout' && !coords) {
+      setWeather({ loading: false, error: 'Нет GPS-точек в тренировке для прогноза', days: [], location: '' });
+      return;
+    }
+    if (weatherSource === 'city' && !cityQuery.trim()) {
+      setWeather({ loading: false, error: 'Введите название города', days: [], location: '' });
+      return;
+    }
+
+    const ctrl = new AbortController();
+
+    async function fetchForecast() {
+      setWeather(prev => ({ ...prev, loading: true, error: '' }));
+      try {
+        const url = new URL('https://api.openweathermap.org/data/2.5/forecast');
+        if (weatherSource === 'city') {
+          url.searchParams.set('q', cityQuery.trim());
+        } else {
+          url.searchParams.set('lat', String(coords.lat));
+          url.searchParams.set('lon', String(coords.lon));
+        }
+        url.searchParams.set('units', 'metric');
+        url.searchParams.set('appid', OPENWEATHER_API_KEY);
+
+        const res = await fetch(url.toString(), { signal: ctrl.signal });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || `OpenWeather HTTP ${res.status}`);
+        }
+
+        const list = Array.isArray(data?.list) ? data.list : [];
+        const days = Array.from({ length: 7 }, (_, i) => pickDailyForecastFrom3h(list, i)).filter(Boolean);
+        const location = data?.city?.name || (weatherSource === 'city' ? cityQuery.trim() : 'Workout location');
+
+        setWeather({ loading: false, error: '', days, location });
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        setWeather({ loading: false, error: e.message || 'Ошибка загрузки погоды', days: [], location: '' });
+      }
+    }
+
+    fetchForecast();
+    return () => ctrl.abort();
+  }, [coords?.lat, coords?.lon, weatherSource, cityQuery]);
+
+  const applyCity = () => {
+    const nextCity = cityInput.trim();
+    if (!nextCity) return;
+    setWeatherSource('city');
+    setCityQuery(nextCity);
+    try {
+      localStorage.setItem('plan_weather_city', nextCity);
+    } catch {}
   };
 
   const [revealed, setRevealed] = useState(false);
@@ -139,6 +317,32 @@ export function PlanTab({ workout: w, history, garmin }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
       {planMeta && <PlanContextBanner meta={planMeta} workout={w} />}
+
+      <Card style={{ padding: 'var(--sp-3) var(--sp-3)' }}>
+        <CardLabel>Plan Type</CardLabel>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+          <select
+            value={planSport}
+            onChange={e => setPlanSport(e.target.value)}
+            style={{
+              background: 'var(--bg-overlay)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--r-sm)',
+              padding: '6px 10px',
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}
+          >
+            <option value="mixed">Mixed</option>
+            <option value="running">Running</option>
+            <option value="cycling">Cycling</option>
+          </select>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Target sport: {profileTarget}
+          </div>
+        </div>
+      </Card>
 
       {/* Start-day picker */}
       <div style={{ display:'flex', alignItems:'center', gap:'var(--sp-3)' }}>
@@ -169,83 +373,158 @@ export function PlanTab({ workout: w, history, garmin }) {
         </div>
       </div>
 
-      {/* Garmin export button */}
-      {garmin && garmin.serverFound && (
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          {garmin.status === 'connected' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-              <button
-                onClick={handleSendToGarmin}
-                disabled={sending}
-                style={{
-                  width: '100%',
-                  background: sendResult === 'success' ? 'rgba(74,222,128,0.1)'
-                            : sendResult === 'error'   ? 'rgba(239,68,68,0.1)'
-                            : 'rgba(232,168,50,0.08)',
-                  border: `1px solid ${
-                    sendResult === 'success' ? 'rgba(74,222,128,0.35)'
-                  : sendResult === 'error'   ? 'rgba(239,68,68,0.35)'
-                  : 'rgba(232,168,50,0.25)'}`,
-                  borderRadius: 'var(--r-md)',
-                  padding: 'var(--sp-3) var(--sp-4)',
-                  color: sendResult === 'success' ? '#4ade80'
-                       : sendResult === 'error'   ? '#ef4444'
-                       : 'var(--accent)',
-                  fontSize: 13, fontWeight: 600, cursor: sending ? 'wait' : 'pointer',
-                  fontFamily: 'var(--font-body)',
-                  transition: 'all var(--t-base) var(--ease-snappy)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                {sending && (
-                  <div style={{ width: 12, height: 12, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                )}
-                {sending              ? 'Отправка в Garmin…'
-                 : sendResult === 'success' ? '✓ Отправлено в Garmin Connect'
-                 : sendResult === 'error'   ? '✗ Ошибка отправки'
-                 : sendResult === 'partial' ? '⚠ Частично отправлено'
-                 : '◈ Отправить план в Garmin Connect'}
-              </button>
-              {sendDetail && (
-                <div style={{ fontSize: 11, color: sendResult === 'error' ? '#f87171' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
-                  {sendDetail}
-                </div>
-              )}
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
-                Тренировки появятся на устройстве после синхронизации
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--sp-3)' }}>
-              Войдите в Garmin Connect для отправки плана
-            </div>
-          )}
-        </div>
-      )}
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-        {plan.map((day, i) => (
+        {alignedPlan.map((day, i) => (
           <DayCard
             key={day.day}
             day={day}
+            weather={weather.days[i]}
             index={i}
             revealed={revealed}
-            sport={w?.sport ?? w?.sportLabel ?? 'cycling'}
-            maxHr={w?.heartRate?.max || 180}
           />
         ))}
       </div>
 
+      <Card style={{ padding: 'var(--sp-4) var(--sp-3)' }}>
+        <CardLabel>Coach Alignment · Weekly Plan</CardLabel>
+        <div style={{
+          background: coachAligned?.fallbackUsed ? 'rgba(249,115,22,0.1)' : 'rgba(74,222,128,0.08)',
+          border: `1px solid ${coachAligned?.fallbackUsed ? 'rgba(249,115,22,0.35)' : 'rgba(74,222,128,0.3)'}`,
+          borderRadius: 'var(--r-md)',
+          padding: 'var(--sp-3)',
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            {coachPrescription?.title || 'No prescription'}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
+            {coachAligned?.reason || 'Coach workout not aligned yet.'}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
+            Coherence score: <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{coachAligned?.coherence ?? 0}/100</span>
+            {' · '}
+            Readiness gate: <span style={{ fontFamily: 'var(--font-mono)' }}>{coachAligned?.chosenReadiness ?? 0}/{coachAligned?.requiredReadiness ?? 0}</span>
+          </div>
+          {!shouldAttachCoachSession && (
+            <div style={{ marginTop: 8, fontSize: 11, color: '#f97316', fontFamily: 'var(--font-mono)' }}>
+              Coach sessions are attached only to the target-sport plan.
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card style={{ padding: 'var(--sp-4) var(--sp-3)' }}>
+        <CardLabel>Погода (OpenWeather)</CardLabel>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setWeatherSource('workout')}
+            style={{
+              background: weatherSource === 'workout' ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
+              border: `1px solid ${weatherSource === 'workout' ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-sm)',
+              padding: '4px 10px',
+              fontSize: 11,
+              color: weatherSource === 'workout' ? 'var(--accent)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+            }}
+          >
+            По GPS тренировки
+          </button>
+          <button
+            onClick={() => setWeatherSource('city')}
+            style={{
+              background: weatherSource === 'city' ? 'rgba(96,165,250,0.12)' : 'var(--bg-overlay)',
+              border: `1px solid ${weatherSource === 'city' ? 'rgba(96,165,250,0.35)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-sm)',
+              padding: '4px 10px',
+              fontSize: 11,
+              color: weatherSource === 'city' ? '#60a5fa' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+            }}
+          >
+            По городу
+          </button>
+          <input
+            value={cityInput}
+            onChange={e => setCityInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') applyCity(); }}
+            placeholder="City, e.g. Prague"
+            style={{
+              flex: '1 1 160px',
+              minWidth: 140,
+              background: 'var(--bg-overlay)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--r-sm)',
+              padding: '4px 8px',
+              fontSize: 11,
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+          <button
+            onClick={applyCity}
+            style={{
+              background: 'rgba(96,165,250,0.12)',
+              border: '1px solid rgba(96,165,250,0.35)',
+              borderRadius: 'var(--r-sm)',
+              padding: '4px 10px',
+              fontSize: 11,
+              color: '#60a5fa',
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+            }}
+          >
+            Применить
+          </button>
+        </div>
+        {weather.location && (
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--sp-2)' }}>
+            Локация: {weather.location}
+          </div>
+        )}
+        {weather.loading && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Загрузка прогноза…
+          </div>
+        )}
+        {!weather.loading && weather.error && (
+          <div style={{ fontSize: 11, color: '#f97316', fontFamily: 'var(--font-mono)' }}>
+            {weather.error}
+          </div>
+        )}
+        {!weather.loading && !weather.error && weather.days.length > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-2)' }}>
+            {weather.days.map((d, i) => (
+              <div key={i} style={{
+                background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)',
+                borderRadius:'var(--r-sm)', padding:'var(--sp-2) var(--sp-3)',
+              }}>
+                <div style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
+                  {alignedPlan[i]?.day ?? `День ${i + 1}`}
+                </div>
+                <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
+                  {d.tempC}°C · {d.weatherLabel || '—'}
+                </div>
+                <div style={{ fontSize:11, color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>
+                  Ветер: {d.windKmh} км/ч ({d.windMs} м/с), {d.windDir}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
         <CardLabel>Интенсивность по дням</CardLabel>
         <ResponsiveContainer width="100%" height={110}>
-          <BarChart data={plan} margin={{ top:0, right:4, left:0, bottom:0 }}>
+          <BarChart data={alignedPlan} margin={{ top:0, right:4, left:0, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
             <XAxis dataKey="day" tick={{ fill:'#3a3d4e', fontSize:11, fontFamily:'var(--font-mono)' }} axisLine={false} tickLine={false} />
             <YAxis domain={[0,100]} tick={{ fill:'#3a3d4e', fontSize:10 }} axisLine={false} tickLine={false} width={24} />
             <Tooltip contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)', color:'var(--text-primary)' }} labelStyle={{ color:'var(--text-muted)' }} itemStyle={{ color:'var(--text-secondary)' }} formatter={(v,_,p) => [`${v}%`, p.payload.label]} />
             <Bar dataKey="intensity" radius={[3,3,0,0]}>
-              {plan.map((d,i) => <Cell key={i} fill={d.current ? '#e8a832' : d.color} opacity={d.current ? 1 : 0.75} />)}
+              {alignedPlan.map((d,i) => <Cell key={i} fill={d.current ? '#e8a832' : d.color} opacity={d.current ? 1 : 0.75} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -274,7 +553,7 @@ export function PlanTab({ workout: w, history, garmin }) {
   );
 }
 
-export function DayCard({ day, index, revealed, sport, maxHr }) {
+export function DayCard({ day, weather, index, revealed }) {
   const [show, setShow] = useState(false);
   useEffect(() => { const t = setTimeout(() => setShow(true), revealed ? index*60 : 0); return () => clearTimeout(t); }, [revealed, index]);
 
@@ -317,6 +596,27 @@ export function DayCard({ day, index, revealed, sport, maxHr }) {
             {day.desc && (
               <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:2 }}>{day.desc}</div>
             )}
+            {weather && (
+              <div style={{ fontSize:10, color:'var(--text-secondary)', marginTop:4, fontFamily:'var(--font-mono)' }}>
+                {weather.tempC}°C · ветер {weather.windKmh} км/ч {weather.windDir}
+              </div>
+            )}
+            {day.coachSession && (
+              <div style={{
+                marginTop: 6,
+                background: day.coachSession.fallbackUsed ? 'rgba(249,115,22,0.12)' : 'rgba(74,222,128,0.1)',
+                border: `1px solid ${day.coachSession.fallbackUsed ? 'rgba(249,115,22,0.35)' : 'rgba(74,222,128,0.35)'}`,
+                borderRadius: 6,
+                padding: '6px 8px',
+              }}>
+                <div style={{ fontSize: 10, color: day.coachSession.fallbackUsed ? '#f97316' : '#4ade80', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
+                  COACH SESSION {day.coachSession.fallbackUsed ? '· FALLBACK' : ''}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                  {day.coachSession.session}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -336,24 +636,6 @@ export function DayCard({ day, index, revealed, sport, maxHr }) {
           boxShadow: highlight ? `0 0 6px ${day.color}55` : 'none',
         }} />
       </div>
-      {day.type !== 'rest' && (
-        <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={(e) => { e.stopPropagation(); downloadFitWorkout(day, sport, maxHr); }}
-            title={`Скачать ${day.label} как .fit для Garmin`}
-            style={{
-              background: 'none', border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--r-sm)', padding: '3px 10px',
-              color: 'var(--text-dim)', fontSize: 10, cursor: 'pointer',
-              fontFamily: 'var(--font-mono)', transition: 'all 120ms ease',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = day.color + '80'; e.currentTarget.style.color = day.color; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-dim)'; }}
-          >
-            ↓ .fit
-          </button>
-        </div>
-      )}
     </div>
   );
 }
