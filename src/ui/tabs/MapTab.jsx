@@ -87,14 +87,14 @@ export function MapTab({ workout: w }) {
     L.circleMarker([startPt.lat, startPt.lon], {
       radius: 7, fillColor: '#4ade80', color: '#07080c',
       weight: 2, fillOpacity: 1,
-    }).bindPopup(`<b>Старт</b><br>${w.startTime}`).addTo(map);
+    }).bindPopup(`<b>Start</b><br>${w.startTime}`).addTo(map);
 
     // Finish marker (red dot)
     const endPt = pts[pts.length - 1];
     L.circleMarker([endPt.lat, endPt.lon], {
       radius: 7, fillColor: '#ef4444', color: '#07080c',
       weight: 2, fillOpacity: 1,
-    }).bindPopup(`<b>Финиш</b><br>${(w.distance/1000).toFixed(2)} км`).addTo(map);
+    }).bindPopup(`<b>Finish</b><br>${(w.distance/1000).toFixed(2)} km`).addTo(map);
 
     // Fit bounds with padding
     const lats = pts.map(p => p.lat);
@@ -115,7 +115,7 @@ export function MapTab({ workout: w }) {
       <Card>
         <div style={{ textAlign: 'center', padding: 'var(--sp-8)', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: 32, marginBottom: 'var(--sp-3)' }}>📍</div>
-          <div style={{ fontSize: 13 }}>GPS-данные отсутствуют в этой тренировке</div>
+          <div style={{ fontSize: 13 }}>No GPS data in this workout</div>
         </div>
       </Card>
     );
@@ -145,7 +145,7 @@ export function MapTab({ workout: w }) {
               animation: 'spin 0.8s linear infinite',
             }} />
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Загрузка карты…
+              Loading карты…
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ export function MapTab({ workout: w }) {
 
       {/* HR legend */}
       <Card>
-        <CardLabel>Цвет трека — зоны ЧСС</CardLabel>
+        <CardLabel>Track color - HR zones</CardLabel>
         <div style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
           {[
             { color: HR_COLORS[0], label: 'Z1 < 60%' },
@@ -176,9 +176,9 @@ export function MapTab({ workout: w }) {
       {/* Stats strip */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-3)' }}>
         {[
-          { label: 'GPS точек',  value: pts.length.toLocaleString() },
-          { label: 'Дистанция', value: `${(w.distance/1000).toFixed(2)} км` },
-          { label: 'Набор',      value: `+${w.elevation?.ascent ?? 0} м` },
+          { label: 'GPS points',  value: pts.length.toLocaleString() },
+          { label: 'Distance', value: `${(w.distance/1000).toFixed(2)} km` },
+          { label: 'Ascent',      value: `+${w.elevation?.ascent ?? 0} m` },
         ].map(s => (
           <div key={s.label} style={{
             background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
@@ -236,9 +236,11 @@ function GPXExportButton({ workout, hasGps }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       }}
     >
-      {status === 'ok'  ? '✓ GPX сохранён'
-     : status === 'err' ? '✗ Нет GPS-данных'
-     : '↓ Экспорт GPX'}
+      {status === 'ok'  ? '✓ GPX saved'
+     : status === 'err' ? '✗ No GPS data'
+     : '↓ Export GPX'}
     </button>
   );
 }
+
+

@@ -1,5 +1,5 @@
-/**
- * useWorkouts.js — Replaces useHistory.js for production.
+﻿/**
+ * useWorkouts.js â€” Replaces useHistory.js for production.
  * Stores workouts in Supabase instead of window.storage.
  * API is compatible with useHistory so Dashboard/HistoryTab need no changes.
  */
@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase.js';
 import { parseFit } from '../core/fitParser.js';
 import { buildWorkoutModel } from '../core/workoutAnalyzer.js';
 
-// Convert WorkoutModel → DB row
+// Convert WorkoutModel â†’ DB row
 function toRow(workout, userId) {
   return {
     user_id:      userId,
@@ -52,8 +52,8 @@ function toRow(workout, userId) {
   };
 }
 
-// Convert DB row → WorkoutSummary (for cards + plan)
-// Estimate aerobic TE from intensity × duration (for Strava workouts without TE)
+// Convert DB row â†’ WorkoutSummary (for cards + plan)
+// Estimate aerobic TE from intensity Ã— duration (for Strava workouts without TE)
 function estimateTE(avgHr, maxHr, durationSec) {
   if (!avgHr || avgHr < 60 || !maxHr || maxHr < 100 || !durationSec || durationSec < 300) return 0;
   const durationH = durationSec / 3600;
@@ -83,7 +83,7 @@ function fromRow(row) {
   // Recalculate client-side from DB columns which are always correct.
   if (row.source === 'strava') {
     const te = estimateTE(row.avg_hr, row.max_hr, row.duration_s);
-    // Always override — don't keep a wrong value (0 or 5) from the edge function
+    // Always override â€” don't keep a wrong value (0 or 5) from the edge function
     base.trainingEffect = {
       aerobic:   te,          // 0 if no HR data (cycling without monitor)
       anaerobic: 0,
@@ -97,7 +97,7 @@ function fromRow(row) {
 // Source priority: garmin FIT > upload FIT > strava (API streams, no laps/TE)
 const SOURCE_RANK = { garmin: 3, upload: 2, strava: 1 };
 
-// Score how "rich" a workout's data is — higher = more data
+// Score how "rich" a workout's data is â€” higher = more data
 function dataRichness(w) {
   let score = SOURCE_RANK[w.source ?? 'upload'] ?? 0;
   if (w.laps?.length)                    score += 2;
@@ -145,7 +145,7 @@ export function useWorkouts(user) {
         if (!uploadErr) row.fit_path = path;
       }
 
-     // Find existing workout for this date (any source) — never downgrade richer data
+     // Find existing workout for this date (any source) â€” never downgrade richer data
      const existing = history.find(h => h.date === workout.date);
      if (existing && dataRichness(workout) < dataRichness(existing)) {
        return true; // keep existing richer record
@@ -285,7 +285,7 @@ export function useWorkouts(user) {
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const buffer  = bytes.buffer;
 
-        // Parse FIT → WorkoutModel
+        // Parse FIT â†’ WorkoutModel
         const fitData = parseFit(buffer);
         const model   = buildWorkoutModel(fitData, `${item.garmin_activity_id}.fit`, historicalMaxHr);
 
@@ -321,7 +321,7 @@ export function useWorkouts(user) {
             continue;
           }
 
-          console.log(`[saveGarminActivities] upgraded ${existing.source} → garmin for ${model.date}`);
+          console.log(`[saveGarminActivities] upgraded ${existing.source} â†’ garmin for ${model.date}`);
           setHistory(prev =>
             prev.map(w => w.id === existing.id ? fromRow(data) : w)
           );

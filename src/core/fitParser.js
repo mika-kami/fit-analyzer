@@ -1,5 +1,5 @@
-/**
- * fitParser.js — Pure-JS ANT/Garmin FIT binary parser. Zero dependencies.
+﻿/**
+ * fitParser.js â€” Pure-JS ANT/Garmin FIT binary parser. Zero dependencies.
  * Handles all ANT+ base types, Smart Recording, enhanced speed/altitude fallbacks,
  * zones_target message, correct CRC boundary via dataEnd.
  */
@@ -13,10 +13,10 @@
  * No external dependencies. Works in browser + Node.
  */
 
-// ─── Base type table ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Base type table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Keys are the actual FIT base_type bytes as written in definition messages.
-// Single-byte types use low-nibble only (0x00–0x0D).
-// Multi-byte types have the high bit set (0x83, 0x84, 0x85, 0x86, 0x88…).
+// Single-byte types use low-nibble only (0x00â€“0x0D).
+// Multi-byte types have the high bit set (0x83, 0x84, 0x85, 0x86, 0x88â€¦).
 // We look up by (btypeRaw & 0x9F) to normalize, so we need BOTH the raw and
 // the normalised form in the table.
 const BASE_TYPE = {
@@ -27,7 +27,7 @@ const BASE_TYPE = {
   0x07: ['string',  1],
   0x0A: ['uint8z',  1],
   0x0D: ['byte',    1],
-  // Multi-byte types — actual bytes in FIT files have high bit set
+  // Multi-byte types â€” actual bytes in FIT files have high bit set
   0x83: ['sint16',  2],
   0x84: ['uint16',  2],
   0x85: ['sint32',  4],
@@ -56,7 +56,7 @@ const INVALID = {
   uint64z: BigInt(0), byte: 0xFF, string: null,
 };
 
-// ─── Read a single value from DataView ───────────────────────────────────────
+// â”€â”€â”€ Read a single value from DataView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function readScalar(dv, offset, typeName, le) {
   switch (typeName) {
     case 'enum':   case 'uint8':  case 'byte': case 'uint8z':
@@ -75,7 +75,7 @@ function readScalar(dv, offset, typeName, le) {
   }
 }
 
-// ─── Parse one field's raw bytes, respecting array fields ────────────────────
+// â”€â”€â”€ Parse one field's raw bytes, respecting array fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function parseFieldBytes(dv, offset, fieldSize, btypeRaw, le) {
   const btypeKey = btypeRaw & 0x9F;
   const info = BASE_TYPE[btypeKey];
@@ -114,7 +114,7 @@ function isInvalid(v, typeName) {
   return v === sentinel;
 }
 
-// ─── Main parser ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function parseFit(buffer) {
   const bytes  = new Uint8Array(buffer);
   const dv     = new DataView(buffer);
@@ -133,7 +133,7 @@ export function parseFit(buffer) {
   const dataSize = dv.getUint32(4, true);
   const dataEnd  = headerSize + dataSize;
 
-  const localDefs = {}; // local message number → definition
+  const localDefs = {}; // local message number â†’ definition
   const result = { sessions: [], laps: [], records: [], sports: [], hrZones: [], fileId: null, zonesTarget: null };
 
   while (pos < dataEnd) {
@@ -215,7 +215,7 @@ export function parseFit(buffer) {
   return result;
 }
 
-// ─── Timestamp conversion ────────────────────────────────────────────────────
+// â”€â”€â”€ Timestamp conversion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function fitTsToDate(ts) {
   if (!ts || ts === 0xFFFFFFFF) return null;
   return new Date(FIT_EPOCH_MS + ts * 1000);
@@ -223,4 +223,4 @@ export function fitTsToDate(ts) {
 
 
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

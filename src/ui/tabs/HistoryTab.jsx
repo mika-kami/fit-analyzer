@@ -7,8 +7,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardLabel }             from './OverviewTab.jsx';
 
 const LOAD_COLOR = { high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151' };
-const WEEKDAYS   = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-const MONTHS_RU  = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+const WEEKDAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const MONTHS_RU  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 
 // ── Heat-map calendar (GitHub-style, last 12 weeks) ──────────────────────────
@@ -77,7 +77,7 @@ export function HeatmapCalendar({ history, onSelect, selectedDate }) {
                   <div
                     key={wi}
                     onClick={() => w && onSelect(cell.date)}
-                    title={w ? `${cell.date}: ${(w.distance/1000).toFixed(1)}км, ТЭ ${w.trainingEffect?.aerobic}` : cell.date}
+                    title={w ? `${cell.date}: ${(w.distance/1000).toFixed(1)}km, TE ${w.trainingEffect?.aerobic}` : cell.date}
                     style={{
                       width:12, height:12, borderRadius:2,
                       background: bg, opacity,
@@ -96,8 +96,8 @@ export function HeatmapCalendar({ history, onSelect, selectedDate }) {
       </div>
       {/* Legend */}
       <div style={{ display:'flex', gap:12, marginTop:8, alignItems:'center' }}>
-        <span style={{ fontSize:10, color:'var(--text-dim)', fontFamily:'var(--font-mono)' }}>Нагрузка:</span>
-        {[['low','Лёгкая'],['medium','Средняя'],['high','Высокая']].map(([level,label]) => (
+        <span style={{ fontSize:10, color:'var(--text-dim)', fontFamily:'var(--font-mono)' }}>Load:</span>
+        {[['low','Easy'],['medium','Wedедняя'],['high','High']].map(([level,label]) => (
           <div key={level} style={{ display:'flex', alignItems:'center', gap:4 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:LOAD_COLOR[level], opacity: level==='high'?1:level==='medium'?0.75:0.5 }} />
             <span style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>{label}</span>
@@ -138,15 +138,15 @@ export function WorkoutRow({ w, selected, onSelect, onDelete }) {
       </div>
       {/* Stats */}
       <div style={{ display:'flex', gap:'var(--sp-4)', flexShrink:0 }}>
-        <Stat value={`${(w.distance/1000).toFixed(1)}`} unit="км" />
+        <Stat value={`${(w.distance/1000).toFixed(1)}`} unit="km" />
         <Stat value={fmtDur(w.duration?.active||0)} unit="" />
-        <Stat value={`${w.trainingEffect?.aerobic?.toFixed(1)||'—'}`} unit="ТЭ" accent />
+        <Stat value={`${w.trainingEffect?.aerobic?.toFixed(1)||'—'}`} unit="TE" accent />
       </div>
       {/* Delete */}
       <button
         onClick={e => { e.stopPropagation(); onDelete(w.date); }}
         style={{ background:'none', border:'none', color:'var(--text-dim)', cursor:'pointer', fontSize:14, padding:'2px 4px', lineHeight:1 }}
-        title="Удалить"
+        title="Delete"
       >×</button>
     </div>
   );
@@ -201,7 +201,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
     setTimeout(() => setSaveStatus(null), 2500);
   };
 
-  const fmtDur = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}ч ${String(m).padStart(2,'0')}мин`; };
+  const fmtDur = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}ч ${String(m).padStart(2,'0')}min`; };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--sp-4)' }}>
@@ -214,9 +214,9 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
           display:'flex', justifyContent:'space-between', alignItems:'center',
         }}>
           <div>
-            <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'var(--font-mono)', marginBottom:2 }}>ТЕКУЩАЯ ТРЕНИРОВКА</div>
+            <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'var(--font-mono)', marginBottom:2 }}>CURRENT WORKOUT</div>
             <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
-              {currentWorkout.date} · {(currentWorkout.distance/1000).toFixed(1)} км · ТЭ {currentWorkout.trainingEffect?.aerobic}
+              {currentWorkout.date} · {(currentWorkout.distance/1000).toFixed(1)} km · TE {currentWorkout.trainingEffect?.aerobic}
             </div>
           </div>
           <button
@@ -231,22 +231,22 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
               fontFamily:'var(--font-body)',
             }}
           >
-            {saveStatus==='saving' ? '…' : saveStatus==='saved' ? '✓ Сохранено' : saveStatus==='error' ? '✗ Ошибка' : '↓ Сохранить'}
+            {saveStatus==='saving' ? '…' : saveStatus==='saved' ? '✓ Saved' : saveStatus==='error' ? '✗ Error' : '↓ Save'}
           </button>
         </div>
       )}
 
       {!history.storageOk && (
         <div style={{ background:'rgba(250,191,36,0.06)', border:'1px solid rgba(250,191,36,0.2)', borderRadius:'var(--r-md)', padding:'var(--sp-3) var(--sp-4)', fontSize:12, color:'var(--accent)', fontFamily:'var(--font-mono)' }}>
-          ℹ История доступна в этой сессии · сохраняется в памяти браузера
+          ℹ History is available in this session and stored in browser memory
         </div>
       )}
 
       {/* Heatmap */}
       <Card>
-        <CardLabel>Календарь активности (12 недель)</CardLabel>
+        <CardLabel>Activity calendar (12 weeks)</CardLabel>
         {history.loadingDb ? (
-          <div style={{ fontSize:12, color:'var(--text-muted)' }}>Загрузка…</div>
+          <div style={{ fontSize:12, color:'var(--text-muted)' }}>Loading...</div>
         ) : (
           <HeatmapCalendar history={workouts} onSelect={setSelectedDate} selectedDate={selectedDate} />
         )}
@@ -255,7 +255,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {/* Period stats */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-          {periodWorkouts.length} тренировок за период
+          {periodWorkouts.length} workouts over период
         </div>
         <PeriodSelector period={period} onChange={setPeriod} />
       </div>
@@ -263,12 +263,12 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {stats && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))', gap:'var(--sp-3)' }}>
           {[
-            { label:'Дистанция',   value: stats.totalDistKm,  unit:'км'   },
-            { label:'Время',        value: fmtDur(stats.totalActiveH*3600), unit:'' },
-            { label:'Набор',         value: stats.totalAscent,  unit:'м'    },
-            { label:'Калории',       value: stats.totalCals,    unit:'ккал' },
-            { label:'Ср. ТЭ',        value: stats.avgTE,        unit:'/5'   },
-            { label:'Высокая нагр.', value: stats.highLoadDays, unit:'дней' },
+            { label:'Distance',   value: stats.totalDistKm,  unit:'km'   },
+            { label:'Time',        value: fmtDur(stats.totalActiveH*3600), unit:'' },
+            { label:'Ascent',         value: stats.totalAscent,  unit:'m'    },
+            { label:'Calories',       value: stats.totalCals,    unit:'kcal' },
+            { label:'Avg TE',        value: stats.avgTE,        unit:'/5'   },
+            { label:'High нагр.', value: stats.highLoadDays, unit:'days' },
           ].map(s => (
             <div key={s.label} style={{ background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', borderRadius:'var(--r-md)', padding:'var(--sp-3) var(--sp-4)' }}>
               <div style={{ fontSize:9, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
@@ -284,12 +284,12 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {workouts.length === 0 ? (
         <div style={{ background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', borderRadius:'var(--r-lg)', padding:'var(--sp-8)', textAlign:'center' }}>
           <div style={{ fontSize:32, marginBottom:'var(--sp-3)' }}>📂</div>
-          <div style={{ fontSize:13, color:'var(--text-secondary)' }}>История пуста</div>
-          <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:'var(--sp-2)' }}>Загрузите тренировку и нажмите «Сохранить»</div>
+          <div style={{ fontSize:13, color:'var(--text-secondary)' }}>History is empty</div>
+          <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:'var(--sp-2)' }}>Загрузите тренировку и нажmите «Save»</div>
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:'var(--sp-2)' }}>
-          <CardLabel>Все тренировки ({workouts.length})</CardLabel>
+          <CardLabel>All тренировки ({workouts.length})</CardLabel>
           {workouts.map(w => (
             <WorkoutRow
               key={w.date} w={w}
@@ -304,13 +304,13 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {/* Selected workout detail */}
       {selectedWorkout && (
         <Card style={{ borderColor:'rgba(232,168,50,0.25)' }}>
-          <CardLabel>Детали · {selectedWorkout.date}</CardLabel>
+          <CardLabel>Details · {selectedWorkout.date}</CardLabel>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-3)' }}>
             {selectedWorkout.hrZones?.map(z => (
               <div key={z.id} style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <div style={{ width:6, height:6, borderRadius:'50%', background:z.color, flexShrink:0 }} />
                 <span style={{ fontSize:11, color:'var(--text-secondary)', flex:1 }}>{z.name}</span>
-                <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:z.color }}>{z.minutes}мин</span>
+                <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:z.color }}>{z.minutes}min</span>
                 <span style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)', width:30, textAlign:'right' }}>{z.pct?.toFixed(0)}%</span>
               </div>
             ))}
@@ -320,3 +320,5 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
     </div>
   );
 }
+
+

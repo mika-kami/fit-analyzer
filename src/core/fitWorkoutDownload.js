@@ -14,7 +14,7 @@
  * For Garmin Connect Web:
  *   NOTE: The regular "Import" button on Garmin Connect only accepts
  *   ACTIVITY files (recorded rides/runs), not workout plan files.
- *   Use the "Отправить в Garmin" button in this app instead —
+ *   Use the "Send to Garmin" button in this app instead —
  *   it uses the Workout API which correctly creates structured workouts.
  *
  * For Wahoo ELEMNT:
@@ -47,3 +47,4 @@ export function downloadFitWorkout(day, sport, maxHr = 180) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+

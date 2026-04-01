@@ -25,7 +25,7 @@ export function workoutToGPX(workout) {
   const pts = (workout.timeSeries ?? []).filter(p => p.lat != null && p.lon != null);
 
   if (pts.length === 0) {
-    throw new Error('Нет GPS-данных в этой тренировке');
+    throw new Error('No GPS data in this workout');
   }
 
   const name     = `${workout.sportLabel} ${workout.date} ${workout.startTime}`;
@@ -61,7 +61,7 @@ export function workoutToGPX(workout) {
   <metadata>
     <name>${escapeXml(name)}</name>
     <time>${fileTime}</time>
-    <desc>${distKm} км · ЧСС ср. ${workout.heartRate?.avg ?? '—'} уд/мин · +${workout.elevation?.ascent ?? 0} м</desc>
+    <desc>${distKm} km · ЧСС ср. ${workout.heartRate?.avg ?? '—'} уд/min · +${workout.elevation?.ascent ?? 0} m</desc>
   </metadata>
   <trk>
     <name>${escapeXml(name)}</name>
@@ -100,3 +100,5 @@ function escapeXml(str) {
     .replace(/"/g,  '&quot;')
     .replace(/'/g,  '&apos;');
 }
+
+

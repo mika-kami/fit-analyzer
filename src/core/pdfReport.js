@@ -42,7 +42,7 @@ function zoneRow(zone) {
         <div style="height:100%;border-radius:3px;background:${zone.color};width:${Math.min(zone.pct, 100)}%;"></div>
       </div>
       <div style="width:36px;text-align:right;color:${C.text};font-weight:600;">${zone.pct}%</div>
-      <div style="width:50px;text-align:right;color:${C.muted};">${zone.minutes} мин</div>
+      <div style="width:50px;text-align:right;color:${C.muted};">${zone.minutes} min</div>
       <div style="width:70px;text-align:right;color:${C.muted};font-size:10px;">${zone.hrLo}–${zone.hrHi}</div>
     </div>`;
 }
@@ -85,7 +85,7 @@ function buildReportHTML(w) {
   <div style="display:flex;justify-content:space-between;margin-bottom:24px;border-bottom:1px solid ${C.border};padding-bottom:16px;">
     <div>
       <div style="font-size:9px;color:${C.accent};letter-spacing:0.15em;margin-bottom:4px;">
-        ◈ FIT ANALYZER · ОТЧЁТ О ТРЕНИРОВКЕ
+        ◈ FIT ANALYZER · WORKOUT REPORT
       </div>
       <div style="font-size:22px;font-weight:700;color:${C.text};letter-spacing:-0.02em;">
         ${w.sportLabel}${w.bike ? ` — ${w.bike}` : ''}
@@ -96,44 +96,44 @@ function buildReportHTML(w) {
     </div>
     <div style="text-align:right;font-size:11px;color:${C.muted};">
       <div style="font-size:16px;color:${C.text};font-weight:600;">${w.date}</div>
-      <div>Создан: ${new Date().toLocaleDateString('ru')}</div>
+      <div>Created: ${new Date().toLocaleDateString('ru')}</div>
     </div>
   </div>
 
   <!-- Metrics -->
-  ${sectionTitle('Ключевые метрики')}
+  ${sectionTitle('Key metrics')}
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:4px;">
-    ${metricCell(fmtKm(w.distance) + ' км', 'Дистанция')}
-    ${metricCell(fmtDurationShort(w.duration.active), 'Акт. время')}
-    ${metricCell(fmtNum(w.speed.avg) + ' км/ч', 'Ср. скорость')}
-    ${metricCell((w.heartRate.avg || '—') + ' уд/мин', 'Ср. ЧСС')}
+    ${metricCell(fmtKm(w.distance) + ' km', 'Distance')}
+    ${metricCell(fmtDurationShort(w.duration.active), 'Active time')}
+    ${metricCell(fmtNum(w.speed.avg) + ' кm/h', 'Wed. скорость')}
+    ${metricCell((w.heartRate.avg || '—') + ' уд/min', 'Wed. ЧСС')}
   </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-    ${metricCell('+' + (w.elevation?.ascent || 0) + ' м', 'Набор высоты')}
-    ${metricCell((w.calories || '—') + ' ккал', 'Калории')}
-    ${metricCell(w.trainingEffect.aerobic.toFixed(1) + ' / 5', 'ТЭ Аэробный')}
-    ${metricCell((w.heartRate.max || '—') + ' уд/мин', 'Макс. ЧСС')}
+    ${metricCell('+' + (w.elevation?.ascent || 0) + ' m', 'Ascent высоты')}
+    ${metricCell((w.calories || '—') + ' kcal', 'Calories')}
+    ${metricCell(w.trainingEffect.aerobic.toFixed(1) + ' / 5', 'TE Aerobic')}
+    ${metricCell((w.heartRate.max || '—') + ' уд/min', 'Max HR')}
   </div>
 
   <!-- HR Zones -->
-  ${zones.length ? sectionTitle('Зоны ЧСС') + zones.map(zoneRow).join('') : ''}
+  ${zones.length ? sectionTitle('Zones ЧСС') + zones.map(zoneRow).join('') : ''}
 
   <!-- Training Effect -->
-  ${sectionTitle('Тренировочный эффект')}
-  ${teBar('Аэробный', w.trainingEffect.aerobic, C.accent)}
-  ${teBar('Анаэробный', w.trainingEffect.anaerobic, C.info)}
+  ${sectionTitle('Training effect')}
+  ${teBar('Aerobic', w.trainingEffect.aerobic, C.accent)}
+  ${teBar('Anaerobic', w.trainingEffect.anaerobic, C.info)}
 
   <!-- Recommendations -->
-  ${recs.length ? sectionTitle('Рекомендации тренера') + recs.map(recBlock).join('') : ''}
+  ${recs.length ? sectionTitle('Coach recommendations') + recs.map(recBlock).join('') : ''}
 
   <!-- Details -->
   <div style="margin-top:20px;padding-top:12px;border-top:1px solid ${C.border};font-size:10px;color:${C.muted};line-height:1.8;">
-    Полное время: ${fmtDuration(w.duration.total)} ·
-    Паузы: ${fmtDurationShort(w.duration.pause)} ·
-    Ср. каданс: ${w.cadence?.avg || '—'} об/мин ·
-    Макс скорость: ${fmtNum(w.speed.max)} км/ч ·
-    Нагрузка: ${w.load?.label || '—'} ·
-    Восст.: ${w.load?.recoveryDays || '—'} дн.
+    Total time: ${fmtDuration(w.duration.total)} ·
+    Pauses: ${fmtDurationShort(w.duration.pause)} ·
+    Wed. каданс: ${w.cadence?.avg || '—'} rpm ·
+    Max speed: ${fmtNum(w.speed.max)} кm/h ·
+    Load: ${w.load?.label || '—'} ·
+    Recovery: ${w.load?.recoveryDays || '—'} дн.
   </div>
 
 </div>`;
@@ -186,3 +186,5 @@ export function downloadWorkoutPDF(workout) {
     }, 1000);
   }, 100);
 }
+
+

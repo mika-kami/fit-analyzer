@@ -239,19 +239,19 @@ export const ZONE_MODELS = {
   // ② Seiler 3-zone polarised (gold standard for endurance science)
   // Z1 < VT1 ≈ 80% LT2, Z2 = VT1→LT2, Z3 > LT2
   seiler3: (lt2) => [
-    { id:'z1', name:'Аэробная (низкая)',  color:'#4ade80', lo: 0,                      hi: Math.round(0.80*lt2) },
-    { id:'z2', name:'Смешанная (средняя)',color:'#fbbf24', lo: Math.round(0.80*lt2),   hi: lt2 + 1             },
-    { id:'z3', name:'Анаэробная (высокая)',color:'#ef4444',lo: lt2 + 1,                hi: 999                 },
+    { id:'z1', name:'Аэробная (нofкая)',  color:'#4ade80', lo: 0,                      hi: Math.round(0.80*lt2) },
+    { id:'z2', name:'Mixed (medium)',color:'#fbbf24', lo: Math.round(0.80*lt2),   hi: lt2 + 1             },
+    { id:'z3', name:'Anaerobic (high)',color:'#ef4444',lo: lt2 + 1,                hi: 999                 },
   ],
   // ③ Coggan 7-zone power-based adapted to HR (uses LT2 as FTP proxy)
   coggan7: (lt2) => [
-    { id:'z1', name:'Восстановление',    color:'#60a5fa', lo: 0,                      hi: Math.round(0.68*lt2) },
-    { id:'z2', name:'Выносливость',      color:'#4ade80', lo: Math.round(0.68*lt2),   hi: Math.round(0.83*lt2) },
-    { id:'z3', name:'Темп',              color:'#a3e635', lo: Math.round(0.83*lt2),   hi: Math.round(0.94*lt2) },
-    { id:'z4', name:'Лактатный порог',   color:'#fbbf24', lo: Math.round(0.94*lt2),   hi: Math.round(1.05*lt2) },
+    { id:'z1', name:'Recovery',    color:'#60a5fa', lo: 0,                      hi: Math.round(0.68*lt2) },
+    { id:'z2', name:'Endurance',      color:'#4ade80', lo: Math.round(0.68*lt2),   hi: Math.round(0.83*lt2) },
+    { id:'z3', name:'Pace',              color:'#a3e635', lo: Math.round(0.83*lt2),   hi: Math.round(0.94*lt2) },
+    { id:'z4', name:'Lactate threshold',   color:'#fbbf24', lo: Math.round(0.94*lt2),   hi: Math.round(1.05*lt2) },
     { id:'z5', name:'VO₂ Max',           color:'#f97316', lo: Math.round(1.05*lt2),   hi: Math.round(1.19*lt2) },
     { id:'z6', name:'Анаэробная',        color:'#ef4444', lo: Math.round(1.19*lt2),   hi: Math.round(1.50*lt2) },
-    { id:'z7', name:'Нейромышечная',     color:'#a855f7', lo: Math.round(1.50*lt2),   hi: 999                 },
+    { id:'z7', name:'Neuromuscular',     color:'#a855f7', lo: Math.round(1.50*lt2),   hi: 999                 },
   ],
 };
 
@@ -322,12 +322,12 @@ export function assessLoad(workout) {
   const activeHours = (duration?.active ?? 0) / 3600;
 
   if (aeroTE >= 4.5 || hiZonePct > 30 || activeHours > 3) {
-    return { level: 'high', label: 'Высокая нагрузка', color: '#ef4444', recoveryDays: 2 };
+    return { level: 'high', label: 'High нагрузка', color: '#ef4444', recoveryDays: 2 };
   }
   if (aeroTE >= 3.0 || hiZonePct > 15 || activeHours > 1.5) {
-    return { level: 'medium', label: 'Средняя нагрузка', color: '#f97316', recoveryDays: 1 };
+    return { level: 'medium', label: 'Wedедняя нагрузка', color: '#f97316', recoveryDays: 1 };
   }
-  return { level: 'low', label: 'Лёгкая нагрузка', color: '#4ade80', recoveryDays: 0 };
+  return { level: 'low', label: 'Easy нагрузка', color: '#4ade80', recoveryDays: 0 };
 }
 
 // ─── Generate training recommendations ───────────────────────────────────────
@@ -346,48 +346,48 @@ export function generateRecommendations(workout) {
   if (z5pct > 10) recs.push({
     type: 'warning',
     icon: '⚠️',
-    title: 'Высокое время в Z5',
-    text: `${z5pct.toFixed(0)}% времени в максимальной зоне — риск перетренировки. Следующие 2 дня держите ЧСС ниже ${Math.round((heartRate?.max ?? 180) * 0.7)} уд/мин.`,
+    title: 'High time in Z5',
+    text: `${z5pct.toFixed(0)}% вреmени в maxиmальной зоне — риск перетренировки. Следующие 2 дня держите ЧСС ниже ${Math.round((heartRate?.max ?? 180) * 0.7)} уд/min.`,
   });
 
   if (z1z2pct < 40) recs.push({
     type: 'info',
     icon: '📊',
-    title: 'Дисбаланс зон',
-    text: `Только ${z1z2pct.toFixed(0)}% в Z1–Z2. Целевое соотношение: 80/20 (поляризованная модель). Запланируйте длинную аэробную тренировку строго в Z2.`,
+    title: 'Zone imbalance',
+    text: `Только ${z1z2pct.toFixed(0)}% в Z1–Z2. Целевое соотношение: 80/20 (полярofованная mодель). Запланируйте длинную аэробную тренировку строго в Z2.`,
   });
 
   if (aeroTE >= 4.0) recs.push({
     type: 'success',
     icon: '🔁',
-    title: 'Качественное восстановление',
-    text: `ТЭ ${aeroTE.toFixed(1)}/5 — значительный аэробный стресс. Минимум ${assessLoad(workout).recoveryDays} дня восстановления с лёгким вращением ≤130 уд/мин.`,
+    title: 'Quality recovery',
+    text: `TE ${aeroTE.toFixed(1)}/5 — значительный аэробный стресс. Миниmуm ${assessLoad(workout).recoveryDays} дня восстановления с лёгкиm вращениеm ≤130 уд/min.`,
   });
 
   if (pauseMin > 20) recs.push({
     type: 'info',
     icon: '⏱️',
-    title: 'Большие паузы',
-    text: `${Math.round(pauseMin)} мин остановок. Для повышения выносливости сократите паузы — непрерывная работа эффективнее для адаптации.`,
+    title: 'Long pauses',
+    text: `${Math.round(pauseMin)} min остановок. Для повышения выносливости сократите паузы — непрерывная работа эффективнее для адаптации.`,
   });
 
   if (elevation?.ascent > 300) recs.push({
     type: 'success',
     icon: '🏔️',
-    title: 'Горная работа',
-    text: `Набор ${elevation.ascent} м — отличная работа для силовой выносливости. Продолжайте включать холмы, чередуя интенсивность.`,
+    title: 'Hill work',
+    text: `Ascent ${elevation.ascent} m — отличная работа для силовой выносливости. Продолжайте включать холmы, чередуя интенсивность.`,
   });
 
   if (anaTE >= 2.5) recs.push({
     type: 'warning',
     icon: '⚡',
-    title: 'Анаэробная нагрузка',
-    text: `Анаэробный ТЭ ${anaTE.toFixed(1)}/5. Эту неделю откажитесь от спринтов и интервалов — восстановите скоростную выносливость.`,
+    title: 'Anaerobic load',
+    text: `Anaerobic TE ${anaTE.toFixed(1)}/5. Эту неделю откажитесь от спринтов и интервалов — восстановите скоростную выносливость.`,
   });
 
   return recs.length ? recs : [{
-    type: 'success', icon: '✅', title: 'Тренировка в норме',
-    text: 'Показатели в пределах нормы. Придерживайтесь текущего плана.',
+    type: 'success', icon: '✅', title: 'Workout в норmе',
+    text: 'Metrics are within normal range. Keep following the current plan.',
   }];
 }
 
@@ -719,3 +719,5 @@ export function getAthleteMaxHr() {
 export function setAthleteMaxHr(hr) {
   if (hr > 100) localStorage.setItem(_maxHrKey, String(hr));
 }
+
+

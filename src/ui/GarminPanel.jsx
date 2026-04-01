@@ -5,12 +5,12 @@
 import { useState, useEffect } from 'react';
 
 const FILTER_LABELS = {
-  all:       'Все',
-  cycling:   'Велосипед 🚴',
-  running:   'Бег 🏃',
-  swimming:  'Плавание 🏊',
-  hiking:    'Хайкинг 🥾',
-  walking:   'Ходьба 🚶',
+  all:       'All',
+  cycling:   'Cycling 🚴',
+  running:   'Running 🏃',
+  swimming:  'Swimming 🏊',
+  hiking:    'Hiking 🥾',
+  walking:   'Walking 🚶',
 };
 
 export function GarminPanel({ garmin, onClose }) {
@@ -55,7 +55,7 @@ export function GarminPanel({ garmin, onClose }) {
               ◈ GARMIN CONNECT
             </div>
             <div style={{ fontSize:16, fontWeight:600, color:'var(--text-primary)' }}>
-              Синхронизация тренировок
+              Workout sync
             </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none',
@@ -72,7 +72,7 @@ export function GarminPanel({ garmin, onClose }) {
               borderRadius:'var(--r-md)', padding:'var(--sp-4)',
             }}>
               <div style={{ fontSize:12, fontWeight:600, color:'#ef4444', marginBottom:6 }}>
-                Сервер не найден на localhost:8765
+                Server not found on localhost:8765
               </div>
               {probeError && (
                 <div style={{ fontSize:11, color:'#f87171', fontFamily:'var(--font-mono)',
@@ -83,7 +83,7 @@ export function GarminPanel({ garmin, onClose }) {
                 padding:'var(--sp-3)', fontFamily:'var(--font-mono)',
                 fontSize:11, color:'#a3e635', lineHeight:2,
               }}>
-                <div style={{ color:'var(--text-muted)' }}># Запустить в терминале:</div>
+                <div style={{ color:'var(--text-muted)' }}># Run in terminal:</div>
                 <div>python garmin_server.py</div>
               </div>
               <button onClick={probe} style={{
@@ -92,7 +92,7 @@ export function GarminPanel({ garmin, onClose }) {
                 borderRadius:'var(--r-md)', padding:'var(--sp-3)',
                 color:'var(--accent)', fontSize:13, cursor:'pointer',
                 fontFamily:'var(--font-body)',
-              }}>↺ Проверить снова</button>
+              }}>↺ Check again</button>
             </div>
           )}
 
@@ -101,7 +101,7 @@ export function GarminPanel({ garmin, onClose }) {
             <div>
               <div style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)',
                             letterSpacing:'0.08em', marginBottom:'var(--sp-2)' }}>
-                ТИП АКТИВНОСТИ
+                ACTIVITY TYPE
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:'var(--sp-2)' }}>
                 {filters.map(f => (
@@ -138,13 +138,13 @@ export function GarminPanel({ garmin, onClose }) {
               borderRadius:'var(--r-md)', padding:'var(--sp-4)',
             }}>
               <div style={{ fontSize:12, fontWeight:600, color:'var(--accent)', marginBottom:6 }}>
-                Как это работает
+                How it works
               </div>
               <div style={{ fontSize:11, color:'var(--text-secondary)', lineHeight:1.8 }}>
-                Нажми кнопку. Откроется браузер Garmin Connect.<br/>
-                Войди в аккаунт (если потребуется).<br/>
-                Приложение само скачает новые тренировки.<br/>
-                Окно закроется, данные сохранятся в историю.
+                Click the button. Garmin Connect opens in your browser.<br/>
+                Log in if needed.<br/>
+                The app will download new workouts automatically.<br/>
+                The window will close and data will be saved to history.
               </div>
             </div>
           )}
@@ -167,8 +167,8 @@ export function GarminPanel({ garmin, onClose }) {
               }}
             >
               {syncing
-                ? <><Spinner /> {step || 'Синхронизация…'}</>
-                : <>↓ Синхронизировать{filter !== 'all' ? ` (${FILTER_LABELS[filter] ?? filter})` : ''}</>
+                ? <><Spinner /> {step || 'Syncing...'}</>
+                : <>↓ Sync{filter !== 'all' ? ` (${FILTER_LABELS[filter] ?? filter})` : ''}</>
               }
             </button>
           )}
@@ -181,7 +181,7 @@ export function GarminPanel({ garmin, onClose }) {
               fontSize:11, color:'var(--text-secondary)',
               fontFamily:'var(--font-mono)', lineHeight:2,
             }}>
-              <StepRow done={true}  text="Открываем браузер" />
+              <StepRow done={true}  text="Opening browser" />
               <StepRow
                 done={step.includes('список') || step.includes('Скач') || step.includes('Сохран')}
                 active={step.includes('Garmin')}
@@ -189,15 +189,15 @@ export function GarminPanel({ garmin, onClose }) {
               <StepRow
                 done={step.includes('Скач') || step.includes('Сохран')}
                 active={step.includes('список')}
-                text="Список тренировок" />
+                text="Workout list" />
               <StepRow
                 done={step.includes('Сохран')}
                 active={step.includes('Скач')}
-                text="Скачиваем FIT-файлы" />
+                text="Downloading FIT files" />
               <StepRow
                 done={false}
                 active={step.includes('Сохран')}
-                text="Сохраняем в историю" />
+                text="Saving to history" />
             </div>
           )}
 
@@ -257,3 +257,4 @@ function StepRow({ done, active, text }) {
     </div>
   );
 }
+

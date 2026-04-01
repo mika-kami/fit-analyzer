@@ -27,7 +27,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
         setDone(true);
       }
     } catch (e) {
-      setError(e.message ?? 'Ошибка');
+      setError(e.message ?? 'Error');
     } finally {
       setLoading(false);
     }
@@ -50,13 +50,13 @@ export function AuthPage({ onSignIn, onSignUp }) {
       <div style={cardStyle}>
         <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 16 }}>📬</div>
         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center', marginBottom: 8 }}>
-          Проверьте почту
+          Check your email
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
-          Отправили письмо на <b>{email}</b> — подтвердите аккаунт, затем войдите.
+          Отправor письmо на <b>{email}</b> — confirm your account, then sign in.
         </div>
         <button onClick={() => { setMode('login'); setDone(false); }} style={btnStyle(true)}>
-          Войти
+          Sign in
         </button>
       </div>
     </div>
@@ -71,7 +71,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
             ◈ FIT ANALYZER
           </div>
           <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {isLogin ? 'Войти' : 'Создать аккаунт'}
+            {isLogin ? 'Sign in' : 'Create account'}
           </div>
         </div>
 
@@ -79,7 +79,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {!isLogin && (
             <input {...input({
-              type: 'text', value: name, placeholder: 'Имя',
+              type: 'text', value: name, placeholder: 'Name',
               onChange: e => setName(e.target.value),
             })} />
           )}
@@ -89,7 +89,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
           })} />
           <input {...input({
             type: 'password', value: password,
-            placeholder: 'Пароль (мин. 6 символов)',
+            placeholder: 'Password (min. 6 chars)',
             onChange: e => setPassword(e.target.value),
             onKeyDown: e => e.key === 'Enter' && handleSubmit(),
           })} />
@@ -106,7 +106,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
           disabled={!canSubmit || loading}
           style={btnStyle(canSubmit && !loading)}
         >
-          {loading ? '…' : isLogin ? 'Войти' : 'Создать аккаунт'}
+          {loading ? '…' : isLogin ? 'Sign in' : 'Create account'}
         </button>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
@@ -114,7 +114,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
             onClick={() => { setMode(isLogin ? 'signup' : 'login'); setError(''); }}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
           >
-            {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+            {isLogin ? 'No account? Sign up' : 'Уже есть аккаунт? Sign in'}
           </button>
         </div>
 
@@ -155,3 +155,5 @@ const btnStyle = (active) => ({
   fontFamily: 'var(--font-body)',
   transition: 'all 0.15s ease',
 });
+
+

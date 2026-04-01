@@ -26,7 +26,7 @@ function CustomTooltip({ active, payload, label, unit, xLabel }) {
       color:      'var(--text-primary)',
     }}>
       <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>
-        {typeof label === 'number' ? label.toFixed(2) : label} км
+        {typeof label === 'number' ? label.toFixed(2) : label} km
       </div>
       <div style={{ color: payload[0]?.color }}>
         {val != null ? Number(val).toFixed(1) : '—'} {unit}
@@ -43,7 +43,7 @@ export function TimeSeriesChart({
   height = 130,
   xKey = 'distKm',
   yDomain = ['auto', 'auto'],
-  xTickFormatter = v => `${Number(v).toFixed(0)} км`,
+  xTickFormatter = v => `${Number(v).toFixed(0)} km`,
   gradientOpacity = [0.3, 0.02],
 }) {
   const gradId = `grad_${dataKey}`;
@@ -106,3 +106,4 @@ export function TimeSeriesChart({
 
 
 // ────────────────────────────────────────────────────────────
+

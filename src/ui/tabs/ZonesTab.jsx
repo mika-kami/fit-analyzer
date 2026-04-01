@@ -19,15 +19,15 @@ export function ZonesTab({ workout: w }) {
 
   const modelMeta = {
     garmin5: {
-      label:   'Garmin 5 зон',
-      desc:    '% от max ЧСС · совместимо с Garmin Connect',
-      ref:     `Max ЧСС: ${maxHr} уд/мин`,
+      label:   'Garmin 5 zones',
+      desc:    '% of max HR · compatible with Garmin Connect',
+      ref:     `Max HR: ${maxHr} уд/min`,
       polar:   null,
     },
     seiler3: {
-      label:   'Seiler 3 зоны',
-      desc:    'Поляризованная модель · научный стандарт выносливости',
-      ref:     lt2 ? `LT2: ${lt2} уд/мин` : 'LT2 не определён',
+      label:   'Seiler 3 zones',
+      desc:    'Полярofованная mодель · научный стандарт выносливости',
+      ref:     lt2 ? `LT2: ${lt2} уд/min` : 'LT2 not detected',
       polar:   zones.length === 3 ? {
         low:  zones[0]?.pct ?? 0,
         mid:  zones[1]?.pct ?? 0,
@@ -35,9 +35,9 @@ export function ZonesTab({ workout: w }) {
       } : null,
     },
     coggan7: {
-      label:   'Coggan 7 зон',
-      desc:    'Адаптация под ЧСС · от лактатного порога',
-      ref:     lt2 ? `LT2: ${lt2} уд/мин` : 'LT2 не определён',
+      label:   'Coggan 7 zones',
+      desc:    'HR-adapted · from lactate threshold',
+      ref:     lt2 ? `LT2: ${lt2} уд/min` : 'LT2 not detected',
       polar:   null,
     },
   };
@@ -81,10 +81,10 @@ export function ZonesTab({ workout: w }) {
 
       {/* Zone bars */}
       <Card>
-        <CardLabel>Время в зонах</CardLabel>
+        <CardLabel>Time в зонах</CardLabel>
         {zones.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 'var(--sp-4) 0' }}>
-            Нет данных — LT2 не определён в файле
+            Нет данных — LT2 not detected в файле
           </div>
         )}
         {zones.map(z => (
@@ -94,7 +94,7 @@ export function ZonesTab({ workout: w }) {
 
       {/* Bar chart */}
       <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-        <CardLabel>Минуты в зонах — {meta.label}</CardLabel>
+        <CardLabel>Minutes in zones - {meta.label}</CardLabel>
         <ResponsiveContainer width="100%" height={model==='coggan7' ? 140 : 120}>
           <BarChart data={zones} margin={{ top:0, right:4, left:0, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -104,7 +104,7 @@ export function ZonesTab({ workout: w }) {
               contentStyle={{ background:'var(--bg-raised)', border:'1px solid var(--border-mid)', borderRadius:8, fontSize:12, fontFamily:'var(--font-mono)', color:'var(--text-primary)' }}
               labelStyle={{ color:'var(--text-muted)' }}
               itemStyle={{ color:'var(--text-secondary)' }}
-              formatter={(v,_,p) => [`${v} мин`, p.payload.name]}
+              formatter={(v,_,p) => [`${v} min`, p.payload.name]}
             />
             <Bar dataKey="minutes" radius={[3,3,0,0]}>
               {zones.map((z,i) => <Cell key={i} fill={z.color} />)}
@@ -116,15 +116,15 @@ export function ZonesTab({ workout: w }) {
       {/* Seiler polarisation score — always shown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-3)' }}>
         {[
-          { label: 'Ниже LT2', value: seilerBelow.toFixed(0)+'%', color:'#4ade80',
-            sub: 'Z1+Z2 Seiler · цель ≥ 80%',
+          { label: 'Below LT2', value: seilerBelow.toFixed(0)+'%', color:'#4ade80',
+            sub: 'Z1+Z2 Seiler · target >= 80%',
             ok: seilerBelow >= 80 },
-          { label: 'Выше LT2', value: seilerAbove.toFixed(0)+'%', color:'#ef4444',
-            sub: 'Z3 Seiler · лимит ≤ 20%',
+          { label: 'Above LT2', value: seilerAbove.toFixed(0)+'%', color:'#ef4444',
+            sub: 'Z3 Seiler · limit <= 20%',
             ok: seilerAbove <= 20 },
-          { label: 'Поляризация', value: seilerBelow >= 80 ? '✓' : '✗',
+          { label: 'Полярofация', value: seilerBelow >= 80 ? '✓' : '✗',
             color: seilerBelow >= 80 ? '#4ade80' : '#f97316',
-            sub: seilerBelow >= 80 ? 'Поляризованная модель' : 'Слишком интенсивно', ok: seilerBelow >= 80 },
+            sub: seilerBelow >= 80 ? 'Полярofованная mодель' : 'Too intense', ok: seilerBelow >= 80 },
         ].map(item => (
           <div key={item.label} style={{
             background: `${item.color}08`,
@@ -144,34 +144,34 @@ export function ZonesTab({ workout: w }) {
 
       {/* Model explanation */}
       <Card>
-        <CardLabel>Что означает эта модель</CardLabel>
+        <CardLabel>Thuо означает эта mодель</CardLabel>
         {model === 'garmin5' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <b style={{ color: 'var(--text-primary)' }}>Garmin 5 зон</b> — стандарт для сравнения с Garmin Connect.
-            Границы зон вычисляются как % от max ЧСС из профиля устройства ({maxHr} уд/мин).
-            Удобна для отслеживания прогресса внутри экосистемы Garmin, но не отражает
-            физиологических порогов конкретного спортсмена.
+            <b style={{ color: 'var(--text-primary)' }}>Garmin 5 zones</b> — стандарт для сравнения с Garmin Connect.
+            Границы зон вычисляются как % от max ЧСС of профиля устройства ({maxHr} уд/min).
+            Удобна для отслеживания прогресса внутри экосистеmы Garmin, но не отражает
+            фofиологических порогов конкретного спортсmена.
           </div>
         )}
         {model === 'seiler3' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             <b style={{ color: 'var(--text-primary)' }}>Модель Сейлера</b> — научный консенсус для спорта на выносливость
-            (Seiler & Kjerland, 2006). Три зоны относительно лактатного порога LT2 ({lt2 || '?'} уд/мин).
-            Элитные спортсмены проводят ~80% тренировок в Z1, ~20% в Z3 и практически ничего в "серой зоне" Z2.
+            (Seiler & Kjerland, 2006). Три зоны относительно лактатного порога LT2 ({lt2 || '?'} уд/min).
+            Элитные спортсmены проводят ~80% тренировок в Z1, ~20% в Z3 и практически ничего в "серой зоне" Z2.
             <br/><br/>
             <span style={{ color: seilerBelow >= 80 ? '#4ade80' : '#f97316' }}>
               {seilerBelow >= 80
-                ? `✓ Ваши ${seilerBelow.toFixed(0)}% ниже LT2 соответствуют поляризованной модели.`
-                : `⚠ Только ${seilerBelow.toFixed(0)}% ниже LT2 — рекомендуется ≥ 80% для оптимальной адаптации.`
+                ? `✓ Ваши ${seilerBelow.toFixed(0)}% ниже LT2 соответствуют полярofованной mодели.`
+                : `⚠ Только ${seilerBelow.toFixed(0)}% ниже LT2 — рекоmендуется ≥ 80% для оптиmальной адаптации.`
               }
             </span>
           </div>
         )}
         {model === 'coggan7' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <b style={{ color: 'var(--text-primary)' }}>7 зон Когана</b> — детализированная система из велоспорта,
-            адаптированная под ЧСС. Лактатный порог LT2 ({lt2 || '?'} уд/мин) используется как FTP-аналог.
-            Зоны Z1–Z2 = аэробная база; Z3 = темп; Z4 = порог; Z5 = VO₂max; Z6–Z7 = анаэробные усилия.
+            <b style={{ color: 'var(--text-primary)' }}>7 зон Когана</b> — деталofированная систеmа of велоспорта,
+            адаптированная под ЧСС. Lactate threshold LT2 ({lt2 || '?'} уд/min) используется как FTP-аналог.
+            Zones Z1–Z2 = аэробная base; Z3 = теmп; Z4 = порог; Z5 = VO₂max; Z6–Z7 = анаэробные усorя.
             Подходит для детального планирования интервальных блоков.
           </div>
         )}
@@ -194,7 +194,7 @@ export function ZoneBarFull({ zone }) {
           <span style={{ fontSize:12, color:'var(--text-secondary)' }}>{zone.name}</span>
           {zone.lo !== undefined && (
             <span style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-              {zone.lo}–{zone.hi > 900 ? '∞' : zone.hi} уд/мин
+              {zone.lo}–{zone.hi > 900 ? '∞' : zone.hi} уд/min
             </span>
           )}
         </div>
@@ -212,3 +212,5 @@ export function ZoneBarFull({ zone }) {
     </div>
   );
 }
+
+

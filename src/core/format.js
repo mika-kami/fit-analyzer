@@ -45,7 +45,7 @@ export function fmtPace(speedKmh) {
   const secPerKm = 3600 / speedKmh;
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);
-  return `${m}:${String(s).padStart(2, '0')} /км`;
+  return `${m}:${String(s).padStart(2, '0')} /km`;
 }
 
 /** Abbreviated large numbers: 1234 → "1.2k" */
@@ -57,3 +57,5 @@ export function fmtCompact(n) {
 
 
 // ────────────────────────────────────────────────────────────
+
+

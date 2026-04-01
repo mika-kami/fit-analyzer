@@ -8,7 +8,7 @@ import { fmtKm, fmtDurationShort } from '../core/format.js';
 
 
 const TABS = [
-  { id: 'overview', label: 'Обзор'   },
+  { id: 'overview', label: 'Overview'   },
   { id: 'charts',   label: 'Графики' },
   { id: 'map',       label: 'Карта'     },
   { id: 'analytics', label: 'Аналитика' },
@@ -17,7 +17,10 @@ const TABS = [
   { id: 'chat',     label: 'Тренер'  },
 ];
 
-export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus, onPDF }) {
+export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus, onPDF, onProfile }) {
+  if (!w) return null;
+  const distanceM = w.distance ?? 0;
+  const activeSec = w.duration?.active ?? 0;
   return (
     <header style={{
       position:   'sticky',
@@ -53,28 +56,12 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
             fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
             fontFamily: 'var(--font-mono)',
           }}>
-            {w.date} · {w.startTime} · {fmtKm(w.distance)} км · {fmtDurationShort(w.duration.active)}
+            {w.date} · {w.startTime} · {fmtKm(distanceM)} км · {fmtDurationShort(activeSec)}
           </div>
         </div>
 
         {/* Right cluster */}
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexShrink: 0 }}>
-          {/* TE badge */}
-          {w.trainingEffect.aerobic > 0 && (
-            <div style={{
-              background:    'var(--accent-dim)',
-              border:        '1px solid rgba(232,168,50,0.3)',
-              borderRadius:  'var(--r-md)',
-              padding:       'var(--sp-2) var(--sp-3)',
-              textAlign:     'center',
-            }}>
-              <div style={{ fontSize: 9, color: 'var(--accent)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 1 }}>TE</div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-display)', lineHeight: 1, letterSpacing: '-0.03em' }}>
-                {w.trainingEffect.aerobic.toFixed(1)}
-              </div>
-            </div>
-          )}
-
           {/* Plans button (moved to header action row) */}
           <button
             onClick={() => onTabChange('plan')}
@@ -95,18 +82,17 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           >
             Планы
           </button>
-
-          {/* Save workout button */}
-          {onSave && (
+          {/* Profile button */}
+          {onProfile && (
             <button
-              onClick={onSave}
-              title="Обновить запись в истории (включая графики и карту)"
+              onClick={onProfile}
+              title="Open profile page"
               style={{
-                background:   saveStatus === 'saved' ? 'rgba(74,222,128,0.12)' : 'rgba(232,168,50,0.08)',
-                border:       `1px solid ${saveStatus === 'saved' ? 'rgba(74,222,128,0.35)' : 'rgba(232,168,50,0.25)'}`,
+                background:   'var(--bg-overlay)',
+                border:       '1px solid var(--border-subtle)',
                 borderRadius: 'var(--r-md)',
                 padding:      'var(--sp-2) var(--sp-3)',
-                color:        saveStatus === 'saved' ? '#4ade80' : 'var(--accent)',
+                color:        'var(--text-secondary)',
                 cursor:       'pointer',
                 fontSize:     11,
                 fontWeight:   600,
@@ -114,11 +100,12 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
                 transition:   'all var(--t-base) var(--ease-snappy)',
                 whiteSpace:   'nowrap',
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
             >
-              {saveStatus === 'saved' ? '✓ Обновлено' : '↺ Обновить данные'}
+              Profile
             </button>
           )}
-
           {/* PDF Report button */}
           <button
             onClick={onPDF}
@@ -244,3 +231,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
 
 
 // ────────────────────────────────────────────────────────────
+
+
+
+

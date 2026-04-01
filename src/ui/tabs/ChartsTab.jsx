@@ -29,24 +29,24 @@ export function ChartsTab({ workout: w }) {
                   background:'var(--bg-overlay)', borderRadius:'var(--r-lg)',
                   border:'1px solid var(--border-subtle)' }}>
       <div style={{ fontSize:32, marginBottom:'var(--sp-3)' }}>📊</div>
-      <div style={{ fontSize:13 }}>Нет данных для графиков</div>
+      <div style={{ fontSize:13 }}>No chart data</div>
     </div>
   );
 
   const maybeCharts = [
-    { key: 'altitude',             label: 'Elevation',            unit: 'м',      color: '#fbbf24' },
-    { key: 'paceMinKm',            label: 'Pace',                 unit: 'мин/км', color: '#22c55e', yDomain: ['auto', 'auto'], showWhen: () => running },
-    { key: 'hr',                   label: 'Heart Rate',           unit: 'уд/мин', color: '#ef4444' },
-    { key: 'stepLengthM',          label: 'Stride Length',        unit: 'м',      color: '#14b8a6' },
+    { key: 'altitude',             label: 'Elevation',            unit: 'm',      color: '#fbbf24' },
+    { key: 'paceMinKm',            label: 'Pace',                 unit: 'min/km', color: '#22c55e', yDomain: ['auto', 'auto'], showWhen: () => running },
+    { key: 'hr',                   label: 'Heart Rate',           unit: 'уд/min', color: '#ef4444' },
+    { key: 'stepLengthM',          label: 'Stride Length',        unit: 'm',      color: '#14b8a6' },
     { key: 'cadence',              label: running ? 'Run Cadence' : 'Cadence', unit: 'spm', color: '#a78bfa' },
-    { key: 'power',                label: 'Power',                unit: 'Вт',     color: '#f97316' },
+    { key: 'power',                label: 'Power',                unit: 'Tue',     color: '#f97316' },
     { key: 'verticalRatio',        label: 'Vertical Ratio',       unit: '%',      color: '#f43f5e' },
-    { key: 'groundContactTimeMs',  label: 'Ground Contact Time',  unit: 'мс',     color: '#0ea5e9' },
+    { key: 'groundContactTimeMs',  label: 'Ground Contact Time',  unit: 'ms',     color: '#0ea5e9' },
     { key: 'stamina',              label: 'Stamina',              unit: '%',      color: '#84cc16', yDomain: [0, 100] },
     { key: 'staminaPotential',     label: 'Stamina Potential',    unit: '%',      color: '#65a30d', yDomain: [0, 100] },
     { key: 'runWalkState',         label: 'Run/Walk',             unit: '',       color: '#eab308', yDomain: [-0.1, 1.1] },
     // Keep speed for cycling and generic activities
-    { key: 'speedKmh',             label: 'Скорость',             unit: 'км/ч',   color: '#60a5fa' },
+    { key: 'speedKmh',             label: 'Speed',             unit: 'кm/h',   color: '#60a5fa' },
   ];
 
   const chartDefs = maybeCharts.filter(c => {
@@ -78,7 +78,7 @@ export function ChartsTab({ workout: w }) {
       {/* Gradient chart — cycling only, needs altitude + distance data */}
       {cycling && gradientSeries.length > 10 && (
         <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-          <CardLabel>Уклон (%) · по дистанции</CardLabel>
+          <CardLabel>Grade (%) by distance</CardLabel>
           <GradientChart data={gradientSeries} height={140} />
         </Card>
       )}
@@ -142,7 +142,7 @@ function GradientChart({ data, height = 140 }) {
           { color: '#f97316', label: '5–8%' },
           { color: '#ef4444', label: '8–12%' },
           { color: '#7f1d1d', label: '>12%' },
-          { color: '#60a5fa', label: 'спуск' },
+          { color: '#60a5fa', label: 'descent' },
         ].map(l => (
           <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 10, height: 8, background: l.color, borderRadius: 2, display: 'inline-block' }} />
@@ -158,3 +158,5 @@ function isRunning(w) {
   const s = (w.sport ?? w.sportLabel ?? '').toLowerCase();
   return s.includes('run') || s.includes('бег');
 }
+
+

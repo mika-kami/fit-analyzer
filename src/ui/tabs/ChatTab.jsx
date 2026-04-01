@@ -5,12 +5,12 @@
 import { useState, useEffect, useRef } from 'react';
 
 const SUGGESTIONS = [
-  'Нужен ли отдых завтра?',
-  'Как улучшить среднюю скорость?',
-  'Оцени мою форму',
-  'Составь план на следующую неделю',
-  'Почему так много времени в Z5?',
-  'Что есть после тренировки?',
+  'Do I need rest tomorrow?',
+  'How can I improve average speed?',
+  'Evaluate my fitness',
+  'Create a plan for next week',
+  'Why is there so much time in Z5?',
+  'What should I eat after training?',
 ];
 
 /** Lightweight markdown → React elements (bold, italic, code, lists, headings). */
@@ -142,7 +142,7 @@ function ChatBubble({ msg }) {
             fontSize: 9, color: 'var(--accent)', fontFamily: 'var(--font-mono)',
             letterSpacing: '0.12em', marginBottom: 4,
           }}>
-            GPT ТРЕНЕР
+            GPT COACH
           </div>
         )}
         {isUser ? msg.content || '—' : renderMarkdown(msg.content)}
@@ -172,9 +172,9 @@ export function ChatTab({ chat }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-4)' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>ИИ-тренер</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>AI coach</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              GPT-4o mini {hasKey ? '' : '· ключ не настроен'}
+              GPT-4o mini {hasKey ? '' : '· key not configured'}
             </div>
           </div>
           {hasKey && (
@@ -188,14 +188,14 @@ export function ChatTab({ chat }) {
             borderRadius: 'var(--r-md)', padding: 'var(--sp-4)',
           }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>
-              OpenAI API ключ не настроен
+              OpenAI API key not configured
             </div>
             <div style={{
               background: 'var(--bg-raised)', borderRadius: 'var(--r-sm)',
               padding: 'var(--sp-3)', fontFamily: 'var(--font-mono)',
               fontSize: 11, color: '#a3e635', lineHeight: 2,
             }}>
-              <div style={{ color: 'var(--text-muted)' }}># Добавь в .env файл:</div>
+              <div style={{ color: 'var(--text-muted)' }}># Add this to the .env file:</div>
               <div>VITE_OPENAI_API_KEY=sk-...</div>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function ChatTab({ chat }) {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder="Спросите о тренировке..."
+                placeholder="Ask about the workout..."
                 disabled={isStreaming}
                 style={{
                   flex: 1, background: 'var(--bg-raised)',
@@ -285,3 +285,5 @@ export function ChatTab({ chat }) {
     </div>
   );
 }
+
+

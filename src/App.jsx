@@ -1,5 +1,5 @@
-/**
- * App.jsx — Root orchestrator (production).
+﻿/**
+ * App.jsx â€” Root orchestrator (production).
  * Screens: 'auth' | 'dashboard' | 'detail'
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -13,6 +13,7 @@ import { useCoachState } from './hooks/useCoachState.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
+import { ProfilePage }  from './ui/ProfilePage.jsx';
 import { GarminPanel }  from './ui/GarminPanel.jsx';
 import { StravaPanel }  from './ui/StravaPanel.jsx';
 import { OverviewTab }  from './ui/tabs/OverviewTab.jsx';
@@ -41,6 +42,7 @@ const GLOBAL_STYLES = `
 
 export default function App() {
   const [screen,     setScreen]    = useState('dashboard');
+  const [profileReturnScreen, setProfileReturnScreen] = useState('dashboard');
   const [activeTab,  setActiveTab] = useState('overview');
   const [garminOpen, setGarminOpen] = useState(false);
   const [stravaOpen, setStravaOpen] = useState(false);
@@ -50,9 +52,14 @@ export default function App() {
   const workouts = useWorkouts(auth.user);       // Supabase-backed history
   const workout  = useWorkout();                  // current open workout
   const coach    = useCoachState(auth.user?.id);
-  const chat     = useOpenAI(workout.workout, workouts.recentWorkouts);
+  const chat     = useOpenAI(
+    workout.workout,
+    workouts.recentWorkouts,
+    workouts.getChatHistory,
+    workouts.saveChatMessage
+  );
   const garmin   = useGarmin(async (results) => {
-    // Called by useGarmin after /sync — save all new FIT files to DB
+    // Called by useGarmin after /sync â€” save all new FIT files to DB
     await workouts.saveGarminActivities?.(results);
   });
   const strava   = useStrava(auth.user, () => {
@@ -60,7 +67,7 @@ export default function App() {
     if (auth.user) workouts.reload?.();
   });
 
-  // When file loaded successfully → save + open detail
+  // When file loaded successfully â†’ save + open detail
   useEffect(() => {
     if (workout.status === 'ready' && workout.workout && screen === 'dashboard') {
       setScreen('detail');
@@ -97,6 +104,23 @@ export default function App() {
     setActiveTab('overview');
   }, [workout]);
 
+  const handleOpenProfile = useCallback((returnScreen) => {
+    setProfileReturnScreen(returnScreen);
+    setScreen('profile');
+  }, []);
+
+  const handleCloseProfile = useCallback(() => {
+    setScreen(profileReturnScreen === 'detail' ? 'detail' : 'dashboard');
+  }, [profileReturnScreen]);
+
+  const handleOpenPlans = useCallback(() => {
+    const latest = workouts.history?.[0];
+    if (!latest) return;
+    workout.loadFromSummary(latest);
+    setScreen('detail');
+    setActiveTab('plan');
+  }, [workouts.history, workout]);
+
   const handleDownloadPdf = useCallback(() => {
     if (!workout.workout) return;
     downloadWorkoutPDF(workout.workout);
@@ -110,7 +134,7 @@ export default function App() {
     </div>
   );
 
-  // Not logged in → Auth screen
+  // Not logged in â†’ Auth screen
   if (!auth.user) return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
@@ -152,6 +176,8 @@ export default function App() {
           user={auth.user}
           onFile={(f) => workout.loadFile(f, workouts.historicalMaxHr)}
           onSample={handleLoadSample}
+          onProfile={() => handleOpenProfile('dashboard')}
+          onPlans={handleOpenPlans}
           onGarmin={() => setGarminOpen(true)}
           onStrava={() => setStravaOpen(true)}
           stravaStatus={strava.status}
@@ -160,12 +186,20 @@ export default function App() {
           isLoading={workout.status === 'loading'}
           loadError={workout.status === 'error' ? workout.error : null}
         />
+      ) : screen === 'profile' ? (
+        <ProfilePage
+          user={auth.user}
+          coach={coach}
+          onBack={handleCloseProfile}
+          onSignOut={auth.signOut}
+        />
       ) : (
         <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
           <Shell
             workout={workout.workout}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            onProfile={() => handleOpenProfile('detail')}
             onReset={handleBack}
             onGarmin={() => setGarminOpen(true)}
             garminStatus={garmin.status}
@@ -198,3 +232,4 @@ export default function App() {
     </>
   );
 }
+

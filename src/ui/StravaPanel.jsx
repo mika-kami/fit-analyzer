@@ -1,4 +1,4 @@
-/**
+﻿/**
  * StravaPanel.jsx — Slide-in panel for Strava integration.
  * OAuth connect, activity list, import with full streams (GPS + HR).
  * Props: { strava, onClose, onImport }
@@ -264,3 +264,5 @@ function Badge({ color, label }) {
     </span>
   );
 }
+
+

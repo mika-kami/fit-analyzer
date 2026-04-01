@@ -32,7 +32,7 @@ export function useWorkout() {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.fit')) {
-      setError('Поддерживаются только файлы с расширением .fit');
+      setError('Поддерживаются только файлы с расширениеm .fit');
       setStatus('error');
       return;
     }
@@ -48,7 +48,7 @@ export function useWorkout() {
       setStatus('ready');
     } catch (e) {
       console.error('[useWorkout] parse error', e);
-      setError(e.message ?? 'Неизвестная ошибка при разборе файла');
+      setError(e.message ?? 'Неofвестная ошибка при разборе файла');
       setStatus('error');
     }
   }, []);
@@ -90,3 +90,4 @@ export function useWorkout() {
 
 
 // ────────────────────────────────────────────────────────────
+

@@ -140,7 +140,7 @@ export function buildGarminWorkout(day, maxHr = 180) {
 
   return {
     sportType,
-    workoutName: day.label || 'Тренировка',
+    workoutName: day.label || 'Workout',
     description: day.desc || '',
     estimatedDurationInSecs: totalSec,
     estimatedDistanceInMeters: (day.targetKm || 0) * 1000,
@@ -151,3 +151,5 @@ export function buildGarminWorkout(day, maxHr = 180) {
     }],
   };
 }
+
+

@@ -48,7 +48,7 @@ export function useGarmin(onSyncComplete) {
   // ── syncActivities ────────────────────────────────────────────────────────
   const syncActivities = useCallback(async (knownGarminIds = [], activityType = 'all') => {
     setSyncing(true);
-    setStep('Открываем браузер…');
+    setStep('Opening browser…');
     setMessage('');
     setError('');
 
@@ -81,7 +81,7 @@ export function useGarmin(onSyncComplete) {
       setMessage(final.message ?? '');
 
       if (final.results?.length) {
-        setStep('Сохраняем в базу данных…');
+        setStep('Saving to database...');
         await onSyncComplete(final.results);
       }
     } catch (e) {
@@ -97,3 +97,4 @@ export function useGarmin(onSyncComplete) {
     probe, syncActivities,
   };
 }
+

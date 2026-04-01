@@ -37,11 +37,11 @@ function PeriodStats({ workouts }) {
   const avgTE    = workouts.reduce((s, w) => s + (w.trainingEffect?.aerobic ?? 0), 0) / workouts.length;
 
   const stats = [
-    { label: 'Тренировок', value: workouts.length, unit: '' },
-    { label: 'Дистанция',  value: totalKm.toFixed(0), unit: 'км' },
-    { label: 'Время',      value: fmtDur(totalH * 3600), unit: '' },
-    { label: 'Набор',      value: Math.round(totalAsc).toLocaleString(), unit: 'м' },
-    { label: 'Ср. ТЭ',    value: avgTE.toFixed(1), unit: '/5' },
+    { label: 'Workouts', value: workouts.length, unit: '' },
+    { label: 'Distance',  value: totalKm.toFixed(0), unit: 'km' },
+    { label: 'Time',      value: fmtDur(totalH * 3600), unit: '' },
+    { label: 'Ascent',      value: Math.round(totalAsc).toLocaleString(), unit: 'm' },
+    { label: 'Avg TE',    value: avgTE.toFixed(1), unit: '/5' },
   ];
 
   return (
@@ -125,11 +125,11 @@ function WorkoutCard({ w, onSelect, onDelete }) {
         {/* Metrics row */}
         <div style={{ display: 'flex', gap: 'var(--sp-5)', flexWrap: 'wrap' }}>
           {[
-            { v: `${(w.distance / 1000).toFixed(1)} км` },
+            { v: `${(w.distance / 1000).toFixed(1)} km` },
             { v: fmtDur(w.duration?.active ?? 0) },
-            { v: `↑ ${w.elevation?.ascent ?? 0} м` },
-            { v: `♥ ${w.heartRate?.avg ?? '—'} уд/мин` },
-            { v: `ТЭ ${w.trainingEffect?.aerobic?.toFixed(1) ?? '—'}`, accent: true },
+            { v: `↑ ${w.elevation?.ascent ?? 0} m` },
+            { v: `♥ ${w.heartRate?.avg ?? '—'} уд/min` },
+            { v: `TE ${w.trainingEffect?.aerobic?.toFixed(1) ?? '—'}`, accent: true },
           ].map((m, i) => (
             <span key={i} style={{
               fontSize: 12,
@@ -176,7 +176,7 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
           transition: 'all var(--t-base) var(--ease-snappy)',
         }}
       >
-        {isLoading ? '⏳ Загрузка…' : '↑ Загрузить FIT (можно несколько)'}
+        {isLoading ? '⏳ Loading...' : '↑ Upload FIT (multiple files allowed)'}
         <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
           onChange={e => {
             const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
@@ -206,7 +206,7 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
     >
       <div style={{ fontSize: 36, marginBottom: 'var(--sp-3)' }}>📂</div>
       <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 'var(--sp-2)' }}>
-        {isLoading ? 'Загрузка…' : 'Перетащите FIT файл или нажмите для выбора'}
+        {isLoading ? 'Loading...' : 'Drop a FIT file or click to choose'}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
         Garmin · Wahoo · Polar · Suunto
@@ -228,6 +228,8 @@ export function Dashboard({
   user,
   onFile,
   onSample,
+  onPlans,
+  onProfile,
   onGarmin,
   onStrava,
   stravaStatus,
@@ -264,14 +266,27 @@ export function Dashboard({
               ◈ FIT ANALYZER
             </div>
             <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
-              История тренировок
+              Training history
             </div>
           </div>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            {user?.email && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {user.email}
-              </span>
+            {onProfile && (
+              <button onClick={onProfile} style={{
+                background: 'var(--bg-overlay)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
+                color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}>Profile</button>
+            )}
+            {onPlans && (
+              <button onClick={onPlans} style={{
+                background: 'rgba(232,168,50,0.08)',
+                border: '1px solid rgba(232,168,50,0.25)',
+                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
+                color: 'var(--accent)', fontSize: 11, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}>Plans</button>
             )}
             {onStrava && (
               <button onClick={onStrava} style={{
@@ -299,7 +314,7 @@ export function Dashboard({
                 borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
                 color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
                 fontFamily: 'var(--font-body)',
-              }}>Выйти</button>
+              }}>Log out</button>
             )}
           </div>
         </div>
@@ -325,16 +340,16 @@ export function Dashboard({
             <div style={{ textAlign: 'center', padding: 'var(--sp-6) 0' }}>
               <div style={{ fontSize: 48, marginBottom: 'var(--sp-3)' }}>🚴</div>
               <div style={{ fontSize: 16, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 'var(--sp-2)' }}>
-                Нет сохранённых тренировок
+                No saved workouts
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Загрузите FIT файл из Garmin, Wahoo, Polar или Suunto
+                Upload a FIT file from Garmin, Wahoo, Polar, or Suunto
               </div>
             </div>
             <DropZone onFile={onFile} onBulk={files => setBulkFiles(files)} isLoading={isLoading} compact={false} />
             <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
               <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
-              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>или</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>or</span>
               <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
             </div>
             <button onClick={onSample} style={{
@@ -343,7 +358,7 @@ export function Dashboard({
               color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
               fontFamily: 'var(--font-body)',
             }}>
-              Открыть пример — 50 км, шоссейный велосипед
+              Open sample - 50 km, road cycling
             </button>
           </div>
         ) : (
@@ -354,7 +369,7 @@ export function Dashboard({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-3)' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  {recent.length} тренировок за {period} дней
+                  {recent.length} workouts over {period} days
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {[7, 14, 30, 90].map(d => (
@@ -394,7 +409,7 @@ export function Dashboard({
                 cursor: 'pointer', fontFamily: 'var(--font-mono)',
                 textDecoration: 'underline',
               }}>
-                Открыть пример тренировки
+                Open sample workout
               </button>
             </div>
           </div>
@@ -414,3 +429,5 @@ export function Dashboard({
     </div>
   );
 }
+
+

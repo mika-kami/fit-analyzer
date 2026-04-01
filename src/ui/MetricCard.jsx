@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 
 /**
  * MetricCard.jsx
  * Atomic display card for a single numeric metric.
- * Purely presentational — receives formatted strings.
+ * Purely presentational â€” receives formatted strings.
  */
 
 export function MetricCard({ label, value, unit, sub, accent }) {
@@ -62,4 +62,4 @@ export function MetricCard({ label, value, unit, sub, accent }) {
 }
 
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -88,23 +88,23 @@ export function OverviewTab({ workout: w }) {
 
       {/* Primary metrics grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 'var(--sp-3)' }}>
-        <MetricCard label="Дистанция"     value={fmtKm(w.distance)}      unit="км"     accent="var(--info)"    />
-        <MetricCard label="Активн. время" value={fmtDurationShort(w.duration.active)} unit="" sub={`полное ${fmtDuration(w.duration.total)}`} accent="var(--accent)" />
-        <MetricCard label="Ср. скорость"  value={fmtNum(w.speed.avg)}     unit="км/ч"   sub={`макс ${fmtNum(w.speed.max)} км/ч`} accent="#34d399" />
-        <MetricCard label="Ср. ЧСС"       value={w.heartRate.avg || '—'}  unit="уд/мин" sub={`макс ${w.heartRate.max}`} accent="#f87171" />
-        <MetricCard label="Набор"          value={w.elevation.ascent}     unit="м"      sub={`−${w.elevation.descent} м`} accent="var(--z3)" />
-        <MetricCard label="Калории"        value={w.calories}             unit="ккал"   accent="var(--warning)" />
+        <MetricCard label="Distance"     value={fmtKm(w.distance)}      unit="km"     accent="var(--info)"    />
+        <MetricCard label="Active time" value={fmtDurationShort(w.duration.active)} unit="" sub={`полное ${fmtDuration(w.duration.total)}`} accent="var(--accent)" />
+        <MetricCard label="Wed. скорость"  value={fmtNum(w.speed.avg)}     unit="кm/h"   sub={`max ${fmtNum(w.speed.max)} кm/h`} accent="#34d399" />
+        <MetricCard label="Wed. ЧСС"       value={w.heartRate.avg || '—'}  unit="уд/min" sub={`max ${w.heartRate.max}`} accent="#f87171" />
+        <MetricCard label="Ascent"          value={w.elevation.ascent}     unit="m"      sub={`−${w.elevation.descent} m`} accent="var(--z3)" />
+        <MetricCard label="Calories"        value={w.calories}             unit="kcal"   accent="var(--warning)" />
       </div>
 
       {/* Training Effect */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
-        <TEBar label="Аэробный ТЭ"    value={w.trainingEffect.aerobic}   color="var(--info)"    />
-        <TEBar label="Анаэробный ТЭ"  value={w.trainingEffect.anaerobic} color="var(--warning)" />
+        <TEBar label="Aerobic TE"    value={w.trainingEffect.aerobic}   color="var(--info)"    />
+        <TEBar label="Anaerobic TE"  value={w.trainingEffect.anaerobic} color="var(--warning)" />
       </div>
 
       {/* HR Zones overview */}
       <Card>
-        <CardLabel>Зоны ЧСС · макс {w.heartRate.max} уд/мин</CardLabel>
+        <CardLabel>Zones ЧСС · max {w.heartRate.max} уд/min</CardLabel>
         {w.hrZones.map(z => <ZoneBar key={z.id} zone={z} animate={zonesReady} />)}
       </Card>
 
@@ -120,7 +120,7 @@ export function OverviewTab({ workout: w }) {
           alignItems: 'center',
         }}>
           <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-            ОЦЕНКА НАГРУЗКИ
+            LOAD ASSESSMENT
           </span>
           <span style={{ fontSize: 13, fontWeight: 600, color: w.load.color, fontFamily: 'var(--font-mono)' }}>
             {w.load.label} · восстановление {w.load.recoveryDays}+ дня
@@ -131,7 +131,7 @@ export function OverviewTab({ workout: w }) {
       {/* Recommendations */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-          Рекомендации
+          Recommendations
         </div>
         {w.recommendations.map((r, i) => <RecCard key={i} rec={r} />)}
       </div>
@@ -161,7 +161,7 @@ export function OverviewGPXButton({ workout }) {
         transition: 'all var(--t-base) var(--ease-snappy)',
       }}
     >
-      {status === 'ok' ? '✓ GPX сохранён' : '↓ Экспорт GPX'}
+      {status === 'ok' ? '✓ GPX saved' : '↓ Export GPX'}
     </button>
   );
 }
@@ -195,26 +195,26 @@ export function CyclingAnalytics({ workout: w }) {
       {/* Section header */}
       <div style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.12em',
                     textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-        Аналитика · Велосипед
+        Analytics · Велосипед
       </div>
 
       {/* Key cycling metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 'var(--sp-3)' }}>
         {w.cadence?.avg > 0 && (
           <MetricCard
-            label="Каданс"
+            label="Cadence"
             value={w.cadence.avg}
-            unit="об/мин"
-            sub={w.cadence.max ? `макс ${w.cadence.max}` : undefined}
+            unit="rpm"
+            sub={w.cadence.max ? `max ${w.cadence.max}` : undefined}
             accent="#a78bfa"
           />
         )}
         {hasPow && (
           <MetricCard
-            label="Мощность"
+            label="Power"
             value={w.power.avg}
-            unit="Вт"
-            sub={`макс ${w.power.max} Вт`}
+            unit="Tue"
+            sub={`max ${w.power.max} Tue`}
             accent="#f97316"
           />
         )}
@@ -222,26 +222,26 @@ export function CyclingAnalytics({ workout: w }) {
           <MetricCard
             label="VAM"
             value={vam}
-            unit="м/ч"
-            sub="скорость подъёма"
+            unit="m/h"
+            sub="climb speed"
             accent="#fbbf24"
           />
         )}
         {avgGrade != null && (
           <MetricCard
-            label="Ср. уклон"
+            label="Wed. уклон"
             value={avgGrade}
             unit="%"
-            sub={`набор ${ascent} м`}
+            sub={`набор ${ascent} m`}
             accent="#34d399"
           />
         )}
         {effIdx != null && (
           <MetricCard
-            label="Эфф-ть"
+            label="Efficiency"
             value={effIdx}
             unit=""
-            sub="скорость/пульс"
+            sub="speed/heart rate"
             accent="#60a5fa"
           />
         )}
@@ -253,7 +253,7 @@ export function CyclingAnalytics({ workout: w }) {
       {/* Climb segments */}
       {climbs.length > 0 && (
         <Card>
-          <CardLabel>Подъёмы ({climbs.length})</CardLabel>
+          <CardLabel>Climbs ({climbs.length})</CardLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
             {climbs.slice(0, 5).map((c, i) => (
               <ClimbRow key={i} climb={c} rank={i + 1} />
@@ -269,8 +269,8 @@ export function CyclingAnalytics({ workout: w }) {
           borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
           fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6,
         }}>
-          <b style={{ color: '#60a5fa' }}>Аэробная эффективность {effIdx}</b> = средняя скорость / средний пульс × 100.
-          Выше — лучше. Сравнивай между похожими маршрутами для отслеживания адаптации.
+          <b style={{ color: '#60a5fa' }}>Aerobic efficiency {effIdx}</b> = средняя скорость / средний пульс × 100.
+          Выше — лучше. Wedавнивай mежду похожиmи mаршрутаmи для отслеживания адаптации.
         </div>
       )}
     </div>
@@ -283,25 +283,25 @@ function PowerSummary({ workout: w }) {
   // Otherwise just show avg/max
   return (
     <Card>
-      <CardLabel>Мощность</CardLabel>
+      <CardLabel>Power</CardLabel>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
         <div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
-            СРЕДНЯЯ
+            AVERAGE
           </div>
           <div style={{ fontSize: 32, fontWeight: 600, color: '#f97316', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
             {w.power.avg}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Вт</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tue</div>
         </div>
         <div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
-            МАКСИМУМ
+            MAX
           </div>
           <div style={{ fontSize: 32, fontWeight: 600, color: '#ef4444', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
             {w.power.max}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Вт</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tue</div>
         </div>
       </div>
     </Card>
@@ -332,23 +332,23 @@ function ClimbRow({ climb, rank }) {
       </div>
       <div>
         <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>
-          +{climb.ascentM} м · {climb.distKm} км
+          +{climb.ascentM} m · {climb.distKm} km
           <span style={{ marginLeft: 8, fontSize: 11, color: gradeColor, fontWeight: 600 }}>
             {climb.avgGrade}%
           </span>
           {climb.maxGrade > climb.avgGrade + 3 && (
             <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>
-              макс {climb.maxGrade}%
+              max {climb.maxGrade}%
             </span>
           )}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-          км {climb.startDistKm}–{climb.endDistKm}
-          {climb.vam > 0 && <span style={{ marginLeft: 8, color: '#fbbf24' }}>VAM {climb.vam} м/ч</span>}
+          km {climb.startDistKm}–{climb.endDistKm}
+          {climb.vam > 0 && <span style={{ marginLeft: 8, color: '#fbbf24' }}>VAM {climb.vam} m/h</span>}
         </div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>УКЛОН</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>GRADE</div>
         <div style={{ fontSize: 18, fontWeight: 600, color: gradeColor, fontFamily: 'var(--font-display)', lineHeight: 1 }}>
           {climb.avgGrade}%
         </div>
@@ -356,3 +356,4 @@ function ClimbRow({ climb, rank }) {
     </div>
   );
 }
+

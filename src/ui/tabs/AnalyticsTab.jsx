@@ -72,22 +72,12 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
   // ── Render ─────────────────────────────────────────────────────────────────
   const lastTSB = tsbSeries.length ? tsbSeries[tsbSeries.length - 1] : null;
   const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
-
-  const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
-  const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
+  const profile = coach?.profile ?? {};
+  const checkin = coach?.getDailyCheckin?.(todayIso) ?? {};
   const [noteDraft, setNoteDraft] = useState(() => {
     if (!coach || !currentWorkout) return defaultWorkoutReflection(currentWorkout);
     return coach.getWorkoutNote(currentWorkout);
   });
-
-  useEffect(() => {
-    setProfileDraft(coach?.profile ?? {});
-  }, [coach?.profile]);
-
-  useEffect(() => {
-    if (!coach?.getDailyCheckin) return;
-    setCheckinDraft(coach.getDailyCheckin(todayIso));
-  }, [coach, todayIso]);
 
   useEffect(() => {
     if (!currentWorkout) {
@@ -102,26 +92,26 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
   }, [coach, currentWorkout?.id, currentWorkout?.date]);
 
   const readiness = useMemo(
-    () => computeReadinessScore(checkinDraft),
-    [checkinDraft]
+    () => computeReadinessScore(checkin),
+    [checkin]
   );
   const trainingStatus = useMemo(
     () => computeTrainingStatus({ lastTSB, readiness }),
     [lastTSB, readiness]
   );
   const insights = useMemo(
-    () => analyzePerformanceLimiters({ workouts, profile: profileDraft, readiness, lastTSB }),
-    [workouts, profileDraft, readiness, lastTSB]
+    () => analyzePerformanceLimiters({ workouts, profile, readiness, lastTSB }),
+    [workouts, profile, readiness, lastTSB]
   );
   const nextWorkout = useMemo(
     () => prescribeNextWorkout({
-      profile: profileDraft,
+      profile,
       readiness,
       trainingStatus,
       insights,
-      weatherScore: checkinDraft?.weatherScore ?? 70,
+      weatherScore: checkin?.weatherScore ?? 70,
     }),
-    [profileDraft, readiness, trainingStatus, insights, checkinDraft?.weatherScore]
+    [profile, readiness, trainingStatus, insights, checkin?.weatherScore]
   );
 
   const workoutNoteKey = currentWorkout?.id
@@ -146,16 +136,6 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
       <CoachStatusCard readiness={readiness} trainingStatus={trainingStatus} />
-      <AthleteProfileCard
-        profile={profileDraft}
-        onChange={setProfileDraft}
-        onSave={() => coach?.saveProfile?.(profileDraft)}
-      />
-      <ReadinessCheckinCard
-        checkin={checkinDraft}
-        onChange={setCheckinDraft}
-        onSave={() => coach?.saveDailyCheckin?.(todayIso, checkinDraft)}
-      />
       <WorkoutReflectionCard
         workout={currentWorkout}
         note={noteDraft}
@@ -193,13 +173,13 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
 
       {/* AET Chart */}
       <Card>
-        <CardLabel>Аэробная эффективность</CardLabel>
+        <CardLabel>Aerobic efficiency</CardLabel>
         <AETChart data={aetData.points} lo={aetData.lo} hi={aetData.hi} />
       </Card>
 
       {/* TE Trend Chart */}
       <Card>
-        <CardLabel>Тренировочный эффект</CardLabel>
+        <CardLabel>Training effect</CardLabel>
         <TETrendChart data={teTrend} workouts={workouts} onSelectWorkout={onSelectWorkout} />
       </Card>
     </div>
@@ -236,80 +216,6 @@ function CoachStatusCard({ readiness, trainingStatus }) {
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{trainingStatus.summary}</div>
         </div>
       </div>
-    </Card>
-  );
-}
-
-function AthleteProfileCard({ profile, onChange, onSave }) {
-  return (
-    <Card>
-      <CardLabel>Athlete Profile</CardLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)' }}>
-        <Field label="Target Sport">
-          <select value={profile.targetSport ?? 'mixed'} onChange={e => onChange(p => ({ ...p, targetSport: e.target.value }))} style={inputStyle}>
-            <option value="mixed">Mixed</option>
-            <option value="running">Running</option>
-            <option value="cycling">Cycling</option>
-          </select>
-        </Field>
-        <Field label="Weekly Hours">
-          <input type="number" min="1" max="30" value={profile.weeklyHours ?? 6} onChange={e => onChange(p => ({ ...p, weeklyHours: Number(e.target.value || 0) }))} style={inputStyle} />
-        </Field>
-        <Field label="Primary Goal">
-          <input value={profile.primaryGoal ?? ''} onChange={e => onChange(p => ({ ...p, primaryGoal: e.target.value }))} style={inputStyle} placeholder="Half marathon, 100km ride..." />
-        </Field>
-        <Field label="Goal Date">
-          <input type="date" value={profile.goalDate ?? ''} onChange={e => onChange(p => ({ ...p, goalDate: e.target.value }))} style={inputStyle} />
-        </Field>
-      </div>
-      <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-2)' }}>
-        <Field label="Constraints">
-          <input value={profile.constraints ?? ''} onChange={e => onChange(p => ({ ...p, constraints: e.target.value }))} style={inputStyle} placeholder="Travel, limited weekdays, etc." />
-        </Field>
-        <Field label="Injury Notes">
-          <input value={profile.injuryNotes ?? ''} onChange={e => onChange(p => ({ ...p, injuryNotes: e.target.value }))} style={inputStyle} placeholder="Achilles, knee, lower back..." />
-        </Field>
-      </div>
-      <SaveRow onSave={onSave} />
-    </Card>
-  );
-}
-
-function ReadinessCheckinCard({ checkin, onChange, onSave }) {
-  const set = (k, v) => onChange(prev => ({ ...prev, [k]: v }));
-  return (
-    <Card>
-      <CardLabel>Daily Readiness Check-in</CardLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)' }}>
-        <Field label="Sleep Score (0-100)">
-          <input type="number" min="0" max="100" value={checkin.sleepScore ?? 70} onChange={e => set('sleepScore', Number(e.target.value || 0))} style={inputStyle} />
-        </Field>
-        <Field label="Health Score (0-100)">
-          <input type="number" min="0" max="100" value={checkin.healthScore ?? 75} onChange={e => set('healthScore', Number(e.target.value || 0))} style={inputStyle} />
-        </Field>
-        <Field label="Weather Score (0-100)">
-          <input type="number" min="0" max="100" value={checkin.weatherScore ?? 70} onChange={e => set('weatherScore', Number(e.target.value || 0))} style={inputStyle} />
-        </Field>
-        <Field label="Energy (1-10)">
-          <input type="number" min="1" max="10" value={checkin.energy ?? 6} onChange={e => set('energy', Number(e.target.value || 1))} style={inputStyle} />
-        </Field>
-        <Field label="Motivation (1-10)">
-          <input type="number" min="1" max="10" value={checkin.motivation ?? 7} onChange={e => set('motivation', Number(e.target.value || 1))} style={inputStyle} />
-        </Field>
-        <Field label="Sleep Hours">
-          <input type="number" min="0" max="14" step="0.1" value={checkin.sleepHours ?? 7.5} onChange={e => set('sleepHours', Number(e.target.value || 0))} style={inputStyle} />
-        </Field>
-        <Field label="Soreness (1-10)">
-          <input type="number" min="1" max="10" value={checkin.soreness ?? 3} onChange={e => set('soreness', Number(e.target.value || 1))} style={inputStyle} />
-        </Field>
-        <Field label="Stress (1-10)">
-          <input type="number" min="1" max="10" value={checkin.stress ?? 4} onChange={e => set('stress', Number(e.target.value || 1))} style={inputStyle} />
-        </Field>
-        <Field label="Resting HR Delta (bpm)">
-          <input type="number" min="-20" max="30" value={checkin.restingHrDelta ?? 0} onChange={e => set('restingHrDelta', Number(e.target.value || 0))} style={inputStyle} />
-        </Field>
-      </div>
-      <SaveRow onSave={onSave} />
     </Card>
   );
 }
@@ -452,9 +358,9 @@ function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: 'var(--sp-4)', color: 'var(--text-muted)', fontSize: 13 }}>
-          Нужно минимум 14 тренировок для анализа нагрузки
+          Нужно minиmуm 14 тренировок для аналofа нагрузки
           <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-dim)' }}>
-            Сейчас: {workoutCount}
+            Current: {workoutCount}
           </div>
         </div>
       </Card>
@@ -475,7 +381,7 @@ function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {
           fontSize: 11, color: '#ef4444', fontFamily: 'var(--font-mono)',
           marginBottom: 'var(--sp-4)', textAlign: 'center',
         }}>
-          Высокий риск перетренированности
+          High overtraining risk
         </div>
       )}
 
@@ -510,7 +416,7 @@ function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {
           textAlign: 'center', marginTop: 'var(--sp-3)',
           fontSize: 11, color: '#4ade80', fontFamily: 'var(--font-mono)',
         }}>
-          Пик формы: {peak.date} ({peak.daysUntil} дн.)
+          Peak form: {peak.date} ({peak.daysUntil} дн.)
         </div>
       )}
     </Card>
@@ -532,7 +438,7 @@ function MetricBlock({ label, value, color }) {
 
 // ── Load Chart (CTL/ATL/TSB) ─────────────────────────────────────────────────
 function LoadChart({ data }) {
-  if (!data.length) return <EmptyState text="Недостаточно данных" />;
+  if (!data.length) return <EmptyState text="Not enough data" />;
 
   // Thin out ticks — show every ~14 days
   const tickInterval = Math.max(1, Math.floor(data.length / (data.length / 14)));
@@ -593,9 +499,9 @@ function AETChart({ data, lo, hi }) {
   if (data.length < 5) {
     return (
       <>
-        <EmptyState text="Недостаточно данных. Нужно 5+ тренировок с данными Z2." />
+        <EmptyState text="Not enough data. Нужно 5+ тренировок с данныmи Z2." />
         <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 4 }}>
-          Z2 скорость: {lo}–{hi} км/ч
+          Z2 скорость: {lo}–{hi} кm/h
         </div>
       </>
     );
@@ -618,7 +524,7 @@ function AETChart({ data, lo, hi }) {
           <XAxis dataKey="date" tick={TICK_STYLE} tickFormatter={fmtShortDate} axisLine={false} tickLine={false} />
           <YAxis
             tick={TICK_STYLE} axisLine={false} tickLine={false} width={36}
-            label={{ value: 'уд/мин', angle: -90, position: 'insideLeft', style: { fill: TICK_COLOR, fontSize: 9, fontFamily: 'var(--font-mono)' } }}
+            label={{ value: 'уд/min', angle: -90, position: 'insideLeft', style: { fill: TICK_COLOR, fontSize: 9, fontFamily: 'var(--font-mono)' } }}
           />
           <Tooltip content={<AETTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.12)', strokeWidth: 1 }} />
           <Scatter dataKey="avgHr" isAnimationActive={false}>
@@ -630,7 +536,7 @@ function AETChart({ data, lo, hi }) {
         </ComposedChart>
       </ResponsiveContainer>
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 4 }}>
-        Z2 скорость: {lo}–{hi} км/ч
+        Z2 скорость: {lo}–{hi} кm/h
       </div>
     </>
   );
@@ -647,14 +553,14 @@ function AETTooltip({ active, payload }) {
       fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)',
     }}>
       <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{d.date} · {d.sport}</div>
-      <div>Ср. ЧСС: <span style={{ color: sportColor(d.sport) }}>{d.avgHr}</span> уд/мин</div>
+      <div>Wed. ЧСС: <span style={{ color: sportColor(d.sport) }}>{d.avgHr}</span> уд/min</div>
     </div>
   );
 }
 
 // ── TE Trend Chart ───────────────────────────────────────────────────────────
 function TETrendChart({ data, workouts, onSelectWorkout }) {
-  if (!data.length) return <EmptyState text="Недостаточно данных о тренировочном эффекте" />;
+  if (!data.length) return <EmptyState text="Not enough data о тренировочноm эффекте" />;
 
   const handleDotClick = (entry) => {
     if (!entry?.id || !onSelectWorkout) return;
@@ -708,3 +614,5 @@ function EmptyState({ text }) {
     </div>
   );
 }
+
+

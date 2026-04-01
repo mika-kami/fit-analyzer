@@ -68,14 +68,14 @@ export function computeTSB(ctlSeries, atlSeries) {
 // ── Form state detection ─────────────────────────────────────────────────────
 export function detectFormState(tsb, ctl) {
   if (ctl < 20)
-    return { label: 'Начало', color: '#6b7280', description: 'Накапливайте базу' };
+    return { label: 'Start', color: '#6b7280', description: 'Build your base' };
   if (tsb < -20)
     return { label: 'Перегрузка', color: '#ef4444', description: 'Высокий риск. Нужен отдых.' };
   if (tsb < 0)
-    return { label: 'Накопление', color: '#f97316', description: 'Форма растёт' };
+    return { label: 'Accumulation', color: '#f97316', description: 'Fitness is growing' };
   if (tsb <= 10)
-    return { label: 'Поддержание', color: '#fbbf24', description: 'Стабильная нагрузка' };
-  return { label: 'Пик формы', color: '#4ade80', description: 'Отличное время для гонки' };
+    return { label: 'Поддержание', color: '#fbbf24', description: 'Stable load' };
+  return { label: 'Peak form', color: '#4ade80', description: 'Great time for racing' };
 }
 
 // ── Peak form prediction ─────────────────────────────────────────────────────
@@ -185,3 +185,5 @@ export function computeTETrend(historyWorkouts) {
 
   return computeRollingAvg(points, 'te', 14);
 }
+
+

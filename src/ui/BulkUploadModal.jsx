@@ -43,7 +43,7 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
             j === i ? {
               ...r,
               status: isDup ? 'duplicate' : 'error',
-              error: isDup ? 'Уже загружена' : msg,
+              error: isDup ? 'Already uploaded' : msg,
             } : r
           ));
         }
@@ -86,7 +86,7 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
           fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
           marginBottom: 'var(--sp-4)',
         }}>
-          Загрузка тренировок ({doneCount} из {total})
+          Loading тренировок ({doneCount} of {total})
         </div>
 
         {/* Progress bar */}
@@ -138,7 +138,7 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
                 </span>
                 {r.status === 'duplicate' && (
                   <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', flexShrink: 0 }}>
-                    (уже есть)
+                    (already exists)
                   </span>
                 )}
                 {r.status === 'error' && r.error && (
@@ -166,7 +166,7 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              Отмена
+              Cancel
             </button>
           </div>
         )}
@@ -174,3 +174,5 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
     </div>
   );
 }
+
+

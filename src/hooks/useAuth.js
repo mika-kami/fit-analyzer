@@ -1,5 +1,5 @@
-/**
- * useAuth.js — Authentication hook via Supabase Auth.
+﻿/**
+ * useAuth.js â€” Authentication hook via Supabase Auth.
  * Provides: user, loading, signIn, signUp, signOut
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -8,6 +8,20 @@ import { supabase } from '../lib/supabase.js';
 export function useAuth() {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const trackSessionEvent = useCallback(async (eventType, userId) => {
+    if (!userId) return;
+    const payload = {
+      user_id: userId,
+      event_type: eventType,
+      client_tz: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    };
+    const { error } = await supabase.from('auth_session_events').insert(payload);
+    if (error) {
+      console.warn('[auth] failed to track session event', eventType, error.message);
+    }
+  }, []);
 
   useEffect(() => {
     // Get initial session
@@ -34,11 +48,14 @@ export function useAuth() {
   const signIn = useCallback(async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-  }, []);
+    const { data: { user: signedInUser } } = await supabase.auth.getUser();
+    await trackSessionEvent('login', signedInUser?.id);
+  }, [trackSessionEvent]);
 
   const signOut = useCallback(async () => {
+    await trackSessionEvent('logout', user?.id);
     await supabase.auth.signOut();
-  }, []);
+  }, [trackSessionEvent, user?.id]);
 
   const exportData = useCallback(async () => {
     const { data, error } = await supabase.rpc('export_user_data', {
@@ -72,3 +89,4 @@ export function useAuth() {
 
   return { user, loading, signUp, signIn, signOut, exportData, deleteAccount };
 }
+

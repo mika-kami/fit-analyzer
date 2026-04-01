@@ -1,6 +1,6 @@
-/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
+﻿/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL        ?? 'https://api.openai.com/v1/chat/completions';
 const MODEL      = import.meta.env.VITE_LLM_MODEL      ?? 'gpt-4o-mini';
@@ -21,65 +21,76 @@ function buildSystemPrompt(workout, recentWorkoutsFn) {
     const recent = recentWorkoutsFn ? recentWorkoutsFn(10) : [];
     if (recent.length <= 1) return '';
     const lines = recent.slice(0, 10).map(r =>
-      `  - ${r.date}: ${r.sport}, ${(r.distance / 1000).toFixed(1)} км, ТЭ ${r.trainingEffect?.aerobic?.toFixed(1) ?? '—'}, ${r.load?.label ?? '—'}`
+      `  - ${r.date}: ${r.sport}, ${(r.distance / 1000).toFixed(1)} km, TE ${r.trainingEffect?.aerobic?.toFixed(1) ?? '—'}, ${r.load?.label ?? '—'}`
     ).join('\n');
-    return `\nПоследние ${recent.length} тренировок из истории:\n${lines}`;
+    return `\nRecent ${recent.length} workouts from history:\n${lines}`;
   })();
 
-  const powerLine = w.power ? `Мощность: ср. ${w.power.avg} Вт\n` : '';
-  const hrZones = w.hrZones.map(z => `${z.id.toUpperCase()} ${z.pct}% (${z.minutes} мин)`).join(', ');
+  const powerLine = w.power ? `Power: avg ${w.power.avg} W\n` : '';
+  const hrZones = w.hrZones.map(z => `${z.id.toUpperCase()} ${z.pct}% (${z.minutes} min)`).join(', ');
 
-  return `Ты — профессиональный тренер по видам спорта на выносливость, аналитик спортивных данных и консультант по спортивному снаряжению с глубокой экспертизой в:
-- Спортивной медицине и физиологии (ЧСС, мощность, зоны нагрузки, восстановление, травмы)
-- Стратегиях тренировок (периодизация, прогрессия нагрузки, соотношение работы и отдыха)
-- Беге, велоспорте, триатлоне, плавании и других видах на выносливость
-- Настройке и подборе снаряжения (обувь, одежда, велосипед, экипировка)
-- Регулярно изучаешь актуальные научные исследования в области спортивной медицины и физиологии.
+  return `You are an expert endurance sports coach, sports data analyst, and gear advisor.
 
-ДАННЫЕ ПОСЛЕДНЕЙ ТРЕНИРОВКИ
-Дата: ${w.date} в ${w.startTime}
-Вид: ${w.sportLabel}${w.bike ? ` (${w.bike})` : ''}
-Дистанция: ${(w.distance / 1000).toFixed(2)} км
-Активное время: ${fmtD(w.duration.active)}, полное: ${fmtD(w.duration.total)}, паузы: ${Math.round(w.duration.pause / 60)} мин
-Калории: ${w.calories} ккал
-ЧСС: ср. ${w.heartRate.avg} уд/мин, макс. ${w.heartRate.max} уд/мин
-Скорость: ср. ${w.speed.avg} км/ч, макс. ${w.speed.max} км/ч
-Набор высоты: +${w.elevation.ascent} м / −${w.elevation.descent} м
-${powerLine}Тренировочный эффект: аэробный ${w.trainingEffect.aerobic}/5, анаэробный ${w.trainingEffect.anaerobic}/5
-Зоны ЧСС: ${hrZones}
-Нагрузка: ${w.load?.label ?? '—'}
+LATEST WORKOUT DATA
+Date: ${w.date} at ${w.startTime}
+Sport: ${w.sportLabel}${w.bike ? ` (${w.bike})` : ''}
+Distance: ${(w.distance / 1000).toFixed(2)} km
+Active time: ${fmtD(w.duration.active)}, total: ${fmtD(w.duration.total)}, pauses: ${Math.round(w.duration.pause / 60)} min
+Calories: ${w.calories} kcal
+Heart rate: avg ${w.heartRate.avg} bpm, max ${w.heartRate.max} bpm
+Speed: avg ${w.speed.avg} km/h, max ${w.speed.max} km/h
+Elevation: +${w.elevation.ascent} m / −${w.elevation.descent} m
+${powerLine}Training Effect: aerobic ${w.trainingEffect.aerobic}/5, anaerobic ${w.trainingEffect.anaerobic}/5
+HR Zones: ${hrZones}
+Load: ${w.load?.label ?? '—'}
 ${recentBlock}
 
-ЗОНЫ КОМПЕТЕНТНОСТИ
-По этим темам давай конкретные практические советы, ссылаясь на цифры из тренировки выше:
-
-🏃 Анализ тренировки — зоны ЧСС, тренировочный эффект, нагрузка, соотношение аэроб/анаэроб, рекомендации по следующей сессии и восстановлению.
-🩺 Травмы и здоровье — причины болей, протоколы восстановления, когда направить к врачу. Не ставь диагнозов — объясняй симптомы и вероятные сценарии.
-🚲 Велосипед и давление в шинах — давление по типу покрышки, весу, покрытию, погоде; посадка, трансмиссия, тормоза.
-👟 Обувь — подбор, шнуровка, стельки, износ, переход между типами.
-👕 Одежда и экипировка — слои, материалы, настройка датчиков, профилактика натёртостей.
-
-Отвечай строго по-русски, кратко и конкретно — цифры, диапазоны, протоколы. Без воды.`;
+Answer in English, concise and practical, with concrete numbers and clear action steps.`;
 }
 
-export function useOpenAI(workout, recentWorkoutsFn) {
+export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage) {
   const [messages,    setMessages]    = useState([]);
-  const [isStreaming, setIsStreaming]  = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const hasKey = API_KEY.startsWith('sk-') && API_KEY.length > 20;
+  const workoutId = workout?.id ?? null;
+
+  useEffect(() => {
+    let alive = true;
+    if (!getChatHistory) return;
+
+    getChatHistory(workoutId)
+      .then((rows) => {
+        if (!alive) return;
+        const mapped = (rows ?? [])
+          .filter(m => m?.role && m?.content)
+          .map(m => ({ role: m.role, content: m.content }));
+        setMessages(mapped);
+      })
+      .catch(() => {
+        if (alive) setMessages([]);
+      });
+
+    return () => { alive = false; };
+  }, [getChatHistory, workoutId]);
 
   const send = useCallback(async (userText) => {
     if (!userText.trim() || isStreaming) return;
+
     if (!hasKey) {
-      setMessages(prev => [...prev,
-        { role: 'user', content: userText.trim() },
-        { role: 'assistant', content: 'OpenAI API ключ не настроен. Добавь VITE_OPENAI_API_KEY в .env файл.' },
-      ]);
+      const userMsg = { role: 'user', content: userText.trim() };
+      const assistantMsg = { role: 'assistant', content: 'OpenAI API key is not configured. Add VITE_OPENAI_API_KEY to .env.' };
+      setMessages(prev => [...prev, userMsg, assistantMsg]);
+      if (saveChatMessage) {
+        await saveChatMessage('user', userMsg.content, workoutId);
+        await saveChatMessage('assistant', assistantMsg.content, workoutId);
+      }
       return;
     }
 
     const trimmed = userText.trim();
     setMessages(prev => [...prev, { role: 'user', content: trimmed }]);
+    if (saveChatMessage) await saveChatMessage('user', trimmed, workoutId);
     setIsStreaming(true);
 
     const systemPrompt  = buildSystemPrompt(workout, recentWorkoutsFn);
@@ -93,25 +104,33 @@ export function useOpenAI(workout, recentWorkoutsFn) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
         body: JSON.stringify({
-          model: MODEL, max_completion_tokens: MAX_TOKENS, stream: false,
+          model: MODEL,
+          max_completion_tokens: MAX_TOKENS,
+          stream: false,
           messages: [{ role: 'system', content: systemPrompt }, ...historyForApi],
         }),
       });
+
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e?.error?.message ?? `HTTP ${res.status}`);
       }
+
       const data = await res.json();
-      const reply = data?.choices?.[0]?.message?.content ?? 'Нет ответа.';
+      const reply = data?.choices?.[0]?.message?.content ?? 'No response.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      if (saveChatMessage) await saveChatMessage('assistant', reply, workoutId);
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Ошибка: ${e.message ?? e}` }]);
+      const errText = `Error: ${e.message ?? e}`;
+      setMessages(prev => [...prev, { role: 'assistant', content: errText }]);
+      if (saveChatMessage) await saveChatMessage('assistant', errText, workoutId);
     } finally {
       setIsStreaming(false);
     }
-  }, [hasKey, isStreaming, messages, workout, recentWorkoutsFn]);
+  }, [hasKey, isStreaming, messages, workout, recentWorkoutsFn, saveChatMessage, workoutId]);
 
   const clearHistory = useCallback(() => setMessages([]), []);
 
   return { messages, isStreaming, hasKey, send, clearHistory };
 }
+

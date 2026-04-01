@@ -27,7 +27,7 @@ export const TYPE_COLOR = {
   test:     '#a855f7',
 };
 
-export const DAY_LABELS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+export const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 // ── ATL / CTL / TSB calculation ───────────────────────────────────────────────
 export function calcTrainingLoad(historyWorkouts) {
@@ -64,7 +64,7 @@ export function calcTrainingLoad(historyWorkouts) {
 // ── Detraining assessment ─────────────────────────────────────────────────────
 export function assessDetraining(historyWorkouts) {
   if (!historyWorkouts.length) {
-    return { daysSince: 999, phase: 'base_rebuild', label: 'Нет истории — начало с базы', factor: 0.40 };
+    return { daysSince: 999, phase: 'base_rebuild', label: 'No history - start from base', factor: 0.40 };
   }
 
   const sorted = [...historyWorkouts].sort((a,b) => b.date.localeCompare(a.date));
@@ -73,12 +73,12 @@ export function assessDetraining(historyWorkouts) {
   const today = new Date(); today.setHours(0,0,0,0);
   const daysSince = Math.round((today - lastDate) / 86400000);
 
-  if (daysSince <= 3)  return { daysSince, phase: 'active',        label: 'Активный период',           factor: 1.00 };
-  if (daysSince <= 7)  return { daysSince, phase: 'slight',        label: 'Лёгкий детрейнинг (≤7 дн)',  factor: 0.90 };
-  if (daysSince <= 14) return { daysSince, phase: 'moderate',      label: 'Умеренный детрейнинг (≤14)', factor: 0.75 };
-  if (daysSince <= 30) return { daysSince, phase: 'significant',   label: 'Значимый детрейнинг (≤30)',  factor: 0.55 };
-  if (daysSince <= 90) return { daysSince, phase: 'base_rebuild',  label: 'Восстановление базы (>30)',  factor: 0.40 };
-  return                       { daysSince, phase: 'full_restart', label: 'Полный перезапуск (>90 дн)', factor: 0.30 };
+  if (daysSince <= 3)  return { daysSince, phase: 'active',        label: 'Active period',           factor: 1.00 };
+  if (daysSince <= 7)  return { daysSince, phase: 'slight',        label: 'Mild detraining (<=7 days)',  factor: 0.90 };
+  if (daysSince <= 14) return { daysSince, phase: 'moderate',      label: 'Moderate detraining (<=14 days)', factor: 0.75 };
+  if (daysSince <= 30) return { daysSince, phase: 'significant',   label: 'Significant detraining (<=30 days)',  factor: 0.55 };
+  if (daysSince <= 90) return { daysSince, phase: 'base_rebuild',  label: 'Recovery базы (>30)',  factor: 0.40 };
+  return                       { daysSince, phase: 'full_restart', label: 'Full restart (>90 days)', factor: 0.30 };
 }
 
 // ── Zone balance analysis (last 4 weeks) ─────────────────────────────────────
@@ -128,18 +128,18 @@ export function sportConfig(workout) {
     weekFloors:   { full_restart:80, base_rebuild:100, significant:120, moderate:150, slight:170, active:180, overreached:80, too_easy:200 },
     // Typical elite/enthusiast reference week if no history
     defaultWeek:  200,
-    unit:         'км',
+    unit:         'km',
     // Day labels and descriptions specific to road cycling
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Полный отдых',                         intensity:0,  targetKm:0,              desc:'Восстановление, растяжка, сон' }),
-      recovery:  (km) => ({ type:'recovery', label:'Восстановительная поездка Z1',          intensity:15, targetKm:Math.max(Math.round(km*0.25), 25), desc:'Каданс 90+, ЧСС <60% макс, полная свобода' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Аэробная база Z2',                      intensity:50, targetKm:Math.round(km*0.55), desc:'Каданс 85–95, ЧСС 60–70%, разговорный темп' }),
-      long:      (km) => ({ type:'long',     label:`Длинная Z2 (~${Math.round(km*0.80)} км)`,intensity:60, targetKm:Math.round(km*0.80), desc:'Равномерный темп, никаких ускорений, гели каждые 45 мин' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Темповая Z3',                           intensity:65, targetKm:Math.round(km*0.45), desc:'Средний блок 20–40 мин в Z3, разминка и заминка по 15 мин' }),
-      interval:  (km) => ({ type:'interval', label:'Интервалы Z4 — 4×8 мин',               intensity:85, targetKm:Math.round(km*0.38), desc:'4 интервала по 8 мин Z4, восстановление 4 мин Z1 между' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max — 5×4 мин Z5',                  intensity:90, targetKm:Math.round(km*0.32), desc:'5 интервалов по 4 мин >90% макс ЧСС, пауза 4 мин' }),
-      hills:     (km) => ({ type:'tempo',    label:'Силовые подъёмы — 6×5 мин',            intensity:78, targetKm:Math.round(km*0.38), desc:'Каданс 55–65, Z3–Z4 на подъёме, сброс на спуске' }),
-      test:      (km) => ({ type:'test',     label:'Оценочная поездка Z1–Z2',               intensity:35, targetKm:Math.round(km*0.35), desc:'Зафиксируй ЧСС и ощущения — это базовая точка отсчёта' }),
+      rest:      (km) => ({ type:'rest',     label:'Full rest',                         intensity:0,  targetKm:0,              desc:'Recovery, растяжка, сон' }),
+      recovery:  (km) => ({ type:'recovery', label:'Recovery ride Z1',          intensity:15, targetKm:Math.max(Math.round(km*0.25), 25), desc:'Cadence 90+, ЧСС <60% max, полная свобода' }),
+      aerobic:   (km) => ({ type:'aerobic',  label:'Aerobic base Z2',                      intensity:50, targetKm:Math.round(km*0.55), desc:'Cadence 85–95, ЧСС 60–70%, разговорный теmп' }),
+      long:      (km) => ({ type:'long',     label:`Long Z2 (~${Math.round(km*0.80)} km)`,intensity:60, targetKm:Math.round(km*0.80), desc:'Равноmерный теmп, никаких ускорений, гели каждые 45 min' }),
+      tempo:     (km) => ({ type:'tempo',    label:'Paceовая Z3',                           intensity:65, targetKm:Math.round(km*0.45), desc:'Wedедний блок 20–40 min в Z3, разminка и заminка по 15 min' }),
+      interval:  (km) => ({ type:'interval', label:'Z4 intervals — 4×8 min',               intensity:85, targetKm:Math.round(km*0.38), desc:'4 интервала по 8 min Z4, восстановление 4 min Z1 mежду' }),
+      vo2:       (km) => ({ type:'interval', label:'VO₂max — 5×4 min Z5',                  intensity:90, targetKm:Math.round(km*0.32), desc:'5 интервалов по 4 min >90% max ЧСС, пауза 4 min' }),
+      hills:     (km) => ({ type:'tempo',    label:'Hill strength repeats — 6×5 min',            intensity:78, targetKm:Math.round(km*0.38), desc:'Cadence 55–65, Z3–Z4 на подъёmе, сброс на descentе' }),
+      test:      (km) => ({ type:'test',     label:'Assessment ride Z1–Z2',               intensity:35, targetKm:Math.round(km*0.35), desc:'Зафиксируй ЧСС и ощущения — это базовая точка отсчёта' }),
     },
   };
 
@@ -147,17 +147,17 @@ export function sportConfig(workout) {
     sport:       'running',
     weekFloors:  { full_restart:25, base_rebuild:30, significant:35, moderate:40, slight:45, active:50, overreached:25, too_easy:55 },
     defaultWeek: 50,
-    unit:        'км',
+    unit:        'km',
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Полный отдых',                        intensity:0,  targetKm:0,              desc:'Восстановление, растяжка' }),
-      recovery:  (km) => ({ type:'recovery', label:'Лёгкая пробежка Z1',                  intensity:15, targetKm:Math.round(km*0.15), desc:'ЧСС <60% макс, очень медленно, разговорный темп' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Аэробный бег Z2',                     intensity:50, targetKm:Math.round(km*0.22), desc:'ЧСС 60–70%, комфортный темп' }),
-      long:      (km) => ({ type:'long',     label:`Длинный бег (~${Math.round(km*0.35)} км)`, intensity:60, targetKm:Math.round(km*0.35), desc:'Медленнее обычного на 30–60 с/км' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Темп Z3',                              intensity:65, targetKm:Math.round(km*0.18), desc:'20–30 мин в темпе чуть быстрее марафонского' }),
-      interval:  (km) => ({ type:'interval', label:'Интервалы Z4 — 6×1 км',               intensity:85, targetKm:Math.round(km*0.15), desc:'6 раз по 1 км в соревновательном темпе, пауза 2 мин' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max — 8×400 м Z5',                 intensity:90, targetKm:Math.round(km*0.12), desc:'8 ускорений по 400 м >90% макс ЧСС' }),
-      hills:     (km) => ({ type:'tempo',    label:'Горный бег — 8×200 м',                intensity:78, targetKm:Math.round(km*0.14), desc:'Ускорения в горку, восстановление трусцой вниз' }),
-      test:      (km) => ({ type:'test',     label:'Оценочная пробежка Z2',               intensity:35, targetKm:Math.round(km*0.15), desc:'Фиксируй темп и ЧСС — базовая точка' }),
+      rest:      (km) => ({ type:'rest',     label:'Full rest',                        intensity:0,  targetKm:0,              desc:'Recovery, растяжка' }),
+      recovery:  (km) => ({ type:'recovery', label:'Easy пробежка Z1',                  intensity:15, targetKm:Math.round(km*0.15), desc:'ЧСС <60% max, очень mедленно, разговорный теmп' }),
+      aerobic:   (km) => ({ type:'aerobic',  label:'Aerobic бег Z2',                     intensity:50, targetKm:Math.round(km*0.22), desc:'ЧСС 60–70%, коmфортный теmп' }),
+      long:      (km) => ({ type:'long',     label:`Long run (~${Math.round(km*0.35)} km)`, intensity:60, targetKm:Math.round(km*0.35), desc:'Медленнее обычного на 30–60 с/km' }),
+      tempo:     (km) => ({ type:'tempo',    label:'Pace Z3',                              intensity:65, targetKm:Math.round(km*0.18), desc:'20–30 min в теmпе чуть быстрее mарафонского' }),
+      interval:  (km) => ({ type:'interval', label:'Z4 intervals — 6×1 km',               intensity:85, targetKm:Math.round(km*0.15), desc:'6 раз по 1 km в соревновательноm теmпе, пауза 2 min' }),
+      vo2:       (km) => ({ type:'interval', label:'VO₂max — 8×400 m Z5',                 intensity:90, targetKm:Math.round(km*0.12), desc:'8 ускорений по 400 m >90% max ЧСС' }),
+      hills:     (km) => ({ type:'tempo',    label:'Hill run — 8×200 m',                intensity:78, targetKm:Math.round(km*0.14), desc:'Ускорения в горку, восстановление трусцой внof' }),
+      test:      (km) => ({ type:'test',     label:'Assessment run Z2',               intensity:35, targetKm:Math.round(km*0.15), desc:'Фиксируй теmп и ЧСС — базовая точка' }),
     },
   };
 
@@ -166,17 +166,17 @@ export function sportConfig(workout) {
     sport:       'other',
     weekFloors:  { full_restart:30, base_rebuild:40, significant:50, moderate:60, slight:70, active:80, overreached:30, too_easy:90 },
     defaultWeek: 60,
-    unit:        'км',
+    unit:        'km',
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Полный отдых',         intensity:0,  targetKm:0,              desc:'' }),
-      recovery:  (km) => ({ type:'recovery', label:'Восстановление Z1',    intensity:15, targetKm:Math.round(km*0.20), desc:'Лёгкая нагрузка' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Аэробная Z2',          intensity:50, targetKm:Math.round(km*0.40), desc:'60–70% макс ЧСС' }),
-      long:      (km) => ({ type:'long',     label:'Длинная Z2',           intensity:60, targetKm:Math.round(km*0.60), desc:'Непрерывно, умеренно' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Темповая Z3',          intensity:65, targetKm:Math.round(km*0.35), desc:'70–80% макс ЧСС' }),
-      interval:  (km) => ({ type:'interval', label:'Интервалы Z4',         intensity:85, targetKm:Math.round(km*0.30), desc:'80–90% макс ЧСС' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max Z5',            intensity:90, targetKm:Math.round(km*0.25), desc:'>90% макс ЧСС' }),
+      rest:      (km) => ({ type:'rest',     label:'Full rest',         intensity:0,  targetKm:0,              desc:'' }),
+      recovery:  (km) => ({ type:'recovery', label:'Recovery Z1',    intensity:15, targetKm:Math.round(km*0.20), desc:'Easy нагрузка' }),
+      aerobic:   (km) => ({ type:'aerobic',  label:'Аэробная Z2',          intensity:50, targetKm:Math.round(km*0.40), desc:'60–70% max ЧСС' }),
+      long:      (km) => ({ type:'long',     label:'Long Z2',           intensity:60, targetKm:Math.round(km*0.60), desc:'Непрерывно, уmеренно' }),
+      tempo:     (km) => ({ type:'tempo',    label:'Paceовая Z3',          intensity:65, targetKm:Math.round(km*0.35), desc:'70–80% max ЧСС' }),
+      interval:  (km) => ({ type:'interval', label:'Z4 intervals',         intensity:85, targetKm:Math.round(km*0.30), desc:'80–90% max ЧСС' }),
+      vo2:       (km) => ({ type:'interval', label:'VO₂max Z5',            intensity:90, targetKm:Math.round(km*0.25), desc:'>90% max ЧСС' }),
       hills:     (km) => ({ type:'tempo',    label:'Силовая Z3–Z4',        intensity:78, targetKm:Math.round(km*0.30), desc:'Силовая работа' }),
-      test:      (km) => ({ type:'test',     label:'Оценочная поездка',    intensity:35, targetKm:Math.round(km*0.25), desc:'Точка отсчёта' }),
+      test:      (km) => ({ type:'test',     label:'Assessment ride',    intensity:35, targetKm:Math.round(km*0.25), desc:'Точка отсчёта' }),
     },
   };
 }
@@ -281,3 +281,4 @@ export function generateTrainingPlan(workout, historyWorkouts = [], startDow = n
     },
   };
 }
+

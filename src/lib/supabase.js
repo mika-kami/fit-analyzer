@@ -1,5 +1,5 @@
-/**
- * supabase.js — Supabase client singleton.
+﻿/**
+ * supabase.js â€” Supabase client singleton.
  * Reads env vars injected by Vite.
  */
 import { createClient } from '@supabase/supabase-js';
@@ -18,3 +18,4 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
     detectSessionInUrl: true,
   },
 });
+

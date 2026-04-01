@@ -73,14 +73,14 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
           fontFamily: 'var(--font-display)', margin: '0 0 var(--sp-3)',
           letterSpacing: '-0.03em', lineHeight: 1.15,
         }}>
-          Анализ тренировки
+          Аналof тренировки
         </h1>
 
         <p style={{
           color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 var(--sp-8)',
           fontFamily: 'var(--font-body)', lineHeight: 1.6,
         }}>
-          Загрузите FIT-файл для детального анализа пульса,<br />зон нагрузки и рекомендаций тренера
+          Загрузите FIT-файл для детального аналofа пульса,<br />зон нагрузки и рекоmендаций тренера
         </p>
 
         {/* Drop zone */}
@@ -119,7 +119,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
             <>
               <Spinner />
               <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                Разбор FIT-файла…
+                Parsing FIT file...
               </span>
             </>
           ) : (
@@ -131,10 +131,10 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
                 color:      drag ? 'var(--accent)' : 'var(--text-primary)',
                 fontSize:   15, fontWeight: 600,
               }}>
-                {drag ? 'Отпустите файл' : 'Перетащите FIT-файл'}
+                {drag ? 'Drop the file' : 'Drag a FIT file'}
               </div>
               <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                или нажмите для выбора
+                or нажmите для выбора
               </div>
               <div style={{
                 color: 'var(--text-dim)', fontSize: 10,
@@ -169,7 +169,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
           color: 'var(--text-dim)', fontSize: 11, marginBottom: 'var(--sp-4)',
         }}>
           <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
-          или
+          or
           <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
         </div>
 
@@ -187,7 +187,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
               transition: 'all var(--t-base) var(--ease-snappy)',
             }}
           >
-            ⊕ Подключить Garmin Connect
+            ⊕ Connect Garmin Connect
           </button>
         )}
 
@@ -210,7 +210,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
         >
-          Открыть пример — 50 км, шоссейный велосипед, 7 сент 2025
+          Open sample - 50 km, road cycling, 7 сент 2025
         </button>
       </div>
     </div>
@@ -231,3 +231,5 @@ export function Spinner() {
 
 
 // ────────────────────────────────────────────────────────────
+
+

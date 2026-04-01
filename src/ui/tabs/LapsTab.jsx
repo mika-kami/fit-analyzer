@@ -23,8 +23,8 @@ function fmtPace(seconds, meters) {
 
 function fmtDist(meters) {
   if (meters == null) return '—';
-  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} км`;
-  return `${Math.round(meters)} м`;
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
+  return `${Math.round(meters)} m`;
 }
 
 const TH = ({ children, align = 'right' }) => (
@@ -54,7 +54,7 @@ export function LapsTab({ workout: w }) {
         borderRadius: 'var(--r-lg)', padding: 'var(--sp-8)',
         textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
       }}>
-        Данные о кругах недоступны для этой активности
+        Lap data is unavailable for this activity
       </div>
     );
   }
@@ -77,13 +77,13 @@ export function LapsTab({ workout: w }) {
         display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--sp-3)',
       }}>
         {[
-          { label: 'Кругов', value: laps.length },
-          { label: 'Лучший круг', value: fmtTime(laps[bestIdx]?.timer) },
-          { label: 'Ср. темп', value: (() => {
+          { label: 'Laps', value: laps.length },
+          { label: 'Best lap', value: fmtTime(laps[bestIdx]?.timer) },
+          { label: 'Wed. теmп', value: (() => {
             const totalTimer = laps.reduce((s, l) => s + (l.timer ?? 0), 0);
             const totalDist  = laps.reduce((s, l) => s + (l.distance ?? 0), 0);
             return fmtPace(totalTimer, totalDist);
-          })() + ' /км' },
+          })() + ' /km' },
         ].map(item => (
           <div key={item.label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -108,11 +108,11 @@ export function LapsTab({ workout: w }) {
           <thead>
             <tr>
               <TH align="left">#</TH>
-              <TH>Время</TH>
-              <TH>Дистанция</TH>
-              <TH>Темп</TH>
-              {hasAscent   && <TH>Набор</TH>}
-              {hasCalories && <TH>Ккал</TH>}
+              <TH>Time</TH>
+              <TH>Distance</TH>
+              <TH>Pace</TH>
+              {hasAscent   && <TH>Ascent</TH>}
+              {hasCalories && <TH>Kcal</TH>}
             </tr>
           </thead>
           <tbody>
@@ -131,9 +131,9 @@ export function LapsTab({ workout: w }) {
                   <TD highlight>{fmtTime(lap.timer ?? lap.elapsed)}</TD>
                   <TD>{fmtDist(lap.distance)}</TD>
                   <TD color={isBest ? 'var(--accent)' : undefined}>
-                    {fmtPace(lap.timer ?? lap.elapsed, lap.distance)} /км
+                    {fmtPace(lap.timer ?? lap.elapsed, lap.distance)} /km
                   </TD>
-                  {hasAscent   && <TD>{lap.ascent  > 0 ? `+${Math.round(lap.ascent)} м` : '—'}</TD>}
+                  {hasAscent   && <TD>{lap.ascent  > 0 ? `+${Math.round(lap.ascent)} m` : '—'}</TD>}
                   {hasCalories && <TD>{lap.calories > 0 ? lap.calories : '—'}</TD>}
                 </tr>
               );
@@ -144,3 +144,5 @@ export function LapsTab({ workout: w }) {
     </div>
   );
 }
+
+

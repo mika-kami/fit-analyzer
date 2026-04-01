@@ -18,6 +18,18 @@ import { Card, CardLabel }      from './OverviewTab.jsx';
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
 
+function normalizePlanDateToIso(value, fallbackIso) {
+  if (!value) return fallbackIso;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const m = String(value).match(/^(\d{2})\/(\d{2})$/);
+  if (m) {
+    const year = Number((fallbackIso || new Date().toISOString().slice(0, 10)).slice(0, 4));
+    const dt = new Date(Date.UTC(year, Number(m[1]) - 1, Number(m[2])));
+    return dt.toISOString().slice(0, 10);
+  }
+  return fallbackIso;
+}
+
 function windDirection(deg) {
   if (deg == null || Number.isNaN(deg)) return '—';
   const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -104,26 +116,26 @@ export function PlanContextBanner({ meta, workout }) {
       }}>
         <div>
           <div style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)', marginBottom:2 }}>
-            ФАЗА ПОДГОТОВКИ
+            TRAINING PHASE
           </div>
           <div style={{ fontSize:13, color: phaseColor, fontWeight:600 }}>
             {dt.label}
           </div>
           {dt.daysSince < 999 && (
             <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>
-              Последняя тренировка: {dt.daysSince === 0 ? 'сегодня' : `${dt.daysSince} дн. назад`}
+              Last workout: {dt.daysSince === 0 ? 'today' : `${dt.daysSince} days ago`}
             </div>
           )}
         </div>
         <div style={{ textAlign:'right' }}>
           <div style={{ fontSize:9, color:'var(--text-muted)', fontFamily:'var(--font-mono)', marginBottom:4 }}>
-            ОБЪЁМ НЕДЕЛИ
+            WEEK VOLUME
           </div>
           <div style={{ fontSize:20, fontWeight:600, color: phaseColor, fontFamily:'var(--font-display)' }}>
-            ~{meta.targetWeekKm} км
+            ~{meta.targetWeekKm} km
           </div>
           <div style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-            база {meta.baseKm} км × {Math.round(100/meta.baseKm * meta.targetWeekKm)}%
+            base {meta.baseKm} km × {Math.round(100/meta.baseKm * meta.targetWeekKm)}%
           </div>
         </div>
       </div>
@@ -132,9 +144,9 @@ export function PlanContextBanner({ meta, workout }) {
       {(load.ctl > 0 || load.atl > 0) && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'var(--sp-2)' }}>
           {[
-            { label:'CTL (фитнес)',  value: load.ctl.toFixed(1), color:'#60a5fa', sub:'ср. ТЭ/42 дня' },
-            { label:'ATL (нагрузка)',value: load.atl.toFixed(1), color:'#f97316', sub:'ср. ТЭ/7 дней'  },
-            { label:'TSB (свежесть)',value: (load.tsb > 0 ? '+' : '') + load.tsb.toFixed(1), color: tsbColor, sub: load.tsb > 5 ? 'свежий' : load.tsb < -15 ? 'усталость' : 'нейтрально' },
+            { label:'CTL (fitness)',  value: load.ctl.toFixed(1), color:'#60a5fa', sub:'ср. TE/42 дня' },
+            { label:'ATL (load)',value: load.atl.toFixed(1), color:'#f97316', sub:'ср. TE/7 days'  },
+            { label:'TSB (freshness)',value: (load.tsb > 0 ? '+' : '') + load.tsb.toFixed(1), color: tsbColor, sub: load.tsb > 5 ? 'fresh' : load.tsb < -15 ? 'fatigue' : 'neutral' },
           ].map(item => (
             <div key={item.label} style={{
               background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)',
@@ -234,7 +246,34 @@ export function PlanTab({ workout: w, history, coach }) {
   }, [plan, coachPrescription, readinessForecast, shouldAttachCoachSession, planSport, profileTarget]);
   const alignedPlan = coachAligned?.alignedDays?.length ? coachAligned.alignedDays : plan;
 
-  const DAY_FULL = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
+  useEffect(() => {
+    if (!coach?.saveWeeklyPlan || !alignedPlan?.length) return;
+    const weekStartDate = normalizePlanDateToIso(alignedPlan[0]?.date, todayIso);
+    coach.saveWeeklyPlan({
+      weekStartDate,
+      planSport,
+      coherenceScore: coachAligned?.coherence ?? 0,
+      requiredReadiness: coachAligned?.requiredReadiness ?? 0,
+      chosenReadiness: coachAligned?.chosenReadiness ?? 0,
+      fallbackUsed: coachAligned?.fallbackUsed ?? false,
+      alignmentReason: coachAligned?.reason ?? '',
+      prescription: coachPrescription ?? {},
+      alignedDays: alignedPlan,
+    });
+  }, [
+    coach,
+    alignedPlan,
+    coachAligned?.coherence,
+    coachAligned?.requiredReadiness,
+    coachAligned?.chosenReadiness,
+    coachAligned?.fallbackUsed,
+    coachAligned?.reason,
+    coachPrescription,
+    planSport,
+    todayIso,
+  ]);
+
+  const DAY_FULL = ['Monday','Tueорник','Wedеда','Thursday','Friday','Saturday','Sunday'];
   const [weatherSource, setWeatherSource] = useState('workout'); // 'workout' | 'city'
   const [cityInput, setCityInput] = useState(() => {
     try {
@@ -254,15 +293,15 @@ export function PlanTab({ workout: w, history, coach }) {
 
   useEffect(() => {
     if (!OPENWEATHER_API_KEY) {
-      setWeather({ loading: false, error: 'VITE_OPENWEATHER_API_KEY не задан', days: [], location: '' });
+      setWeather({ loading: false, error: 'VITE_OPENWEATHER_API_KEY is not set', days: [], location: '' });
       return;
     }
     if (weatherSource === 'workout' && !coords) {
-      setWeather({ loading: false, error: 'Нет GPS-точек в тренировке для прогноза', days: [], location: '' });
+      setWeather({ loading: false, error: 'No GPS points in workout for forecast', days: [], location: '' });
       return;
     }
     if (weatherSource === 'city' && !cityQuery.trim()) {
-      setWeather({ loading: false, error: 'Введите название города', days: [], location: '' });
+      setWeather({ loading: false, error: 'Enter city name', days: [], location: '' });
       return;
     }
 
@@ -294,7 +333,7 @@ export function PlanTab({ workout: w, history, coach }) {
         setWeather({ loading: false, error: '', days, location });
       } catch (e) {
         if (e.name === 'AbortError') return;
-        setWeather({ loading: false, error: e.message || 'Ошибка загрузки погоды', days: [], location: '' });
+        setWeather({ loading: false, error: e.message || 'Error загрузки погоды', days: [], location: '' });
       }
     }
 
@@ -347,12 +386,12 @@ export function PlanTab({ workout: w, history, coach }) {
       {/* Start-day picker */}
       <div style={{ display:'flex', alignItems:'center', gap:'var(--sp-3)' }}>
         <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', whiteSpace:'nowrap' }}>
-          НАЧАТЬ ПЛАН С:
+          START PLAN FROM:
         </span>
         <div style={{ display:'flex', gap:6, flex:1 }}>
           {[
-            { dow: todayDow,    label: 'Сегодня',    sub: DAY_FULL[todayDow]    },
-            { dow: tomorrowDow, label: 'Завтра',     sub: DAY_FULL[tomorrowDow] },
+            { dow: todayDow,    label: 'Today',    sub: DAY_FULL[todayDow]    },
+            { dow: tomorrowDow, label: 'Tomorrow',     sub: DAY_FULL[tomorrowDow] },
           ].map(opt => (
             <button key={opt.dow} onClick={() => setStartDow(opt.dow)} style={{
               flex: 1,
@@ -413,7 +452,7 @@ export function PlanTab({ workout: w, history, coach }) {
       </Card>
 
       <Card style={{ padding: 'var(--sp-4) var(--sp-3)' }}>
-        <CardLabel>Погода (OpenWeather)</CardLabel>
+        <CardLabel>Weather (OpenWeather)</CardLabel>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}>
           <button
             onClick={() => setWeatherSource('workout')}
@@ -428,7 +467,7 @@ export function PlanTab({ workout: w, history, coach }) {
               cursor: 'pointer',
             }}
           >
-            По GPS тренировки
+            By workout GPS
           </button>
           <button
             onClick={() => setWeatherSource('city')}
@@ -443,7 +482,7 @@ export function PlanTab({ workout: w, history, coach }) {
               cursor: 'pointer',
             }}
           >
-            По городу
+            By city
           </button>
           <input
             value={cityInput}
@@ -475,17 +514,17 @@ export function PlanTab({ workout: w, history, coach }) {
               cursor: 'pointer',
             }}
           >
-            Применить
+            Apply
           </button>
         </div>
         {weather.location && (
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--sp-2)' }}>
-            Локация: {weather.location}
+            Location: {weather.location}
           </div>
         )}
         {weather.loading && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            Загрузка прогноза…
+            Loading прогноза…
           </div>
         )}
         {!weather.loading && weather.error && (
@@ -501,13 +540,13 @@ export function PlanTab({ workout: w, history, coach }) {
                 borderRadius:'var(--r-sm)', padding:'var(--sp-2) var(--sp-3)',
               }}>
                 <div style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-                  {alignedPlan[i]?.day ?? `День ${i + 1}`}
+                  {alignedPlan[i]?.day ?? `Day ${i + 1}`}
                 </div>
                 <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
                   {d.tempC}°C · {d.weatherLabel || '—'}
                 </div>
                 <div style={{ fontSize:11, color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>
-                  Ветер: {d.windKmh} км/ч ({d.windMs} м/с), {d.windDir}
+                  Wind: {d.windKmh} кm/h ({d.windMs} m/с), {d.windDir}
                 </div>
               </div>
             ))}
@@ -516,7 +555,7 @@ export function PlanTab({ workout: w, history, coach }) {
       </Card>
 
       <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-        <CardLabel>Интенсивность по дням</CardLabel>
+        <CardLabel>Daily intensity</CardLabel>
         <ResponsiveContainer width="100%" height={110}>
           <BarChart data={alignedPlan} margin={{ top:0, right:4, left:0, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -531,13 +570,13 @@ export function PlanTab({ workout: w, history, coach }) {
       </Card>
 
       <Card>
-        <CardLabel>Недельные цели</CardLabel>
+        <CardLabel>Weekly goals</CardLabel>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-3)' }}>
           {[
-            {icon:'📏', label:'Целевой объём',      value: planMeta ? `~${planMeta.targetWeekKm} км` : '—'},
-            {icon:'💚', label:'Z1–Z2 доля',         value: planMeta?.meta?.phase === 'too_easy' ? '≥ 65%' : '≥ 75%'},
-            {icon:'⚡', label:'Интенсивных сессий', value: ['overreached','base_rebuild','full_restart'].includes(planMeta?.phase) ? '0' : '1–2'},
-            {icon:'😴', label:'Дней отдыха',        value: ['overreached','full_restart'].includes(planMeta?.phase) ? '3+' : '2'},
+            {icon:'📏', label:'Target volume',      value: planMeta ? `~${planMeta.targetWeekKm} km` : '—'},
+            {icon:'💚', label:'Z1-Z2 share',         value: planMeta?.meta?.phase === 'too_easy' ? '≥ 65%' : '≥ 75%'},
+            {icon:'⚡', label:'Intense sessions', value: ['overreached','base_rebuild','full_restart'].includes(planMeta?.phase) ? '0' : '1–2'},
+            {icon:'😴', label:'Rest days',        value: ['overreached','full_restart'].includes(planMeta?.phase) ? '3+' : '2'},
           ].map(item => (
             <div key={item.label} style={{ display:'flex', gap:'var(--sp-3)', alignItems:'flex-start' }}>
               <span style={{ fontSize:20, lineHeight:1.3 }}>{item.icon}</span>
@@ -558,7 +597,7 @@ export function DayCard({ day, weather, index, revealed }) {
   useEffect(() => { const t = setTimeout(() => setShow(true), revealed ? index*60 : 0); return () => clearTimeout(t); }, [revealed, index]);
 
   const highlight = day.isToday || day.isTomorrow;
-  const badge = day.isToday ? 'СЕГОДНЯ' : day.isTomorrow ? 'ЗАВТРА' : null;
+  const badge = day.isToday ? 'TODAY' : day.isTomorrow ? 'TOMORROW' : null;
 
   return (
     <div style={{
@@ -598,7 +637,7 @@ export function DayCard({ day, weather, index, revealed }) {
             )}
             {weather && (
               <div style={{ fontSize:10, color:'var(--text-secondary)', marginTop:4, fontFamily:'var(--font-mono)' }}>
-                {weather.tempC}°C · ветер {weather.windKmh} км/ч {weather.windDir}
+                {weather.tempC}°C · ветер {weather.windKmh} кm/h {weather.windDir}
               </div>
             )}
             {day.coachSession && (
@@ -622,7 +661,7 @@ export function DayCard({ day, weather, index, revealed }) {
         <div style={{ textAlign:'right', flexShrink:0 }}>
           <div style={{ fontSize:10, color:day.color, fontFamily:'var(--font-mono)', textTransform:'uppercase' }}>{day.type}</div>
           {day.targetKm > 0 && (
-            <div style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>~{day.targetKm} км</div>
+            <div style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>~{day.targetKm} km</div>
           )}
         </div>
       </div>
@@ -639,3 +678,5 @@ export function DayCard({ day, weather, index, revealed }) {
     </div>
   );
 }
+
+

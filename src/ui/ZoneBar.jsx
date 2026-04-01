@@ -48,7 +48,7 @@ export function ZoneBar({ zone, animate = true, showHr = false }) {
         width: 48, fontSize: 11, color: zone.color,
         fontFamily: 'var(--font-mono)', textAlign: 'right', flexShrink: 0,
       }}>
-        {zone.minutes}мин
+        {zone.minutes}min
       </span>
 
       {/* Percentage */}
@@ -74,3 +74,4 @@ export function ZoneBar({ zone, animate = true, showHr = false }) {
 
 
 // ────────────────────────────────────────────────────────────
+
