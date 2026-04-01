@@ -1,5 +1,4 @@
-import { fmtKm, fmtDurationShort } from '../core/format.js';
-
+﻿import { fmtKm, fmtDurationShort } from '../core/format.js';
 /**
  * Shell.jsx
  * App shell: sticky header with workout summary + tab navigation.
@@ -9,12 +8,12 @@ import { fmtKm, fmtDurationShort } from '../core/format.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview'   },
-  { id: 'charts',   label: 'Графики' },
-  { id: 'map',       label: 'Карта'     },
-  { id: 'analytics', label: 'Аналитика' },
-  { id: 'zones',     label: 'Зоны'      },
-  { id: 'laps',     label: 'Круги'   },
-  { id: 'chat',     label: 'Тренер'  },
+  { id: 'charts',   label: 'Charts' },
+  { id: 'map',       label: 'Map'     },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'zones',     label: 'Zones'      },
+  { id: 'laps',     label: 'Laps'   },
+  { id: 'chat',     label: 'Coach'  },
 ];
 
 export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus, onPDF, onProfile }) {
@@ -56,7 +55,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
             fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
             fontFamily: 'var(--font-mono)',
           }}>
-            {w.date} · {w.startTime} · {fmtKm(distanceM)} км · {fmtDurationShort(activeSec)}
+            {w.date} · {w.startTime} · {fmtKm(distanceM)} km · {fmtDurationShort(activeSec)}
           </div>
         </div>
 
@@ -65,7 +64,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           {/* Plans button (moved to header action row) */}
           <button
             onClick={() => onTabChange('plan')}
-            title="Открыть недельные планы"
+            title="Open weekly plans"
             style={{
               background:   activeTab === 'plan' ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
               border:       `1px solid ${activeTab === 'plan' ? 'rgba(232,168,50,0.35)' : 'var(--border-subtle)'}`,
@@ -80,7 +79,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
               whiteSpace:   'nowrap',
             }}
           >
-            Планы
+            Plans
           </button>
           {/* Profile button */}
           {onProfile && (
@@ -109,7 +108,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           {/* PDF Report button */}
           <button
             onClick={onPDF}
-            title="Скачать отчёт о тренировке (PDF)"
+            title="Download workout report (PDF)"
             style={{
               background:   'var(--bg-overlay)',
               border:       '1px solid var(--border-subtle)',
@@ -153,7 +152,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           {/* Garmin Connect button */}
           <button
             onClick={onGarmin}
-            title="Загрузить из Garmin Connect"
+            title="Download from Garmin Connect"
             style={{
               background:   garminStatus === 'connected' ? 'rgba(232,168,50,0.1)' : 'var(--bg-overlay)',
               border:       `1px solid ${garminStatus === 'connected' ? 'rgba(232,168,50,0.35)' : 'var(--border-subtle)'}`,
@@ -175,7 +174,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
           {/* New file button */}
           <button
             onClick={onReset}
-            title={showBack ? 'Вернуться к истории' : 'Загрузить другой файл'}
+            title={showBack ? 'Back to history' : 'Upload another file'}
             style={{
               background:   'var(--bg-overlay)',
               border:       '1px solid var(--border-subtle)',
@@ -191,7 +190,7 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
           >
-            {showBack ? '← История' : '↑ Новый файл'}
+            {showBack ? '← History' : '↑ New file'}
           </button>
         </div>
       </div>
@@ -228,10 +227,3 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
     </header>
   );
 }
-
-
-// ────────────────────────────────────────────────────────────
-
-
-
-

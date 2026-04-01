@@ -73,14 +73,14 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
           fontFamily: 'var(--font-display)', margin: '0 0 var(--sp-3)',
           letterSpacing: '-0.03em', lineHeight: 1.15,
         }}>
-          Аналof тренировки
+          Workout analysis
         </h1>
 
         <p style={{
           color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 var(--sp-8)',
           fontFamily: 'var(--font-body)', lineHeight: 1.6,
         }}>
-          Загрузите FIT-файл для детального аналofа пульса,<br />зон нагрузки и рекоmендаций тренера
+          Upload a FIT file for detailed analysis of heart rate,<br />training zones, and coach recommendations
         </p>
 
         {/* Drop zone */}
@@ -119,7 +119,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
             <>
               <Spinner />
               <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                Parsing FIT file...
+                Parsing FIT file…
               </span>
             </>
           ) : (
@@ -131,10 +131,10 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
                 color:      drag ? 'var(--accent)' : 'var(--text-primary)',
                 fontSize:   15, fontWeight: 600,
               }}>
-                {drag ? 'Drop the file' : 'Drag a FIT file'}
+                {drag ? 'Drop file' : 'Drag and drop FIT file'}
               </div>
               <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                or нажmите для выбора
+                or click to select
               </div>
               <div style={{
                 color: 'var(--text-dim)', fontSize: 10,
@@ -210,7 +210,7 @@ export function UploadScreen({ onFile, onSample, onGarmin, isLoading, error }) {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
         >
-          Open sample - 50 km, road cycling, 7 сент 2025
+          Open sample — 50 km, road bike, Sept 7, 2025
         </button>
       </div>
     </div>
@@ -229,7 +229,4 @@ export function Spinner() {
   );
 }
 
-
 // ────────────────────────────────────────────────────────────
-
-

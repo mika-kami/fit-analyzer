@@ -145,7 +145,7 @@ export function MapTab({ workout: w }) {
               animation: 'spin 0.8s linear infinite',
             }} />
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Loading карты…
+              Map loading…
             </div>
           </div>
         )}

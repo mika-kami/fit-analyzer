@@ -54,7 +54,7 @@ export function LapsTab({ workout: w }) {
         borderRadius: 'var(--r-lg)', padding: 'var(--sp-8)',
         textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
       }}>
-        Lap data is unavailable for this activity
+        Lap data is not available for this activity
       </div>
     );
   }
@@ -79,7 +79,7 @@ export function LapsTab({ workout: w }) {
         {[
           { label: 'Laps', value: laps.length },
           { label: 'Best lap', value: fmtTime(laps[bestIdx]?.timer) },
-          { label: 'Wed. теmп', value: (() => {
+          { label: 'Avg pace', value: (() => {
             const totalTimer = laps.reduce((s, l) => s + (l.timer ?? 0), 0);
             const totalDist  = laps.reduce((s, l) => s + (l.distance ?? 0), 0);
             return fmtPace(totalTimer, totalDist);
@@ -112,7 +112,7 @@ export function LapsTab({ workout: w }) {
               <TH>Distance</TH>
               <TH>Pace</TH>
               {hasAscent   && <TH>Ascent</TH>}
-              {hasCalories && <TH>Kcal</TH>}
+              {hasCalories && <TH>kcal</TH>}
             </tr>
           </thead>
           <tbody>
@@ -144,5 +144,3 @@ export function LapsTab({ workout: w }) {
     </div>
   );
 }
-
-

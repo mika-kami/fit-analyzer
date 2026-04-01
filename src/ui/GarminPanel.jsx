@@ -19,10 +19,10 @@ export function GarminPanel({ garmin, onClose }) {
     probe, syncActivities,
   } = garmin;
 
-  const knownIds      = garmin.knownGarminIds ?? [];
+  const knownIds      = garmin.knownGarminIds ??[];
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { probe?.(); }, []);
+  useEffect(() => { probe?.(); },[]);
 
   return (
     <div
@@ -183,20 +183,20 @@ export function GarminPanel({ garmin, onClose }) {
             }}>
               <StepRow done={true}  text="Opening browser" />
               <StepRow
-                done={step.includes('список') || step.includes('Скач') || step.includes('Сохран')}
+                done={step.includes('list') || step.includes('Download') || step.includes('Save')}
                 active={step.includes('Garmin')}
                 text="Garmin Connect" />
               <StepRow
-                done={step.includes('Скач') || step.includes('Сохран')}
-                active={step.includes('список')}
+                done={step.includes('Download') || step.includes('Save')}
+                active={step.includes('list')}
                 text="Workout list" />
               <StepRow
-                done={step.includes('Сохран')}
-                active={step.includes('Скач')}
+                done={step.includes('Save')}
+                active={step.includes('Download')}
                 text="Downloading FIT files" />
               <StepRow
                 done={false}
-                active={step.includes('Сохран')}
+                active={step.includes('Save')}
                 text="Saving to history" />
             </div>
           )}

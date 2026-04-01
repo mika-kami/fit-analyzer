@@ -3,7 +3,7 @@
 /**
  * MetricCard.jsx
  * Atomic display card for a single numeric metric.
- * Purely presentational â€” receives formatted strings.
+ * Purely presentational — receives formatted strings.
  */
 
 export function MetricCard({ label, value, unit, sub, accent }) {
@@ -62,4 +62,4 @@ export function MetricCard({ label, value, unit, sub, accent }) {
 }
 
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ────────────────────────────────────────────────────────────

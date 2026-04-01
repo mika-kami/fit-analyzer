@@ -60,7 +60,6 @@ export function TEBar({ label, value, color }) {
     </Card>
   );
 }
-
 // ─── Recommendation card ─────────────────────────────────────────────────────
 export function RecCard({ rec }) {
   const borderColor = { warning: 'rgba(249,115,22,0.2)', info: 'rgba(96,165,250,0.2)', success: 'rgba(74,222,128,0.2)' }[rec.type] ?? 'var(--border-subtle)';
@@ -89,9 +88,9 @@ export function OverviewTab({ workout: w }) {
       {/* Primary metrics grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 'var(--sp-3)' }}>
         <MetricCard label="Distance"     value={fmtKm(w.distance)}      unit="km"     accent="var(--info)"    />
-        <MetricCard label="Active time" value={fmtDurationShort(w.duration.active)} unit="" sub={`полное ${fmtDuration(w.duration.total)}`} accent="var(--accent)" />
-        <MetricCard label="Wed. скорость"  value={fmtNum(w.speed.avg)}     unit="кm/h"   sub={`max ${fmtNum(w.speed.max)} кm/h`} accent="#34d399" />
-        <MetricCard label="Wed. ЧСС"       value={w.heartRate.avg || '—'}  unit="уд/min" sub={`max ${w.heartRate.max}`} accent="#f87171" />
+        <MetricCard label="Active time" value={fmtDurationShort(w.duration.active)} unit="" sub={`total ${fmtDuration(w.duration.total)}`} accent="var(--accent)" />
+        <MetricCard label="Avg speed"  value={fmtNum(w.speed.avg)}     unit="km/h"   sub={`max ${fmtNum(w.speed.max)} km/h`} accent="#34d399" />
+        <MetricCard label="Avg HR"       value={w.heartRate.avg || '—'}  unit="bpm" sub={`max ${w.heartRate.max}`} accent="#f87171" />
         <MetricCard label="Ascent"          value={w.elevation.ascent}     unit="m"      sub={`−${w.elevation.descent} m`} accent="var(--z3)" />
         <MetricCard label="Calories"        value={w.calories}             unit="kcal"   accent="var(--warning)" />
       </div>
@@ -101,10 +100,10 @@ export function OverviewTab({ workout: w }) {
         <TEBar label="Aerobic TE"    value={w.trainingEffect.aerobic}   color="var(--info)"    />
         <TEBar label="Anaerobic TE"  value={w.trainingEffect.anaerobic} color="var(--warning)" />
       </div>
-
+      
       {/* HR Zones overview */}
       <Card>
-        <CardLabel>Zones ЧСС · max {w.heartRate.max} уд/min</CardLabel>
+        <CardLabel>HR Zones · max {w.heartRate.max} bpm</CardLabel>
         {w.hrZones.map(z => <ZoneBar key={z.id} zone={z} animate={zonesReady} />)}
       </Card>
 
@@ -123,7 +122,7 @@ export function OverviewTab({ workout: w }) {
             LOAD ASSESSMENT
           </span>
           <span style={{ fontSize: 13, fontWeight: 600, color: w.load.color, fontFamily: 'var(--font-mono)' }}>
-            {w.load.label} · восстановление {w.load.recoveryDays}+ дня
+            {w.load.label} · recovery {w.load.recoveryDays}+ d
           </span>
         </div>
       )}
@@ -171,7 +170,8 @@ export function OverviewGPXButton({ workout }) {
 
 function isCycling(w) {
   const s = (w.sport ?? w.sportLabel ?? '').toLowerCase();
-  return s.includes('cycl') || s.includes('bike') || s.includes('велос') || s.includes('ebik');
+
+  return s.includes('cycl') || s.includes('велос') || s.includes('bike') || s.includes('ebik');
 }
 
 // ─── Cycling Analytics section ───────────────────────────────────────────────
@@ -189,13 +189,13 @@ export function CyclingAnalytics({ workout: w }) {
     ? parseFloat(((ascent / distM) * 100).toFixed(1))
     : null;
 
-  return (
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
 
       {/* Section header */}
       <div style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.12em',
                     textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-        Analytics · Велосипед
+        Analytics · Cycling
       </div>
 
       {/* Key cycling metrics */}
@@ -213,8 +213,8 @@ export function CyclingAnalytics({ workout: w }) {
           <MetricCard
             label="Power"
             value={w.power.avg}
-            unit="Tue"
-            sub={`max ${w.power.max} Tue`}
+            unit="W"
+            sub={`max ${w.power.max} W`}
             accent="#f97316"
           />
         )}
@@ -223,16 +223,16 @@ export function CyclingAnalytics({ workout: w }) {
             label="VAM"
             value={vam}
             unit="m/h"
-            sub="climb speed"
+            sub="climbing speed"
             accent="#fbbf24"
           />
         )}
         {avgGrade != null && (
           <MetricCard
-            label="Wed. уклон"
+            label="Avg gradient"
             value={avgGrade}
             unit="%"
-            sub={`набор ${ascent} m`}
+            sub={`ascent ${ascent} m`}
             accent="#34d399"
           />
         )}
@@ -241,7 +241,7 @@ export function CyclingAnalytics({ workout: w }) {
             label="Efficiency"
             value={effIdx}
             unit=""
-            sub="speed/heart rate"
+            sub="speed/HR"
             accent="#60a5fa"
           />
         )}
@@ -269,8 +269,8 @@ export function CyclingAnalytics({ workout: w }) {
           borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
           fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6,
         }}>
-          <b style={{ color: '#60a5fa' }}>Aerobic efficiency {effIdx}</b> = средняя скорость / средний пульс × 100.
-          Выше — лучше. Wedавнивай mежду похожиmи mаршрутаmи для отслеживания адаптации.
+          <b style={{ color: '#60a5fa' }}>Aerobic efficiency {effIdx}</b> = average speed / average HR × 100.
+          Higher is better. Compare between similar routes to track adaptation.
         </div>
       )}
     </div>
@@ -292,16 +292,16 @@ function PowerSummary({ workout: w }) {
           <div style={{ fontSize: 32, fontWeight: 600, color: '#f97316', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
             {w.power.avg}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tue</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>W</div>
         </div>
         <div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
-            MAX
+            MAXIMUM
           </div>
           <div style={{ fontSize: 32, fontWeight: 600, color: '#ef4444', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
             {w.power.max}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tue</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>W</div>
         </div>
       </div>
     </Card>
@@ -348,7 +348,7 @@ function ClimbRow({ climb, rank }) {
         </div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>GRADE</div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>GRADIENT</div>
         <div style={{ fontSize: 18, fontWeight: 600, color: gradeColor, fontFamily: 'var(--font-display)', lineHeight: 1 }}>
           {climb.avgGrade}%
         </div>
@@ -356,4 +356,3 @@ function ClimbRow({ climb, rank }) {
     </div>
   );
 }
-

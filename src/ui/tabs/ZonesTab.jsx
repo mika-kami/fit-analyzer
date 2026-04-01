@@ -21,13 +21,13 @@ export function ZonesTab({ workout: w }) {
     garmin5: {
       label:   'Garmin 5 zones',
       desc:    '% of max HR · compatible with Garmin Connect',
-      ref:     `Max HR: ${maxHr} уд/min`,
+      ref:     `Max HR: ${maxHr} bpm`,
       polar:   null,
     },
     seiler3: {
       label:   'Seiler 3 zones',
-      desc:    'Полярofованная mодель · научный стандарт выносливости',
-      ref:     lt2 ? `LT2: ${lt2} уд/min` : 'LT2 not detected',
+      desc:    'Polarized model · scientific standard for endurance',
+      ref:     lt2 ? `LT2: ${lt2} bpm` : 'LT2 not defined',
       polar:   zones.length === 3 ? {
         low:  zones[0]?.pct ?? 0,
         mid:  zones[1]?.pct ?? 0,
@@ -36,8 +36,8 @@ export function ZonesTab({ workout: w }) {
     },
     coggan7: {
       label:   'Coggan 7 zones',
-      desc:    'HR-adapted · from lactate threshold',
-      ref:     lt2 ? `LT2: ${lt2} уд/min` : 'LT2 not detected',
+      desc:    'HR adaptation · from lactate threshold',
+      ref:     lt2 ? `LT2: ${lt2} bpm` : 'LT2 not defined',
       polar:   null,
     },
   };
@@ -81,10 +81,10 @@ export function ZonesTab({ workout: w }) {
 
       {/* Zone bars */}
       <Card>
-        <CardLabel>Time в зонах</CardLabel>
+        <CardLabel>Time in zones</CardLabel>
         {zones.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 'var(--sp-4) 0' }}>
-            Нет данных — LT2 not detected в файле
+            No data — LT2 not defined in file
           </div>
         )}
         {zones.map(z => (
@@ -94,7 +94,7 @@ export function ZonesTab({ workout: w }) {
 
       {/* Bar chart */}
       <Card style={{ padding: 'var(--sp-4) var(--sp-3) var(--sp-3)' }}>
-        <CardLabel>Minutes in zones - {meta.label}</CardLabel>
+        <CardLabel>Minutes in zones — {meta.label}</CardLabel>
         <ResponsiveContainer width="100%" height={model==='coggan7' ? 140 : 120}>
           <BarChart data={zones} margin={{ top:0, right:4, left:0, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -117,14 +117,14 @@ export function ZonesTab({ workout: w }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-3)' }}>
         {[
           { label: 'Below LT2', value: seilerBelow.toFixed(0)+'%', color:'#4ade80',
-            sub: 'Z1+Z2 Seiler · target >= 80%',
+            sub: 'Z1+Z2 Seiler · target ≥ 80%',
             ok: seilerBelow >= 80 },
           { label: 'Above LT2', value: seilerAbove.toFixed(0)+'%', color:'#ef4444',
-            sub: 'Z3 Seiler · limit <= 20%',
+            sub: 'Z3 Seiler · limit ≤ 20%',
             ok: seilerAbove <= 20 },
-          { label: 'Полярofация', value: seilerBelow >= 80 ? '✓' : '✗',
+          { label: 'Polarization', value: seilerBelow >= 80 ? '✓' : '✗',
             color: seilerBelow >= 80 ? '#4ade80' : '#f97316',
-            sub: seilerBelow >= 80 ? 'Полярofованная mодель' : 'Too intense', ok: seilerBelow >= 80 },
+            sub: seilerBelow >= 80 ? 'Polarized model' : 'Too intense', ok: seilerBelow >= 80 },
         ].map(item => (
           <div key={item.label} style={{
             background: `${item.color}08`,
@@ -144,35 +144,35 @@ export function ZonesTab({ workout: w }) {
 
       {/* Model explanation */}
       <Card>
-        <CardLabel>Thuо означает эта mодель</CardLabel>
+        <CardLabel>What this model means</CardLabel>
         {model === 'garmin5' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <b style={{ color: 'var(--text-primary)' }}>Garmin 5 zones</b> — стандарт для сравнения с Garmin Connect.
-            Границы зон вычисляются как % от max ЧСС of профиля устройства ({maxHr} уд/min).
-            Удобна для отслеживания прогресса внутри экосистеmы Garmin, но не отражает
-            фofиологических порогов конкретного спортсmена.
+            <b style={{ color: 'var(--text-primary)' }}>Garmin 5 zones</b> — a standard for comparison with Garmin Connect.
+            Zone boundaries are calculated as a % of the max HR from the device profile ({maxHr} bpm).
+            Convenient for tracking progress within the Garmin ecosystem, but does not reflect 
+            the physiological thresholds of a specific athlete.
           </div>
         )}
         {model === 'seiler3' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <b style={{ color: 'var(--text-primary)' }}>Модель Сейлера</b> — научный консенсус для спорта на выносливость
-            (Seiler & Kjerland, 2006). Три зоны относительно лактатного порога LT2 ({lt2 || '?'} уд/min).
-            Элитные спортсmены проводят ~80% тренировок в Z1, ~20% в Z3 и практически ничего в "серой зоне" Z2.
+            <b style={{ color: 'var(--text-primary)' }}>Seiler Model</b> — scientific consensus for endurance sports
+            (Seiler & Kjerland, 2006). Three zones relative to the lactate threshold LT2 ({lt2 || '?'} bpm).
+            Elite athletes spend ~80% of training in Z1, ~20% in Z3 and practically nothing in the Z2 "gray zone".
             <br/><br/>
             <span style={{ color: seilerBelow >= 80 ? '#4ade80' : '#f97316' }}>
               {seilerBelow >= 80
-                ? `✓ Ваши ${seilerBelow.toFixed(0)}% ниже LT2 соответствуют полярofованной mодели.`
-                : `⚠ Только ${seilerBelow.toFixed(0)}% ниже LT2 — рекоmендуется ≥ 80% для оптиmальной адаптации.`
+                ? `✓ Your ${seilerBelow.toFixed(0)}% below LT2 matches the polarized model.`
+                : `⚠ Only ${seilerBelow.toFixed(0)}% below LT2 — ≥ 80% recommended for optimal adaptation.`
               }
             </span>
           </div>
         )}
         {model === 'coggan7' && (
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <b style={{ color: 'var(--text-primary)' }}>7 зон Когана</b> — деталofированная систеmа of велоспорта,
-            адаптированная под ЧСС. Lactate threshold LT2 ({lt2 || '?'} уд/min) используется как FTP-аналог.
-            Zones Z1–Z2 = аэробная base; Z3 = теmп; Z4 = порог; Z5 = VO₂max; Z6–Z7 = анаэробные усorя.
-            Подходит для детального планирования интервальных блоков.
+            <b style={{ color: 'var(--text-primary)' }}>Coggan 7 zones</b> — a detailed system from cycling 
+            adapted for heart rate. The lactate threshold LT2 ({lt2 || '?'} bpm) is used as an FTP equivalent.
+            Zones Z1–Z2 = aerobic base; Z3 = tempo; Z4 = threshold; Z5 = VO₂max; Z6–Z7 = anaerobic efforts.
+            Suitable for detailed interval block planning.
           </div>
         )}
       </Card>
@@ -194,7 +194,7 @@ export function ZoneBarFull({ zone }) {
           <span style={{ fontSize:12, color:'var(--text-secondary)' }}>{zone.name}</span>
           {zone.lo !== undefined && (
             <span style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-              {zone.lo}–{zone.hi > 900 ? '∞' : zone.hi} уд/min
+              {zone.lo}–{zone.hi > 900 ? '∞' : zone.hi} bpm
             </span>
           )}
         </div>
@@ -212,5 +212,3 @@ export function ZoneBarFull({ zone }) {
     </div>
   );
 }
-
-

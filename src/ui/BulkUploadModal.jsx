@@ -86,7 +86,7 @@ export function BulkUploadModal({ files, uploadFit, onDone }) {
           fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
           marginBottom: 'var(--sp-4)',
         }}>
-          Loading тренировок ({doneCount} of {total})
+          Loading of activities ({doneCount} of {total})
         </div>
 
         {/* Progress bar */}

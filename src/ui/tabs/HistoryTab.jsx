@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardLabel }             from './OverviewTab.jsx';
 
 const LOAD_COLOR = { high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151' };
-const WEEKDAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const WEEKDAYS   = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 const MONTHS_RU  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 
@@ -97,7 +97,7 @@ export function HeatmapCalendar({ history, onSelect, selectedDate }) {
       {/* Legend */}
       <div style={{ display:'flex', gap:12, marginTop:8, alignItems:'center' }}>
         <span style={{ fontSize:10, color:'var(--text-dim)', fontFamily:'var(--font-mono)' }}>Load:</span>
-        {[['low','Easy'],['medium','Wedедняя'],['high','High']].map(([level,label]) => (
+        {[['low','Low'],['medium','Medium'],['high','High']].map(([level,label]) => (
           <div key={level} style={{ display:'flex', alignItems:'center', gap:4 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:LOAD_COLOR[level], opacity: level==='high'?1:level==='medium'?0.75:0.5 }} />
             <span style={{ fontSize:10, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>{label}</span>
@@ -173,13 +173,13 @@ export function PeriodSelector({ period, onChange }) {
           borderRadius:'var(--r-sm)', padding:'4px 10px',
           color: period===d ? 'var(--accent)' : 'var(--text-secondary)',
           fontSize:11, fontFamily:'var(--font-mono)', cursor:'pointer',
-        }}>{d}д</button>
+        }}>{d}d</button>
       ))}
     </div>
   );
 }
 
-// ── Main tab ─────────────────────────────────────────────────────────────────
+// ── Period selector ───────────────────────────────────────────────────────────
 export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory }) {
   const [selectedDate, setSelectedDate]  = useState(null);
   const [period,       setPeriod]        = useState(10);
@@ -201,7 +201,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
     setTimeout(() => setSaveStatus(null), 2500);
   };
 
-  const fmtDur = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}ч ${String(m).padStart(2,'0')}min`; };
+  const fmtDur = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}h ${String(m).padStart(2,'0')}min`; };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--sp-4)' }}>
@@ -238,13 +238,13 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
 
       {!history.storageOk && (
         <div style={{ background:'rgba(250,191,36,0.06)', border:'1px solid rgba(250,191,36,0.2)', borderRadius:'var(--r-md)', padding:'var(--sp-3) var(--sp-4)', fontSize:12, color:'var(--accent)', fontFamily:'var(--font-mono)' }}>
-          ℹ History is available in this session and stored in browser memory
+          ℹ History available in this session · saved in browser memory
         </div>
       )}
 
       {/* Heatmap */}
       <Card>
-        <CardLabel>Activity calendar (12 weeks)</CardLabel>
+        <CardLabel>Activity Calendar (12 weeks)</CardLabel>
         {history.loadingDb ? (
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Loading...</div>
         ) : (
@@ -255,7 +255,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {/* Period stats */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
-          {periodWorkouts.length} workouts over период
+          {periodWorkouts.length} workouts in period
         </div>
         <PeriodSelector period={period} onChange={setPeriod} />
       </div>
@@ -268,7 +268,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
             { label:'Ascent',         value: stats.totalAscent,  unit:'m'    },
             { label:'Calories',       value: stats.totalCals,    unit:'kcal' },
             { label:'Avg TE',        value: stats.avgTE,        unit:'/5'   },
-            { label:'High нагр.', value: stats.highLoadDays, unit:'days' },
+            { label:'High load', value: stats.highLoadDays, unit:'days' },
           ].map(s => (
             <div key={s.label} style={{ background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', borderRadius:'var(--r-md)', padding:'var(--sp-3) var(--sp-4)' }}>
               <div style={{ fontSize:9, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
@@ -285,11 +285,11 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
         <div style={{ background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', borderRadius:'var(--r-lg)', padding:'var(--sp-8)', textAlign:'center' }}>
           <div style={{ fontSize:32, marginBottom:'var(--sp-3)' }}>📂</div>
           <div style={{ fontSize:13, color:'var(--text-secondary)' }}>History is empty</div>
-          <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:'var(--sp-2)' }}>Загрузите тренировку и нажmите «Save»</div>
+          <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:'var(--sp-2)' }}>Upload a workout and click "Save"</div>
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:'var(--sp-2)' }}>
-          <CardLabel>All тренировки ({workouts.length})</CardLabel>
+          <CardLabel>All workouts ({workouts.length})</CardLabel>
           {workouts.map(w => (
             <WorkoutRow
               key={w.date} w={w}
@@ -320,5 +320,3 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
     </div>
   );
 }
-
-

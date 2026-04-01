@@ -128,7 +128,7 @@ function WorkoutCard({ w, onSelect, onDelete }) {
             { v: `${(w.distance / 1000).toFixed(1)} km` },
             { v: fmtDur(w.duration?.active ?? 0) },
             { v: `↑ ${w.elevation?.ascent ?? 0} m` },
-            { v: `♥ ${w.heartRate?.avg ?? '—'} уд/min` },
+            { v: `♥ ${w.heartRate?.avg ?? '—'} bpm` },
             { v: `TE ${w.trainingEffect?.aerobic?.toFixed(1) ?? '—'}`, accent: true },
           ].map((m, i) => (
             <span key={i} style={{
@@ -379,7 +379,7 @@ export function Dashboard({
                       borderRadius: 'var(--r-sm)', padding: '3px 10px',
                       color: period === d ? 'var(--accent)' : 'var(--text-secondary)',
                       fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer',
-                    }}>{d}д</button>
+                    }}>{d}d</button>
                   ))}
                 </div>
               </div>

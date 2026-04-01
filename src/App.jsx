@@ -1,5 +1,5 @@
 ﻿/**
- * App.jsx â€” Root orchestrator (production).
+ * App.jsx -- Root orchestrator (production).
  * Screens: 'auth' | 'dashboard' | 'detail'
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -59,7 +59,7 @@ export default function App() {
     workouts.saveChatMessage
   );
   const garmin   = useGarmin(async (results) => {
-    // Called by useGarmin after /sync â€” save all new FIT files to DB
+    // Called by useGarmin after /sync → save all new FIT files to DB
     await workouts.saveGarminActivities?.(results);
   });
   const strava   = useStrava(auth.user, () => {
@@ -67,7 +67,7 @@ export default function App() {
     if (auth.user) workouts.reload?.();
   });
 
-  // When file loaded successfully â†’ save + open detail
+  // When file loaded successfully → save + open detail
   useEffect(() => {
     if (workout.status === 'ready' && workout.workout && screen === 'dashboard') {
       setScreen('detail');
@@ -134,7 +134,7 @@ export default function App() {
     </div>
   );
 
-  // Not logged in â†’ Auth screen
+  // Not logged in → Auth screen
   if (!auth.user) return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />

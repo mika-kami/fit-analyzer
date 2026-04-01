@@ -144,8 +144,8 @@ export function PlanContextBanner({ meta, workout }) {
       {(load.ctl > 0 || load.atl > 0) && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'var(--sp-2)' }}>
           {[
-            { label:'CTL (fitness)',  value: load.ctl.toFixed(1), color:'#60a5fa', sub:'ср. TE/42 дня' },
-            { label:'ATL (load)',value: load.atl.toFixed(1), color:'#f97316', sub:'ср. TE/7 days'  },
+            { label:'CTL (fitness)',  value: load.ctl.toFixed(1), color:'#60a5fa', sub:'avg TE/42 days' },
+            { label:'ATL (load)',value: load.atl.toFixed(1), color:'#f97316', sub:'avg TE/7 days'  },
             { label:'TSB (freshness)',value: (load.tsb > 0 ? '+' : '') + load.tsb.toFixed(1), color: tsbColor, sub: load.tsb > 5 ? 'fresh' : load.tsb < -15 ? 'fatigue' : 'neutral' },
           ].map(item => (
             <div key={item.label} style={{
@@ -226,7 +226,7 @@ export function PlanTab({ workout: w, history, coach }) {
       ? planSport === 'mixed'
       : planSport === profileTarget;
 
-  const coachAligned = useMemo(() => {
+      const coachAligned = useMemo(() => {
     if (!shouldAttachCoachSession) {
       return {
         alignedDays: plan,
@@ -273,7 +273,7 @@ export function PlanTab({ workout: w, history, coach }) {
     todayIso,
   ]);
 
-  const DAY_FULL = ['Monday','Tueорник','Wedеда','Thursday','Friday','Saturday','Sunday'];
+  const DAY_FULL = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   const [weatherSource, setWeatherSource] = useState('workout'); // 'workout' | 'city'
   const [cityInput, setCityInput] = useState(() => {
     try {
@@ -333,7 +333,7 @@ export function PlanTab({ workout: w, history, coach }) {
         setWeather({ loading: false, error: '', days, location });
       } catch (e) {
         if (e.name === 'AbortError') return;
-        setWeather({ loading: false, error: e.message || 'Error загрузки погоды', days: [], location: '' });
+        setWeather({ loading: false, error: e.message || 'Loading weather error', days: [], location: '' });
       }
     }
 
@@ -524,7 +524,7 @@ export function PlanTab({ workout: w, history, coach }) {
         )}
         {weather.loading && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            Loading прогноза…
+            Loading forecast…
           </div>
         )}
         {!weather.loading && weather.error && (
@@ -546,7 +546,7 @@ export function PlanTab({ workout: w, history, coach }) {
                   {d.tempC}°C · {d.weatherLabel || '—'}
                 </div>
                 <div style={{ fontSize:11, color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>
-                  Wind: {d.windKmh} кm/h ({d.windMs} m/с), {d.windDir}
+                  Wind: {d.windKmh} km/h ({d.windMs} m/s), {d.windDir}
                 </div>
               </div>
             ))}
@@ -637,7 +637,7 @@ export function DayCard({ day, weather, index, revealed }) {
             )}
             {weather && (
               <div style={{ fontSize:10, color:'var(--text-secondary)', marginTop:4, fontFamily:'var(--font-mono)' }}>
-                {weather.tempC}°C · ветер {weather.windKmh} кm/h {weather.windDir}
+                {weather.tempC}°C · wind {weather.windKmh} km/h {weather.windDir}
               </div>
             )}
             {day.coachSession && (
@@ -678,5 +678,3 @@ export function DayCard({ day, weather, index, revealed }) {
     </div>
   );
 }
-
-

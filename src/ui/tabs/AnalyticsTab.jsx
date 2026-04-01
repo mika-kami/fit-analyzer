@@ -120,7 +120,7 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
       ? `date:${currentWorkout.date}`
       : null;
 
-  // ── Loading / empty states ─────────────────────────────────────────────────
+      // ── Loading / empty states ─────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
@@ -158,11 +158,11 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
             borderRadius: 'var(--r-sm)', padding: '3px 10px',
             color: period === d ? 'var(--accent)' : 'var(--text-secondary)',
             fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer',
-          }}>{d}д</button>
+          }}>{d}d</button>
         ))}
       </div>
 
-      {/* Form Summary Card */}
+            {/* Form Summary Card */}
       <FormSummaryCard lastTSB={lastTSB} formState={formState} peak={peak} workoutCount={workouts.length} />
 
       {/* Load Chart */}
@@ -358,7 +358,7 @@ function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: 'var(--sp-4)', color: 'var(--text-muted)', fontSize: 13 }}>
-          Нужно minиmуm 14 тренировок для аналofа нагрузки
+          Need at least 14 workouts for training load analysis
           <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-dim)' }}>
             Current: {workoutCount}
           </div>
@@ -416,7 +416,7 @@ function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {
           textAlign: 'center', marginTop: 'var(--sp-3)',
           fontSize: 11, color: '#4ade80', fontFamily: 'var(--font-mono)',
         }}>
-          Peak form: {peak.date} ({peak.daysUntil} дн.)
+          Peak form: {peak.date} ({peak.daysUntil} d.)
         </div>
       )}
     </Card>
@@ -499,9 +499,9 @@ function AETChart({ data, lo, hi }) {
   if (data.length < 5) {
     return (
       <>
-        <EmptyState text="Not enough data. Нужно 5+ тренировок с данныmи Z2." />
+        <EmptyState text="Not enough data. Need 5+ workouts with Z2 data." />
         <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 4 }}>
-          Z2 скорость: {lo}–{hi} кm/h
+          Z2 speed: {lo}–{hi} km/h
         </div>
       </>
     );
@@ -524,7 +524,7 @@ function AETChart({ data, lo, hi }) {
           <XAxis dataKey="date" tick={TICK_STYLE} tickFormatter={fmtShortDate} axisLine={false} tickLine={false} />
           <YAxis
             tick={TICK_STYLE} axisLine={false} tickLine={false} width={36}
-            label={{ value: 'уд/min', angle: -90, position: 'insideLeft', style: { fill: TICK_COLOR, fontSize: 9, fontFamily: 'var(--font-mono)' } }}
+            label={{ value: 'bpm', angle: -90, position: 'insideLeft', style: { fill: TICK_COLOR, fontSize: 9, fontFamily: 'var(--font-mono)' } }}
           />
           <Tooltip content={<AETTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.12)', strokeWidth: 1 }} />
           <Scatter dataKey="avgHr" isAnimationActive={false}>
@@ -532,11 +532,11 @@ function AETChart({ data, lo, hi }) {
               <Cell key={i} fill={sportColor(p.sport)} r={4} />
             ))}
           </Scatter>
-          <Line type="monotone" dataKey="rollingAvg" stroke="#a78bfa" strokeWidth={2} dot={false} name="14д среднее" />
+          <Line type="monotone" dataKey="rollingAvg" stroke="#a78bfa" strokeWidth={2} dot={false} name="14d avg" />
         </ComposedChart>
       </ResponsiveContainer>
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 4 }}>
-        Z2 скорость: {lo}–{hi} кm/h
+        Z2 speed: {lo}–{hi} km/h
       </div>
     </>
   );
@@ -553,14 +553,14 @@ function AETTooltip({ active, payload }) {
       fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)',
     }}>
       <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{d.date} · {d.sport}</div>
-      <div>Wed. ЧСС: <span style={{ color: sportColor(d.sport) }}>{d.avgHr}</span> уд/min</div>
+      <div>Avg. HR: <span style={{ color: sportColor(d.sport) }}>{d.avgHr}</span> bpm</div>
     </div>
   );
 }
 
 // ── TE Trend Chart ───────────────────────────────────────────────────────────
 function TETrendChart({ data, workouts, onSelectWorkout }) {
-  if (!data.length) return <EmptyState text="Not enough data о тренировочноm эффекте" />;
+  if (!data.length) return <EmptyState text="Not enough data on training effect" />;
 
   const handleDotClick = (entry) => {
     if (!entry?.id || !onSelectWorkout) return;
@@ -574,15 +574,15 @@ function TETrendChart({ data, workouts, onSelectWorkout }) {
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
         <XAxis dataKey="date" tick={TICK_STYLE} tickFormatter={fmtShortDate} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 5]} tick={TICK_STYLE} axisLine={false} tickLine={false} width={36} />
-        <ReferenceLine y={2.0} stroke="#6b7280" strokeDasharray="4 4" label={{ value: 'Поддержание', fill: '#6b7280', fontSize: 9, fontFamily: 'var(--font-mono)', position: 'right' }} />
-        <ReferenceLine y={4.0} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Перегрузка', fill: '#ef4444', fontSize: 9, fontFamily: 'var(--font-mono)', position: 'right' }} />
+        <ReferenceLine y={2.0} stroke="#6b7280" strokeDasharray="4 4" label={{ value: 'Maintenance', fill: '#6b7280', fontSize: 9, fontFamily: 'var(--font-mono)', position: 'right' }} />
+        <ReferenceLine y={4.0} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Overload', fill: '#ef4444', fontSize: 9, fontFamily: 'var(--font-mono)', position: 'right' }} />
         <Tooltip content={<TETooltip />} cursor={{ stroke: 'rgba(255,255,255,0.12)', strokeWidth: 1 }} />
         <Scatter dataKey="te" isAnimationActive={false} onClick={(_, __, entry) => handleDotClick(entry)} style={{ cursor: 'pointer' }}>
           {data.map((p, i) => (
             <Cell key={i} fill={sportColor(p.sport)} r={4} />
           ))}
         </Scatter>
-        <Line type="monotone" dataKey="rollingAvg" stroke="#a78bfa" strokeWidth={2} dot={false} name="14д среднее" />
+        <Line type="monotone" dataKey="rollingAvg" stroke="#a78bfa" strokeWidth={2} dot={false} name="14d average" />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -614,5 +614,3 @@ function EmptyState({ text }) {
     </div>
   );
 }
-
-
