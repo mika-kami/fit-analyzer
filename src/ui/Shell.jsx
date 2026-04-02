@@ -61,26 +61,6 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
 
         {/* Right cluster */}
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexShrink: 0 }}>
-          {/* Plans button (moved to header action row) */}
-          <button
-            onClick={() => onTabChange('plan')}
-            title="Open weekly plans"
-            style={{
-              background:   activeTab === 'plan' ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
-              border:       `1px solid ${activeTab === 'plan' ? 'rgba(232,168,50,0.35)' : 'var(--border-subtle)'}`,
-              borderRadius: 'var(--r-md)',
-              padding:      'var(--sp-2) var(--sp-3)',
-              color:        activeTab === 'plan' ? 'var(--accent)' : 'var(--text-secondary)',
-              cursor:       'pointer',
-              fontSize:     11,
-              fontWeight:   600,
-              fontFamily:   'var(--font-body)',
-              transition:   'all var(--t-base) var(--ease-snappy)',
-              whiteSpace:   'nowrap',
-            }}
-          >
-            Plans
-          </button>
           {/* Profile button */}
           {onProfile && (
             <button
@@ -105,6 +85,26 @@ export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, g
               Profile
             </button>
           )}
+          {/* Plans button (moved to header action row) */}
+          <button
+            onClick={() => onTabChange('plan')}
+            title="Open weekly plans"
+            style={{
+              background:   activeTab === 'plan' ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
+              border:       `1px solid ${activeTab === 'plan' ? 'rgba(232,168,50,0.35)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-md)',
+              padding:      'var(--sp-2) var(--sp-3)',
+              color:        activeTab === 'plan' ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor:       'pointer',
+              fontSize:     11,
+              fontWeight:   600,
+              fontFamily:   'var(--font-body)',
+              transition:   'all var(--t-base) var(--ease-snappy)',
+              whiteSpace:   'nowrap',
+            }}
+          >
+            Plans
+          </button>
           {/* PDF Report button */}
           <button
             onClick={onPDF}
