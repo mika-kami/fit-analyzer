@@ -195,18 +195,18 @@ export function analyzeHrZones(timeSeries, maxHr) {
     .filter(p => p.hr && p.hr > 0 && p.hr < 255 && p.timestamp)
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  if (!pts.length) return [];
+    if (!pts.length) return [];
 
-  const zoneSecs = new Array(HR_ZONE_DEFS.length).fill(0);
+    const zoneSecs = new Array(HR_ZONE_DEFS.length).fill(0);
 
-  for (let i = 0; i < pts.length; i++) {
+    for (let i = 0; i < pts.length; i++) {
     const pt = pts[i];
     // dt = duration this HR reading was held
     const dt = i < pts.length - 1
       ? Math.min(pts[i + 1].timestamp - pt.timestamp, MAX_GAP_S)
       : 1;
 
-    const pct  = pt.hr / maxHr;
+      const pct  = pt.hr / maxHr;
     const zIdx = HR_ZONE_DEFS.findIndex(z => pct >= z.pctLo && pct < z.pctHi);
     if (zIdx >= 0) zoneSecs[zIdx] += dt;
   }
@@ -239,19 +239,19 @@ export const ZONE_MODELS = {
   // ② Seiler 3-zone polarised (gold standard for endurance science)
   // Z1 < VT1 ≈ 80% LT2, Z2 = VT1→LT2, Z3 > LT2
   seiler3: (lt2) => [
-    { id:'z1', name:'Аэробная (нofкая)',  color:'#4ade80', lo: 0,                      hi: Math.round(0.80*lt2) },
-    { id:'z2', name:'Mixed (medium)',color:'#fbbf24', lo: Math.round(0.80*lt2),   hi: lt2 + 1             },
+    { id:'z1', name:'Aerobic (low)',   color:'#4ade80', lo: 0,                      hi: Math.round(0.80*lt2) },
+    { id:'z2', name:'Mixed (medium)',  color:'#fbbf24', lo: Math.round(0.80*lt2),   hi: lt2 + 1             },
     { id:'z3', name:'Anaerobic (high)',color:'#ef4444',lo: lt2 + 1,                hi: 999                 },
   ],
   // ③ Coggan 7-zone power-based adapted to HR (uses LT2 as FTP proxy)
   coggan7: (lt2) => [
-    { id:'z1', name:'Recovery',    color:'#60a5fa', lo: 0,                      hi: Math.round(0.68*lt2) },
-    { id:'z2', name:'Endurance',      color:'#4ade80', lo: Math.round(0.68*lt2),   hi: Math.round(0.83*lt2) },
-    { id:'z3', name:'Pace',              color:'#a3e635', lo: Math.round(0.83*lt2),   hi: Math.round(0.94*lt2) },
-    { id:'z4', name:'Lactate threshold',   color:'#fbbf24', lo: Math.round(0.94*lt2),   hi: Math.round(1.05*lt2) },
-    { id:'z5', name:'VO₂ Max',           color:'#f97316', lo: Math.round(1.05*lt2),   hi: Math.round(1.19*lt2) },
-    { id:'z6', name:'Анаэробная',        color:'#ef4444', lo: Math.round(1.19*lt2),   hi: Math.round(1.50*lt2) },
-    { id:'z7', name:'Neuromuscular',     color:'#a855f7', lo: Math.round(1.50*lt2),   hi: 999                 },
+    { id:'z1', name:'Recovery',           color:'#60a5fa', lo: 0,                      hi: Math.round(0.68*lt2) },
+    { id:'z2', name:'Endurance',          color:'#4ade80', lo: Math.round(0.68*lt2),   hi: Math.round(0.83*lt2) },
+    { id:'z3', name:'Tempo',              color:'#a3e635', lo: Math.round(0.83*lt2),   hi: Math.round(0.94*lt2) },
+    { id:'z4', name:'Lactate threshold',  color:'#fbbf24', lo: Math.round(0.94*lt2),   hi: Math.round(1.05*lt2) },
+    { id:'z5', name:'VO₂ Max',            color:'#f97316', lo: Math.round(1.05*lt2),   hi: Math.round(1.19*lt2) },
+    { id:'z6', name:'Anaerobic',          color:'#ef4444', lo: Math.round(1.19*lt2),   hi: Math.round(1.50*lt2) },
+    { id:'z7', name:'Neuromuscular',      color:'#a855f7', lo: Math.round(1.50*lt2),   hi: 999                 },
   ],
 };
 
@@ -261,7 +261,7 @@ export function computeZoneTimes(timeSeries, zoneDefs) {
     .filter(p => p.hr && p.hr > 0 && p.hr < 255 && p.timestamp)
     .sort((a,b) => a.timestamp - b.timestamp);
 
-  for (let i = 0; i < pts.length; i++) {
+    for (let i = 0; i < pts.length; i++) {
     const hr = pts[i].hr;
     const dt = i < pts.length - 1
       ? Math.min(pts[i+1].timestamp - pts[i].timestamp, MAX_GAP_S)
@@ -292,17 +292,15 @@ export function buildMultiZones(timeSeries, maxHr, lt2) {
   return result;
 }
 
-
-
 // ─── Derived metrics ─────────────────────────────────────────────────────────
 export function computeDerived(timeSeries, session) {
   const validHr    = timeSeries.map(p => p.hr).filter(Boolean);
   const validSpeed = timeSeries.map(p => p.speed).filter(v => v != null && v > 0.1); // >0.36 km/h
   const validAlt   = timeSeries.map(p => p.altitude).filter(v => v != null);
   const validCad   = timeSeries.map(p => p.cadence).filter(Boolean);
-
+  
   const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-
+ 
   return {
     minHr:        validHr.length   ? validHr.reduce((a,b) => a<b?a:b)  : 0,
     avgMovingSpd: validSpeed.length ? avg(validSpeed) * 3.6 : 0,   // m/s → km/h
@@ -316,18 +314,17 @@ export function computeDerived(timeSeries, session) {
 export function assessLoad(workout) {
   const { hrZones, trainingEffect, duration } = workout;
   if (!hrZones?.length) return { level: 'unknown', label: 'Unknown' };
-
   const aeroTE = trainingEffect?.aerobic ?? 0;
   const hiZonePct = (hrZones[3]?.pct ?? 0) + (hrZones[4]?.pct ?? 0);
   const activeHours = (duration?.active ?? 0) / 3600;
 
   if (aeroTE >= 4.5 || hiZonePct > 30 || activeHours > 3) {
-    return { level: 'high', label: 'High нагрузка', color: '#ef4444', recoveryDays: 2 };
+    return { level: 'high', label: 'High load', color: '#ef4444', recoveryDays: 2 };
   }
   if (aeroTE >= 3.0 || hiZonePct > 15 || activeHours > 1.5) {
-    return { level: 'medium', label: 'Wedедняя нагрузка', color: '#f97316', recoveryDays: 1 };
+    return { level: 'medium', label: 'Medium load', color: '#f97316', recoveryDays: 1 };
   }
-  return { level: 'low', label: 'Easy нагрузка', color: '#4ade80', recoveryDays: 0 };
+  return { level: 'low', label: 'Light load', color: '#4ade80', recoveryDays: 0 };
 }
 
 // ─── Generate training recommendations ───────────────────────────────────────
@@ -347,47 +344,47 @@ export function generateRecommendations(workout) {
     type: 'warning',
     icon: '⚠️',
     title: 'High time in Z5',
-    text: `${z5pct.toFixed(0)}% вреmени в maxиmальной зоне — риск перетренировки. Следующие 2 дня держите ЧСС ниже ${Math.round((heartRate?.max ?? 180) * 0.7)} уд/min.`,
+    text: `${z5pct.toFixed(0)}% of time in max zone — risk of overtraining. Keep HR below ${Math.round((heartRate?.max ?? 180) * 0.7)} bpm for the next 2 days.`,
   });
 
   if (z1z2pct < 40) recs.push({
     type: 'info',
     icon: '📊',
     title: 'Zone imbalance',
-    text: `Только ${z1z2pct.toFixed(0)}% в Z1–Z2. Целевое соотношение: 80/20 (полярofованная mодель). Запланируйте длинную аэробную тренировку строго в Z2.`,
+    text: `Only ${z1z2pct.toFixed(0)}% in Z1–Z2. Target ratio: 80/20 (polarized model). Plan a long aerobic workout strictly in Z2.`,
   });
 
   if (aeroTE >= 4.0) recs.push({
     type: 'success',
     icon: '🔁',
     title: 'Quality recovery',
-    text: `TE ${aeroTE.toFixed(1)}/5 — значительный аэробный стресс. Миниmуm ${assessLoad(workout).recoveryDays} дня восстановления с лёгкиm вращениеm ≤130 уд/min.`,
+    text: `TE ${aeroTE.toFixed(1)}/5 — significant aerobic stress. Minimum ${assessLoad(workout).recoveryDays} d of recovery with light spinning ≤130 bpm.`,
   });
 
   if (pauseMin > 20) recs.push({
     type: 'info',
     icon: '⏱️',
     title: 'Long pauses',
-    text: `${Math.round(pauseMin)} min остановок. Для повышения выносливости сократите паузы — непрерывная работа эффективнее для адаптации.`,
+    text: `${Math.round(pauseMin)} min of stops. To increase endurance, shorten pauses — continuous work is more effective for adaptation.`,
   });
 
   if (elevation?.ascent > 300) recs.push({
     type: 'success',
     icon: '🏔️',
-    title: 'Hill work',
-    text: `Ascent ${elevation.ascent} m — отличная работа для силовой выносливости. Продолжайте включать холmы, чередуя интенсивность.`,
+    title: 'Climbing work',
+    text: `Ascent ${elevation.ascent} m — excellent work for strength endurance. Continue including hills, alternating intensity.`,
   });
 
   if (anaTE >= 2.5) recs.push({
     type: 'warning',
     icon: '⚡',
     title: 'Anaerobic load',
-    text: `Anaerobic TE ${anaTE.toFixed(1)}/5. Эту неделю откажитесь от спринтов и интервалов — восстановите скоростную выносливость.`,
+    text: `Anaerobic TE ${anaTE.toFixed(1)}/5. This week skip sprints and intervals — restore speed endurance.`,
   });
 
   return recs.length ? recs : [{
-    type: 'success', icon: '✅', title: 'Workout в норmе',
-    text: 'Metrics are within normal range. Keep following the current plan.',
+    type: 'success', icon: '✅', title: 'Workout normal',
+    text: 'Metrics within normal range. Stick to the current plan.',
   }];
 }
 
@@ -436,7 +433,7 @@ export function buildWorkoutModel(fitData, fileName = '', userMaxHr = 0) {
               : profileMaxHr > 100 ? profileMaxHr
               : sessionPeakHr;  // fallback — zones will show a warning in UI
 
-  // HR Zone analysis
+              // HR Zone analysis
   const hrZones = analyzeHrZones(timeSeries, maxHr);
 
   // Derived metrics
@@ -556,10 +553,10 @@ export function computeGradientSeries(timeSeries, windowM = 50) {
   const pts = timeSeries
     .filter(p => p.altitude != null && p.distance != null)
     .sort((a, b) => a.distance - b.distance);
-
-  if (pts.length < 2) return [];
-
-  const result = [];
+ 
+    if (pts.length < 2) return [];
+ 
+    const result = [];
   for (let i = 1; i < pts.length; i++) {
     const dDist = pts[i].distance - pts[i - 1].distance;
     const dAlt  = pts[i].altitude  - pts[i - 1].altitude;
@@ -571,7 +568,7 @@ export function computeGradientSeries(timeSeries, windowM = 50) {
       altitude: parseFloat(pts[i].altitude.toFixed(1)),
     });
   }
-
+ 
   // Rolling average smoothing
   const win = [], smoothed = [];
   for (const pt of result) {
@@ -649,7 +646,7 @@ export function detectClimbs(timeSeries, { minGrade = 2, minAscentM = 20, dropOf
       }
     }
   }
-
+  
   // Handle climb that extends to end of ride
   if (inClimb && climbStart != null) {
     const seg    = pts.slice(climbStart);
@@ -719,5 +716,3 @@ export function getAthleteMaxHr() {
 export function setAthleteMaxHr(hr) {
   if (hr > 100) localStorage.setItem(_maxHrKey, String(hr));
 }
-
-

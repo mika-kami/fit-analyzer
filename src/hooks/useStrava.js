@@ -1,5 +1,5 @@
 ﻿/**
- * useStrava.js â€” Strava OAuth + activity import hook.
+ * useStrava.js — Strava OAuth + activity import hook.
  * Handles: OAuth redirect flow, token refresh, activity listing,
  * full activity import with streams (GPS for maps, HR for zones).
  */
@@ -12,7 +12,7 @@ const REDIRECT_URI = `${window.location.origin}/`;
 const SCOPES       = 'activity:read_all';
 const TOKEN_KEY    = 'strava_tokens';
 
-// â”€â”€ Strava sport type â†’ app sport name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Strava sport type → app sport name ──────────────────────────────────────
 const SPORT_MAP = {
   Ride: 'Cycling', VirtualRide: 'Cycling', EBikeRide: 'E-Biking',
   GravelRide: 'Cycling', MountainBikeRide: 'Cycling',
@@ -25,7 +25,7 @@ const SPORT_MAP = {
   Yoga: 'Training',
 };
 
-// â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── API helpers ─────────────────────────────────────────────────────────────
 function stravaApi(path, token, params = {}) {
   const qs = new URLSearchParams({ path, ...params }).toString();
   return fetch(`/api/strava/proxy?${qs}`, {
@@ -58,12 +58,12 @@ async function doRefresh(refreshToken) {
   return data;
 }
 
-// â”€â”€ Token persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Token persistence ───────────────────────────────────────────────────────
 function loadTokens()      { try { return JSON.parse(localStorage.getItem(TOKEN_KEY)); } catch { return null; } }
 function saveTokens(t)     { localStorage.setItem(TOKEN_KEY, JSON.stringify(t)); }
 function clearTokens()     { localStorage.removeItem(TOKEN_KEY); }
 
-// â”€â”€ Build WorkoutModel from Strava data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Build WorkoutModel from Strava data ─────────────────────────────────────
 function buildStravaWorkout(activity, streams, athleteMaxHr) {
   const timeArr   = streams.find(s => s.type === 'time')?.data ?? [];
   const hrArr     = streams.find(s => s.type === 'heartrate')?.data ?? [];
@@ -74,7 +74,7 @@ function buildStravaWorkout(activity, streams, athleteMaxHr) {
   const wattsArr  = streams.find(s => s.type === 'watts')?.data ?? [];
   const velArr    = streams.find(s => s.type === 'velocity_smooth')?.data ?? [];
 
-  // Build timeSeries â€” same shape as FIT-parsed records (lat, lon, hr, etc.)
+  // Build timeSeries — same shape as FIT-parsed records (lat, lon, hr, etc.)
   const startEpoch = new Date(activity.start_date).getTime() / 1000;
   const timeSeries = timeArr.map((t, i) => {
     const pt = { timestamp: startEpoch + t };
@@ -92,7 +92,7 @@ function buildStravaWorkout(activity, streams, athleteMaxHr) {
   const sport     = SPORT_MAP[activity.type] ?? activity.type ?? 'Activity';
 
   // Max HR: athlete HR zones (from Strava API) or persisted value from a FIT file.
-  // Never use the activity peak â€” that's the max reached in one workout, not the athlete's max.
+  // Never use the activity peak — that's the max reached in one workout, not the athlete's max.
   const storedMaxHr = getAthleteMaxHr();
   const maxHr       = athleteMaxHr || storedMaxHr || 0;
   const thresholdHr  = maxHr ? Math.round(maxHr * 0.88) : 0;
@@ -172,7 +172,7 @@ function buildStravaWorkout(activity, streams, athleteMaxHr) {
   return workout;
 }
 
-// â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Hook ────────────────────────────────────────────────────────────────────
 export function useStrava() {
   const [status,      setStatus]      = useState('idle');   // idle | connected | loading
   const [athlete,     setAthlete]     = useState(null);
@@ -203,7 +203,7 @@ export function useStrava() {
     return tokens.access_token;
   }, []);
 
-  // Fetch athlete HR zones â†’ derive maxHR from top zone boundary
+  // Fetch athlete HR zones → derive maxHR from top zone boundary
   const fetchAthleteZones = useCallback(async (token) => {
     try {
       const data = await stravaApi('athlete/zones', token);
@@ -215,7 +215,7 @@ export function useStrava() {
           setAthleteMaxHr(maxBpm);
         }
       }
-    } catch { /* non-critical â€” zones require a FIT file or Strava zones API */ }
+    } catch { /* non-critical — zones require a FIT file or Strava zones API */ }
   }, []);
 
   // On mount: check URL for OAuth callback code, or restore session
@@ -225,7 +225,7 @@ export function useStrava() {
     const scope  = params.get('scope');
 
     if (code && scope?.includes('activity:read')) {
-      // OAuth callback â€” clean URL and exchange code
+      // OAuth callback — clean URL and exchange code
       window.history.replaceState({}, '', window.location.pathname);
       setStatus('loading');
       exchangeCode(code)
@@ -250,7 +250,7 @@ export function useStrava() {
     }
   }, []);
 
-  // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Public API ──────────────────────────────────────────────────────────
   const connect = useCallback(() => {
     if (!CLIENT_ID) { setError('VITE_STRAVA_CLIENT_ID not set'); return; }
     const url = `https://www.strava.com/oauth/authorize`
@@ -315,4 +315,3 @@ export function useStrava() {
     connect, disconnect, fetchActivities, importActivity,
   };
 }
-

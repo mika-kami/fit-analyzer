@@ -37,7 +37,7 @@ export function useGarmin(onSyncComplete) {
       clearTimeout(tid);
       setServerFound(false);
       setProbeError(e.name === 'AbortError'
-        ? 'Timeout — сервер не ответил за 4 сек'
+        ? 'Timeout — server did not respond within 4 sec'
         : (e.message || String(e)));
     }
   }, []);

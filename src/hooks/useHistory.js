@@ -1,16 +1,16 @@
-﻿/** useHistory.js â€” Workout history via window.storage with in-memory fallback. */
+﻿/** useHistory.js — Workout history via window.storage with in-memory fallback. */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
- * useHistory â€” persists workout summaries via window.storage.
+ * useHistory — persists workout summaries via window.storage.
  * Schema:
- *   "fit:index"         â†’ JSON string[]  (ISO date keys, newest first)
- *   "fit:YYYY-MM-DD"    â†’ JSON WorkoutSummary  (lightweight, no timeSeries)
- *   "fit:YYYY-MM-DD:ts" â†’ JSON DataPoint[]     (timeSeries, loaded on demand)
+ *   "fit:index"         → JSON string[]  (ISO date keys, newest first)
+ *   "fit:YYYY-MM-DD"    → JSON WorkoutSummary  (lightweight, no timeSeries)
+ *   "fit:YYYY-MM-DD:ts" → JSON DataPoint[]     (timeSeries, loaded on demand)
  */
 
-// WorkoutSummary â€” what we store per workout (no heavy timeSeries)
+// WorkoutSummary — what we store per workout (no heavy timeSeries)
 function summarize(workout) {
   return {
     date:          workout.date,
@@ -38,7 +38,7 @@ export function useHistory() {
   const [loadingDb, setLoadingDb] = useState(true);
   const [storageOk, setStorageOk] = useState(false);
 
-  // â”€â”€ Storage abstraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Storage abstraction ─────────────────────────────────────────────────
   // Tries window.storage (Claude artifact persistent store).
   // Falls back to a session-scoped in-memory Map if unavailable.
   const memStore = useRef(new Map());
@@ -71,7 +71,7 @@ export function useHistory() {
     },
   };
 
-  // â”€â”€ Detect storage availability â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Detect storage availability ────────────────────────────────────────
   useEffect(() => {
     (async () => {
       let ok = false;
@@ -104,7 +104,7 @@ export function useHistory() {
     })();
   }, []);
 
-  // â”€â”€ Save a workout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Save a workout ─────────────────────────────────────────────────────
   const saveWorkout = useCallback(async (workout) => {
     try {
       const summary = summarize(workout);
@@ -133,7 +133,7 @@ export function useHistory() {
     }
   }, [history]);
 
-  // â”€â”€ Delete a workout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Delete a workout ───────────────────────────────────────────────────
   const deleteWorkout = useCallback(async (date) => {
     try {
       await store.del(`fit:${date}`);
@@ -146,12 +146,12 @@ export function useHistory() {
     }
   }, [history]);
 
-  // â”€â”€ Recent N workouts for AI context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Recent N workouts for AI context ──────────────────────────────────
   const recentWorkouts = useCallback((n = 10) => {
     return history.slice(0, n);
   }, [history]);
 
-  // â”€â”€ Aggregate stats for a period â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Aggregate stats for a period ──────────────────────────────────────
   const aggregateStats = useCallback((workouts) => {
     if (!workouts.length) return null;
     return {

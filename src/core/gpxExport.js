@@ -61,8 +61,7 @@ export function workoutToGPX(workout) {
   <metadata>
     <name>${escapeXml(name)}</name>
     <time>${fileTime}</time>
-    <desc>${distKm} km · ЧСС ср. ${workout.heartRate?.avg ?? '—'} уд/min · +${workout.elevation?.ascent ?? 0} m</desc>
-  </metadata>
+    <desc>${distKm} km · Avg HR ${workout.heartRate?.avg ?? '—'} bpm · +${workout.elevation?.ascent ?? 0} m</desc>
   <trk>
     <name>${escapeXml(name)}</name>
     <type>${escapeXml(workout.sportLabel ?? 'cycling')}</type>

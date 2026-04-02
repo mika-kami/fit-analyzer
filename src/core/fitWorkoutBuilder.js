@@ -56,7 +56,7 @@ const FIT_EPOCH = 631065600; // Unix ts of 1989-12-31 00:00:00 UTC
 function sportId(sport) {
   const s = (sport ?? '').toLowerCase();
   if (s.includes('cycl') || s.includes('bike') || s.includes('road')) return 2;
-  if (s.includes('run') || s.includes('run')) return 1;
+  if (s.includes('run') || s.includes('бег')) return 1;
   return 0;
 }
 
@@ -208,4 +208,3 @@ export function buildFitWorkout(day, sport, maxHr = 180) {
   result[combined.length+1] = (fCrc >> 8) & 0xFF;
   return result;
 }
-

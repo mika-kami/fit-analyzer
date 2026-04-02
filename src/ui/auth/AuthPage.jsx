@@ -32,7 +32,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
       setLoading(false);
     }
   };
-
+ 
   const input = (props) => ({
     style: {
       width: '100%', background: 'var(--bg-raised)',
@@ -53,10 +53,10 @@ export function AuthPage({ onSignIn, onSignUp }) {
           Check your email
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
-          Отправor письmо на <b>{email}</b> — confirm your account, then sign in.
+          Sent an email to <b>{email}</b> — confirm your account, then log in.
         </div>
         <button onClick={() => { setMode('login'); setDone(false); }} style={btnStyle(true)}>
-          Sign in
+          Log in
         </button>
       </div>
     </div>
@@ -71,7 +71,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
             ◈ FIT ANALYZER
           </div>
           <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {isLogin ? 'Sign in' : 'Create account'}
+            {isLogin ? 'Log in' : 'Create account'}
           </div>
         </div>
 
@@ -89,7 +89,7 @@ export function AuthPage({ onSignIn, onSignUp }) {
           })} />
           <input {...input({
             type: 'password', value: password,
-            placeholder: 'Password (min. 6 chars)',
+            placeholder: 'Password (min. 6 characters)',
             onChange: e => setPassword(e.target.value),
             onKeyDown: e => e.key === 'Enter' && handleSubmit(),
           })} />
@@ -100,13 +100,13 @@ export function AuthPage({ onSignIn, onSignUp }) {
             ⚠ {error}
           </div>
         )}
-
+  
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || loading}
           style={btnStyle(canSubmit && !loading)}
         >
-          {loading ? '…' : isLogin ? 'Sign in' : 'Create account'}
+          {loading ? '…' : isLogin ? 'Log in' : 'Create account'}
         </button>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
@@ -114,14 +114,14 @@ export function AuthPage({ onSignIn, onSignUp }) {
             onClick={() => { setMode(isLogin ? 'signup' : 'login'); setError(''); }}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}
           >
-            {isLogin ? 'No account? Sign up' : 'Уже есть аккаунт? Sign in'}
+            {isLogin ? 'No account? Sign up' : 'Already have an account? Log in'}
           </button>
         </div>
 
         {/* GDPR notice */}
         {!isLogin && (
           <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', marginTop: 12, lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
-            Данные хранятся в ЕС (Frankfurt) · GDPR compliant
+            Data stored in EU (Frankfurt) · GDPR compliant
           </div>
         )}
       </div>
@@ -155,5 +155,3 @@ const btnStyle = (active) => ({
   fontFamily: 'var(--font-body)',
   transition: 'all 0.15s ease',
 });
-
-

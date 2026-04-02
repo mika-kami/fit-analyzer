@@ -81,7 +81,7 @@ function buildReportHTML(w) {
   return `
 <div style="font-family:'DM Mono',monospace;background:${C.bg};color:${C.text};max-width:800px;margin:0 auto;padding:32px;font-size:12px;line-height:1.5;">
 
-  <!-- Header -->
+<!-- Header -->
   <div style="display:flex;justify-content:space-between;margin-bottom:24px;border-bottom:1px solid ${C.border};padding-bottom:16px;">
     <div>
       <div style="font-size:9px;color:${C.accent};letter-spacing:0.15em;margin-bottom:4px;">
@@ -101,42 +101,42 @@ function buildReportHTML(w) {
   </div>
 
   <!-- Metrics -->
-  ${sectionTitle('Key metrics')}
+  ${sectionTitle('Key Metrics')}
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:4px;">
     ${metricCell(fmtKm(w.distance) + ' km', 'Distance')}
-    ${metricCell(fmtDurationShort(w.duration.active), 'Active time')}
-    ${metricCell(fmtNum(w.speed.avg) + ' кm/h', 'Wed. скорость')}
-    ${metricCell((w.heartRate.avg || '—') + ' уд/min', 'Wed. ЧСС')}
+    ${metricCell(fmtDurationShort(w.duration.active), 'Active Time')}
+    ${metricCell(fmtNum(w.speed.avg) + ' km/h', 'Avg Speed')}
+    ${metricCell((w.heartRate.avg || '—') + ' bpm', 'Avg HR')}
   </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-    ${metricCell('+' + (w.elevation?.ascent || 0) + ' m', 'Ascent высоты')}
+    ${metricCell('+' + (w.elevation?.ascent || 0) + ' m', 'Elevation Gain')}
     ${metricCell((w.calories || '—') + ' kcal', 'Calories')}
-    ${metricCell(w.trainingEffect.aerobic.toFixed(1) + ' / 5', 'TE Aerobic')}
-    ${metricCell((w.heartRate.max || '—') + ' уд/min', 'Max HR')}
+    ${metricCell(w.trainingEffect.aerobic.toFixed(1) + ' / 5', 'Aerobic TE')}
+    ${metricCell((w.heartRate.max || '—') + ' bpm', 'Max HR')}
   </div>
 
   <!-- HR Zones -->
-  ${zones.length ? sectionTitle('Zones ЧСС') + zones.map(zoneRow).join('') : ''}
+  ${zones.length ? sectionTitle('HR Zones') + zones.map(zoneRow).join('') : ''}
 
   <!-- Training Effect -->
-  ${sectionTitle('Training effect')}
+  ${sectionTitle('Training Effect')}
   ${teBar('Aerobic', w.trainingEffect.aerobic, C.accent)}
   ${teBar('Anaerobic', w.trainingEffect.anaerobic, C.info)}
 
   <!-- Recommendations -->
-  ${recs.length ? sectionTitle('Coach recommendations') + recs.map(recBlock).join('') : ''}
+  ${recs.length ? sectionTitle('Coach Recommendations') + recs.map(recBlock).join('') : ''}
 
   <!-- Details -->
   <div style="margin-top:20px;padding-top:12px;border-top:1px solid ${C.border};font-size:10px;color:${C.muted};line-height:1.8;">
     Total time: ${fmtDuration(w.duration.total)} ·
     Pauses: ${fmtDurationShort(w.duration.pause)} ·
-    Wed. каданс: ${w.cadence?.avg || '—'} rpm ·
-    Max speed: ${fmtNum(w.speed.max)} кm/h ·
+    Avg cadence: ${w.cadence?.avg || '—'} rpm ·
+    Max speed: ${fmtNum(w.speed.max)} km/h ·
     Load: ${w.load?.label || '—'} ·
-    Recovery: ${w.load?.recoveryDays || '—'} дн.
+    Recovery: ${w.load?.recoveryDays || '—'} d.
   </div>
 
-</div>`;
+  </div>`;
 }
 
 export function downloadWorkoutPDF(workout) {
@@ -186,5 +186,3 @@ export function downloadWorkoutPDF(workout) {
     }, 1000);
   }, 100);
 }
-
-

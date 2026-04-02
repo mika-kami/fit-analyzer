@@ -1,5 +1,5 @@
 ﻿/**
- * useAuth.js â€” Authentication hook via Supabase Auth.
+ * useAuth.js — Authentication hook via Supabase Auth.
  * Provides: user, loading, signIn, signUp, signOut
  */
 import { useState, useEffect, useCallback } from 'react';

@@ -70,12 +70,12 @@ export function detectFormState(tsb, ctl) {
   if (ctl < 20)
     return { label: 'Start', color: '#6b7280', description: 'Build your base' };
   if (tsb < -20)
-    return { label: 'Перегрузка', color: '#ef4444', description: 'Высокий риск. Нужен отдых.' };
+    return { label: 'Overload', color: '#ef4444', description: 'High risk. Rest needed.' };
   if (tsb < 0)
-    return { label: 'Accumulation', color: '#f97316', description: 'Fitness is growing' };
+    return { label: 'Accumulation', color: '#f97316', description: 'Fitness is improving' };
   if (tsb <= 10)
-    return { label: 'Поддержание', color: '#fbbf24', description: 'Stable load' };
-  return { label: 'Peak form', color: '#4ade80', description: 'Great time for racing' };
+    return { label: 'Maintenance', color: '#fbbf24', description: 'Stable load' };
+  return { label: 'Peak', color: '#4ade80', description: 'Great time for racing' };
 }
 
 // ── Peak form prediction ─────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export function predictPeakForm(tsbSeries) {
     ? [...stressMap.values()].reduce((s, v) => s + v, 0) / stressMap.size
     : 0;
 
-  // Project forward 21 days
+    // Project forward 21 days
   let ctl = last.ctl;
   let atl = last.atl;
   const decayCTL = Math.exp(-1 / 42);
@@ -165,7 +165,7 @@ export function computeRollingAvg(series, field, windowDays = 14) {
       ? parseFloat((inWindow.reduce((s, p) => s + (p[field] ?? 0), 0) / inWindow.length).toFixed(1))
       : item[field];
 
-    return { ...item, rollingAvg: avg };
+      return { ...item, rollingAvg: avg };
   });
 }
 
@@ -183,7 +183,5 @@ export function computeTETrend(historyWorkouts) {
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return computeRollingAvg(points, 'te', 14);
+    return computeRollingAvg(points, 'te', 14);
 }
-
-

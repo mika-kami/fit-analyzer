@@ -330,8 +330,8 @@ export function buildWeeklyReadinessForecast(baseCheckin) {
 
 function sessionHardness(sessionText = '') {
   const s = sessionText.toLowerCase();
-  if (s.includes('vo2') || s.includes('108-115%') || s.includes('110-120%') || s.includes('threshold') || s.includes('интервал')) return 'high';
-  if (s.includes('tempo') || s.includes('durability') || s.includes('порог') || s.includes('теmп')) return 'medium';
+  if (s.includes('vo2') || s.includes('108-115%') || s.includes('110-120%') || s.includes('threshold') || s.includes('interval')) return 'high';
+  if (s.includes('tempo') || s.includes('durability') || s.includes('threshold') || s.includes('tempo')) return 'medium';
   return 'low';
 }
 

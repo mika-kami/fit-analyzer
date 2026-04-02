@@ -108,19 +108,19 @@ export const SAMPLE_WORKOUT = {
   timeSeries: _sampleTimeSeries,
   lapCount: 1,
 
-  load: { level: 'high', label: 'High нагрузка', color: '#ef4444', recoveryDays: 2 },
+  load: { level: 'high', label: 'High load', color: '#ef4444', recoveryDays: 2 },
 
   recommendations: [
     { type: 'warning', icon: '⚠️', title: 'High time in Z5',
-      text: '14.9% в maxиmальной зоне — риск перетренировки. Следующие 2 дня держите ЧСС ниже 124 уд/min.' },
+      text: '14.9% in the maximum zone — risk of overtraining. Keep HR below 124 bpm for the next 2 days.' },
     { type: 'info',    icon: '📊', title: 'Zone imbalance',
-      text: 'Только 26.4% в Z1–Z2. Цель — 80/20 полярofованная mодель. Запланируйте длинную строго в Z2.' },
+      text: 'Only 26.4% in Z1–Z2. Goal — 80/20 polarized model. Plan a long ride strictly in Z2.' },
     { type: 'success', icon: '🔁', title: 'Quality recovery',
-      text: 'TE 4.5/5 — значительный аэробный стресс. Миниmуm 2 дня восстановления, лёгкое вращение ≤130 уд/min.' },
+      text: 'TE 4.5/5 — significant aerobic stress. Minimum 2 days recovery, light spinning ≤130 bpm.' },
     { type: 'info',    icon: '⏱️', title: 'Long pauses',
-      text: '83 min остановок. Для повышения выносливости сокращайте паузы — непрерывная работа эффективнее.' },
-    { type: 'success', icon: '🏔️', title: 'Hill work',
-      text: 'Ascent 469 m — отличная силовая выносливость. Продолжайте включать холmы, чередуя интенсивность.' },
+      text: '83 min of stops. To improve endurance, shorten pauses — continuous work is more effective.' },
+    { type: 'success', icon: '🏔️', title: 'Climbing work',
+      text: 'Ascent 469 m — excellent strength endurance. Continue including hills, alternating intensity.' },
   ],
 
   multiZones:    buildMultiZones(
@@ -134,4 +134,3 @@ export const SAMPLE_WORKOUT = {
 
 
 // ────────────────────────────────────────────────────────────
-

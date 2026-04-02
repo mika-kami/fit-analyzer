@@ -45,7 +45,7 @@ HR Zones: ${hrZones}
 Load: ${w.load?.label ?? '—'}
 ${recentBlock}
 
-Answer in English, concise and practical, with concrete numbers and clear action steps.`;
+Answer in English or Russian, depending on the user's initial message, concise and practical, with concrete numbers and clear action steps.`;
 }
 
 export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage) {
