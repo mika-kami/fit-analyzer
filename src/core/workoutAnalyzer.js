@@ -312,16 +312,52 @@ export function computeDerived(timeSeries, session) {
 
 // ─── Training load assessment ─────────────────────────────────────────────────
 export function assessLoad(workout) {
-  const { hrZones, trainingEffect, duration } = workout;
+  const { hrZones, trainingEffect, duration, sport, sportLabel } = workout;
   if (!hrZones?.length) return { level: 'unknown', label: 'Unknown' };
+ 
   const aeroTE = trainingEffect?.aerobic ?? 0;
+  const anaTE  = trainingEffect?.anaerobic ?? 0;
   const hiZonePct = (hrZones[3]?.pct ?? 0) + (hrZones[4]?.pct ?? 0);
+  const loZonePct = (hrZones[0]?.pct ?? 0) + (hrZones[1]?.pct ?? 0);
   const activeHours = (duration?.active ?? 0) / 3600;
-
-  if (aeroTE >= 4.5 || hiZonePct > 30 || activeHours > 3) {
+ 
+  // Detect sport type
+  const s = (sport ?? sportLabel ?? '').toLowerCase();
+  const isLowImpact = s.includes('hik') || s.includes('walk') || s.includes('yoga')
+                   || s.includes('swim') || s.includes('stretc') || s.includes('пеш')
+                   || s.includes('ходьб');
+  const isCycling   = s.includes('cycl') || s.includes('bike') || s.includes('велос')
+                   || s.includes('ebik');
+  const isRunning   = s.includes('run') || s.includes('бег');
+ 
+  // Intensity score: weighted combination of TE, high-zone time, and anaerobic load
+  // This replaces the naive "activeHours > 3" trigger
+  let intensity = 0;
+  intensity += aeroTE * 15;              // TE 4.5 → 67.5 pts
+  intensity += anaTE * 12;               // anaerobic contributes too
+  intensity += hiZonePct * 1.2;          // 30% Z4-Z5 → 36 pts
+  intensity += Math.max(0, 100 - loZonePct) * 0.3; // penalty for NOT being in Z1-Z2
+ 
+  // Duration contribution — but scaled by how hard the session was
+  // Long easy session ≠ long hard session
+  const avgIntensityFactor = loZonePct >= 80 ? 0.3   // mostly Z1-Z2: duration barely matters
+                           : loZonePct >= 60 ? 0.6   // mixed: moderate duration weight
+                           : 1.0;                     // lots of high zones: duration matters fully
+  intensity += activeHours * 10 * avgIntensityFactor;
+ 
+  // Sport modifier: low-impact activities get a significant discount
+  if (isLowImpact) {
+    intensity *= 0.4;  // hiking/walking: 60% discount
+  } else if (isCycling) {
+    intensity *= 0.85; // cycling: ~15% discount (non-weight-bearing)
+  }
+  // Running: no discount (highest musculoskeletal stress)
+ 
+  // Classify
+  if (intensity >= 80) {
     return { level: 'high', label: 'High load', color: '#ef4444', recoveryDays: 2 };
   }
-  if (aeroTE >= 3.0 || hiZonePct > 15 || activeHours > 1.5) {
+  if (intensity >= 45) {
     return { level: 'medium', label: 'Medium load', color: '#f97316', recoveryDays: 1 };
   }
   return { level: 'low', label: 'Light load', color: '#4ade80', recoveryDays: 0 };
