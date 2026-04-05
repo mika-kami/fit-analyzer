@@ -1,6 +1,7 @@
-﻿/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
+/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
 
 import { useState, useCallback, useEffect } from 'react';
+import { supabase } from '../lib/supabase.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL        ?? 'https://api.openai.com/v1/chat/completions';
 const MODEL      = import.meta.env.VITE_LLM_MODEL      ?? 'gpt-4o-mini';
@@ -177,13 +178,44 @@ ${lines.map(l => '  ' + l).join('\n')}
 IMPORTANT: Factor this medical information into ALL training advice. Adjust intensity limits, recovery times, medication interactions (e.g. beta-blockers affect HR zones), injury accommodations, and flag any safety concerns proactively. If the athlete has conditions that contraindicate certain exercises, say so clearly.`;
 }
 
-function buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile) {
+async function fetchMedicalDocSummaries(userId) {
+  if (!userId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('medical_documents')
+      .select('file_name, category, document_date, description, key_findings')
+      .eq('user_id', userId)
+      .neq('key_findings', '')
+      .order('document_date', { ascending: false, nullsFirst: false });
+    if (error) throw error;
+    return data ?? [];
+  } catch (e) {
+    console.warn('[useOpenAI] Failed to fetch medical docs:', e);
+    return [];
+  }
+}
+
+function formatMedicalDocsBlock(docs) {
+  if (!docs?.length) return '';
+  const lines = docs.map(d => {
+    const parts = [];
+    if (d.category && d.category !== 'other') parts.push(`[${d.category.replace(/_/g, ' ')}]`);
+    if (d.document_date) parts.push(d.document_date);
+    if (d.file_name) parts.push(d.file_name);
+    if (d.description) parts.push(`— ${d.description}`);
+    return `  ${parts.join(' ')}: ${d.key_findings}`;
+  }).join('\n');
+  return `\n\nMEDICAL RECORDS (key findings from uploaded documents):\n${lines}\nFactor these lab results, diagnoses, and clinical findings into your training and nutrition advice.`;
+}
+
+function buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile, medDocs) {
   const weatherBlock = formatWeatherForSystem(weatherData);
   const medicalBlock = formatMedicalBlock(athleteProfile);
+  const medDocsBlock = formatMedicalDocsBlock(medDocs);
 
   const preamble = `You are an expert endurance sports coach, sports data analyst, and gear advisor.
 
-${weatherBlock}${medicalBlock}`;
+${weatherBlock}${medicalBlock}${medDocsBlock}`;
 
   if (!workout) {
     return `${preamble}
@@ -231,7 +263,7 @@ Answer in English or Russian, depending on the user's initial message, concise a
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage, athleteProfile) {
+export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage, athleteProfile, userId) {
   const [messages,    setMessages]    = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -280,7 +312,8 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
       // Fetch weather synchronously — guaranteed before prompt is built
       const weatherData = await getWeather(workout);
 
-      const systemPrompt = buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile);
+      const medDocs = await fetchMedicalDocSummaries(userId);
+      const systemPrompt = buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile, medDocs);
 
       // Build message array from persisted chat history
       const historyForApi = messages
@@ -324,7 +357,7 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
     } finally {
       setIsStreaming(false);
     }
-  }, [hasKey, isStreaming, messages, workout, recentWorkoutsFn, saveChatMessage, workoutId]);
+  }, [hasKey, isStreaming, messages, workout, recentWorkoutsFn, saveChatMessage, workoutId, athleteProfile, userId]);
 
   const clearHistory = useCallback(() => setMessages([]), []);
 

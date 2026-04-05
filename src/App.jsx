@@ -1,4 +1,4 @@
-﻿/**
+/**
  * App.jsx -- Root orchestrator (production).
  * Screens: 'auth' | 'dashboard' | 'detail'
  */
@@ -57,7 +57,8 @@ export default function App() {
     workouts.recentWorkouts,
     workouts.getChatHistory,
     workouts.saveChatMessage,
-    coach?.profile
+    coach?.profile,
+    auth.user?.id
   );
   const garmin   = useGarmin(async (results) => {
     // Called by useGarmin after /sync → save all new FIT files to DB

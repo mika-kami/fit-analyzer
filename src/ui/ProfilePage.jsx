@@ -554,6 +554,16 @@ function MedicalDocumentsCard({ userId }) {
                   <button onClick={() => deleteDoc(doc)} style={{ ...smallBtnStyle, color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }} title="Delete">✕</button>
                 </div>
               </div>
+              <div style={{ marginBottom: 'var(--sp-1)' }}>
+                <Field label="Key findings (visible to AI coach)">
+                  <textarea
+                    value={doc.key_findings ?? ''}
+                    onChange={e => updateDoc(doc.id, { key_findings: e.target.value })}
+                    style={{ ...inputStyleSm, minHeight: 40, resize: 'vertical' }}
+                    placeholder="e.g. Ferritin 28 ng/mL (low), Vitamin D 18 ng/mL (deficient), TSH normal 2.1..."
+                  />
+                </Field>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-1)' }}>
                 <Field label="Category">
                   <select value={doc.category ?? 'other'} onChange={e => updateDoc(doc.id, { category: e.target.value })} style={inputStyleSm}>
