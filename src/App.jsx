@@ -56,7 +56,8 @@ export default function App() {
     workout.workout,
     workouts.recentWorkouts,
     workouts.getChatHistory,
-    workouts.saveChatMessage
+    workouts.saveChatMessage,
+    coach?.profile
   );
   const garmin   = useGarmin(async (results) => {
     // Called by useGarmin after /sync → save all new FIT files to DB

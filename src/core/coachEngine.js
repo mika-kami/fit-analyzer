@@ -3,6 +3,50 @@
  * profile schema, readiness scoring, and training status synthesis.
  */
 
+export const DEFAULT_MEDICAL_PROFILE = {
+  // Cardiovascular
+  restingHr: '',
+  maxHrTested: '',
+  bloodPressure: '',
+  knownCardiacConditions: '',
+
+  // Respiratory
+  asthma: false,
+  exerciseInducedBronchoconstriction: false,
+  respiratoryNotes: '',
+
+  // Musculoskeletal
+  currentInjuries: '',
+  pastSurgeries: '',
+  chronicConditions: '',
+  mobilityLimitations: '',
+
+  // Metabolic & endocrine
+  diabetes: 'none',
+  thyroidCondition: '',
+  ironDeficiency: false,
+
+  // Medications & supplements
+  currentMedications: '',
+  supplements: '',
+  allergies: '',
+
+  // Lifestyle & history
+  smokingStatus: 'never',
+  alcoholFrequency: '',
+  sleepDisorders: '',
+
+  // Sport-specific medical
+  lastStressTest: '',
+  lastBloodwork: '',
+  lastEcg: '',
+  vo2maxTested: '',
+  lactateThreshold: '',
+
+  // Freetext
+  doctorNotes: '',
+};
+
 export const DEFAULT_ATHLETE_PROFILE = {
   targetSport: 'mixed',       // running | cycling | mixed
   primaryGoal: '',
@@ -10,6 +54,7 @@ export const DEFAULT_ATHLETE_PROFILE = {
   weeklyHours: 6,
   constraints: '',
   injuryNotes: '',
+  medical: { ...DEFAULT_MEDICAL_PROFILE },
 };
 
 export function defaultDailyCheckin(dateIso) {

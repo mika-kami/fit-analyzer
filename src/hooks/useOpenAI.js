@@ -136,12 +136,54 @@ function formatWeatherReminder(weatherData) {
 
 // ── System prompt builder ─────────────────────────────────────────────────────
 
-function buildSystemPrompt(workout, recentWorkoutsFn, weatherData) {
+function formatMedicalBlock(profile) {
+  const m = profile?.medical;
+  if (!m) return '';
+  const lines = [];
+
+  if (m.restingHr) lines.push(`Resting HR: ${m.restingHr} bpm`);
+  if (m.maxHrTested) lines.push(`Max HR (tested): ${m.maxHrTested} bpm`);
+  if (m.bloodPressure) lines.push(`Blood pressure: ${m.bloodPressure}`);
+  if (m.knownCardiacConditions) lines.push(`Cardiac: ${m.knownCardiacConditions}`);
+  if (m.asthma) lines.push('Asthma: YES');
+  if (m.exerciseInducedBronchoconstriction) lines.push('Exercise-induced bronchoconstriction: YES');
+  if (m.respiratoryNotes) lines.push(`Respiratory: ${m.respiratoryNotes}`);
+  if (m.currentInjuries) lines.push(`Current injuries: ${m.currentInjuries}`);
+  if (m.pastSurgeries) lines.push(`Past surgeries: ${m.pastSurgeries}`);
+  if (m.chronicConditions) lines.push(`Chronic conditions: ${m.chronicConditions}`);
+  if (m.mobilityLimitations) lines.push(`Mobility limits: ${m.mobilityLimitations}`);
+  if (m.diabetes && m.diabetes !== 'none') lines.push(`Diabetes: ${m.diabetes}`);
+  if (m.thyroidCondition) lines.push(`Thyroid: ${m.thyroidCondition}`);
+  if (m.ironDeficiency) lines.push('Iron deficiency: YES');
+  if (m.currentMedications) lines.push(`Medications: ${m.currentMedications}`);
+  if (m.supplements) lines.push(`Supplements: ${m.supplements}`);
+  if (m.allergies) lines.push(`Allergies: ${m.allergies}`);
+  if (m.smokingStatus && m.smokingStatus !== 'never') lines.push(`Smoking: ${m.smokingStatus}`);
+  if (m.sleepDisorders) lines.push(`Sleep disorders: ${m.sleepDisorders}`);
+  if (m.vo2maxTested) lines.push(`VO2max (tested): ${m.vo2maxTested} ml/kg/min`);
+  if (m.lactateThreshold) lines.push(`Lactate threshold: ${m.lactateThreshold}`);
+  if (m.lastStressTest) lines.push(`Last stress test: ${m.lastStressTest}`);
+  if (m.lastBloodwork) lines.push(`Last bloodwork: ${m.lastBloodwork}`);
+  if (m.lastEcg) lines.push(`Last ECG: ${m.lastEcg}`);
+  if (m.doctorNotes) lines.push(`Doctor/athlete notes: ${m.doctorNotes}`);
+
+  if (profile?.injuryNotes) lines.push(`Injury notes: ${profile.injuryNotes}`);
+  if (profile?.constraints) lines.push(`Training constraints: ${profile.constraints}`);
+
+  if (!lines.length) return '';
+
+  return `\n\nATHLETE MEDICAL PROFILE:
+${lines.map(l => '  ' + l).join('\n')}
+IMPORTANT: Factor this medical information into ALL training advice. Adjust intensity limits, recovery times, medication interactions (e.g. beta-blockers affect HR zones), injury accommodations, and flag any safety concerns proactively. If the athlete has conditions that contraindicate certain exercises, say so clearly.`;
+}
+
+function buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile) {
   const weatherBlock = formatWeatherForSystem(weatherData);
+  const medicalBlock = formatMedicalBlock(athleteProfile);
 
   const preamble = `You are an expert endurance sports coach, sports data analyst, and gear advisor.
 
-${weatherBlock}`;
+${weatherBlock}${medicalBlock}`;
 
   if (!workout) {
     return `${preamble}
@@ -189,7 +231,7 @@ Answer in English or Russian, depending on the user's initial message, concise a
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage) {
+export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage, athleteProfile) {
   const [messages,    setMessages]    = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -238,7 +280,7 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
       // Fetch weather synchronously — guaranteed before prompt is built
       const weatherData = await getWeather(workout);
 
-      const systemPrompt = buildSystemPrompt(workout, recentWorkoutsFn, weatherData);
+      const systemPrompt = buildSystemPrompt(workout, recentWorkoutsFn, weatherData, athleteProfile);
 
       // Build message array from persisted chat history
       const historyForApi = messages

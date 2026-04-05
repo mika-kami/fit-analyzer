@@ -42,6 +42,7 @@ function mapProfileFromDb(row) {
     weeklyHours: Number(row.weekly_hours ?? 6),
     constraints: row.constraints,
     injuryNotes: row.injury_notes,
+    medical: row.medical_profile ?? {},
   };
 }
 
@@ -149,6 +150,7 @@ export function useCoachState(userId) {
       weekly_hours: next.profile.weeklyHours ?? 6,
       constraints: next.profile.constraints ?? '',
       injury_notes: next.profile.injuryNotes ?? '',
+      medical_profile: next.profile.medical ?? {},
     };
     await supabase.from('athlete_profiles').upsert(payload, { onConflict: 'user_id' });
   }, [persistLocal, state, userId]);
