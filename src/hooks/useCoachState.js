@@ -1,6 +1,7 @@
 ﻿import { useMemo, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { DEFAULT_ATHLETE_PROFILE, defaultDailyCheckin, defaultWorkoutReflection } from '../core/coachEngine.js';
+import { buildAthleteDigest } from '../core/coachDigest.js';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -8,6 +9,24 @@ function todayIso() {
 
 function storageKey(userId) {
   return `coach_state_v1_${userId || 'anon'}`;
+}
+
+function digestStorageKey(userId) {
+  return `coach_athlete_digest_${userId || 'anon'}`;
+}
+
+function readDigest(key) {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeDigest(key, digest) {
+  try {
+    localStorage.setItem(key, digest || '');
+  } catch {}
 }
 
 function initialState() {
@@ -73,7 +92,37 @@ function parseWorkoutKey(workoutKey) {
 
 export function useCoachState(userId) {
   const key = useMemo(() => storageKey(userId), [userId]);
+  const digestKey = useMemo(() => digestStorageKey(userId), [userId]);
   const [state, setState] = useState(initialState);
+  const [athleteDigest, setAthleteDigest] = useState(() => readDigest(digestKey));
+
+  const fetchSharedMedicalDocs = useCallback(async () => {
+    if (!userId) return [];
+    const { data, error } = await supabase
+      .from('medical_documents')
+      .select('key_findings')
+      .eq('user_id', userId)
+      .eq('share_with_coach', true)
+      .neq('key_findings', '');
+    if (error) throw error;
+    return data ?? [];
+  }, [userId]);
+
+  const rebuildAthleteDigest = useCallback(async (profileOverride) => {
+    const baseProfile = profileOverride ? { ...state.profile, ...profileOverride } : state.profile;
+    try {
+      const docs = await fetchSharedMedicalDocs();
+      const digest = buildAthleteDigest(baseProfile, docs);
+      setAthleteDigest(digest);
+      writeDigest(digestKey, digest);
+      return digest;
+    } catch {
+      const digest = buildAthleteDigest(baseProfile, []);
+      setAthleteDigest(digest);
+      writeDigest(digestKey, digest);
+      return digest;
+    }
+  }, [state.profile, fetchSharedMedicalDocs, digestKey]);
 
   const persistLocal = useCallback((next) => {
     setState(next);
@@ -83,10 +132,19 @@ export function useCoachState(userId) {
   useEffect(() => {
     let alive = true;
     const localState = readLocal(key);
+    const localDigest = readDigest(digestKey);
+    setAthleteDigest(localDigest);
 
     async function load() {
       if (!userId) {
-        if (alive) setState(localState);
+        if (alive) {
+          setState(localState);
+          if (!localDigest) {
+            const digest = buildAthleteDigest(localState.profile, []);
+            setAthleteDigest(digest);
+            writeDigest(digestKey, digest);
+          }
+        }
         return;
       }
 
@@ -125,6 +183,10 @@ export function useCoachState(userId) {
       if (!alive) return;
       setState(merged);
       try { localStorage.setItem(key, JSON.stringify(merged)); } catch {}
+      const docs = await fetchSharedMedicalDocs().catch(() => []);
+      const digest = buildAthleteDigest(merged.profile, docs);
+      setAthleteDigest(digest);
+      writeDigest(digestKey, digest);
     }
 
     load().catch(() => {
@@ -132,7 +194,7 @@ export function useCoachState(userId) {
     });
 
     return () => { alive = false; };
-  }, [key, userId]);
+  }, [key, userId, digestKey, fetchSharedMedicalDocs]);
 
   const saveProfile = useCallback(async (patch) => {
     const next = {
@@ -141,7 +203,10 @@ export function useCoachState(userId) {
     };
     persistLocal(next);
 
-    if (!userId) return;
+    if (!userId) {
+      await rebuildAthleteDigest(next.profile);
+      return;
+    }
     const payload = {
       user_id: userId,
       target_sport: next.profile.targetSport ?? 'mixed',
@@ -153,7 +218,8 @@ export function useCoachState(userId) {
       medical_profile: next.profile.medical ?? {},
     };
     await supabase.from('athlete_profiles').upsert(payload, { onConflict: 'user_id' });
-  }, [persistLocal, state, userId]);
+    await rebuildAthleteDigest(next.profile);
+  }, [persistLocal, state, userId, rebuildAthleteDigest]);
 
   const saveDailyCheckin = useCallback(async (dateIso, payload) => {
     const base = defaultDailyCheckin(dateIso);
@@ -260,6 +326,8 @@ export function useCoachState(userId) {
 
   return {
     profile: state.profile,
+    athleteDigest,
+    rebuildAthleteDigest,
     saveProfile,
     getDailyCheckin,
     saveDailyCheckin,
@@ -269,4 +337,3 @@ export function useCoachState(userId) {
     todayIso: todayIso(),
   };
 }
-

@@ -13,7 +13,6 @@ const TABS = [
   { id: 'analytics', label: 'Analytics' },
   { id: 'zones',     label: 'Zones'      },
   { id: 'laps',     label: 'Laps'   },
-  { id: 'chat',     label: 'Coach'  },
 ];
 
 export function Shell({ workout: w, activeTab, onTabChange, onReset, onGarmin, garminStatus, onStrava, stravaStatus, showBack, onSave, saveStatus, onPDF, onProfile }) {

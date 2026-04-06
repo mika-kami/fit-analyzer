@@ -9,6 +9,7 @@ import { ZoneBar }                                       from '../ZoneBar.jsx';
 import { fmtKm, fmtDuration, fmtDurationShort, fmtNum } from '../../core/format.js';
 import { downloadGPX } from '../../core/gpxExport.js';
 import { computeAerobicEfficiency, computeVAM, detectClimbs } from '../../core/workoutAnalyzer.js';
+import { buildCoachTake } from '../../core/coachVerdicts.js';
 
 // ─── Shared card wrapper ─────────────────────────────────────────────────────
 export function Card({ children, style = {} }) {
@@ -78,9 +79,10 @@ export function RecCard({ rec }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Overview
 // ═══════════════════════════════════════════════════════════════════════════════
-export function OverviewTab({ workout: w }) {
+export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading }) {
   const [zonesReady, setZonesReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setZonesReady(true), 200); return () => clearTimeout(t); }, []);
+  const coachTake = buildCoachTake(w);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
@@ -126,6 +128,25 @@ export function OverviewTab({ workout: w }) {
           </span>
         </div>
       )}
+
+      <Card>
+        <CardLabel>Coach Take</CardLabel>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{coachTake.verdict}</div>
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>{coachTake.next}</div>
+        <div style={{ marginTop: 10 }}>
+          <button onClick={onDeepAnalysis} style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--r-sm)',
+            padding: '6px 10px',
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            cursor: 'pointer',
+          }}>Deep Analysis</button>
+        </div>
+        {deepAnalysisLoading && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>Analyzing...</div>}
+        {deepAnalysisResult && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55 }}>{deepAnalysisResult}</div>}
+      </Card>
 
       {/* Recommendations */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>

@@ -5,6 +5,7 @@
  */
 import { useState, useRef } from 'react';
 import { BulkUploadModal } from './BulkUploadModal.jsx';
+import { CoachBriefingCard } from './CoachBriefingCard.jsx';
 
 const LOAD_COLOR = {
   high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151'
@@ -226,6 +227,11 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
 export function Dashboard({
   history,
   user,
+  coachBriefing,
+  coachActionLoading,
+  coachActionResult,
+  onCoachAction,
+  onCoachOpen,
   onFile,
   onSample,
   onPlans,
@@ -364,6 +370,13 @@ export function Dashboard({
         ) : (
           /* ── History view ────────────────────────────────────────────── */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+            <CoachBriefingCard
+              briefing={coachBriefing}
+              actionLoading={coachActionLoading}
+              actionResult={coachActionResult}
+              onAction={onCoachAction}
+              onOpenCoach={onCoachOpen}
+            />
 
             {/* Period selector + stats */}
             <div>
@@ -429,5 +442,4 @@ export function Dashboard({
     </div>
   );
 }
-
 

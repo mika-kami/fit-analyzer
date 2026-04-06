@@ -229,6 +229,7 @@ export function useWorkouts(user) {
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
     if (workoutId) q.eq('workout_id', workoutId);
+    else q.is('workout_id', null);
     const { data } = await q.limit(50);
     return (data ?? []).map(m => ({ role: m.role, content: m.content }));
   }, [user]);
