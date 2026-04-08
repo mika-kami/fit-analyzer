@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo }                                  from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateTrainingPlan } from '../../core/trainingEngine.js';
+import { describeWeekPlan, buildDescribeContext } from '../../core/coachPlanMatcher.js';
 import {
   computeReadinessScore,
   computeTrainingStatus,
@@ -168,6 +169,8 @@ export function PlanTab({ workout: w, history, coach }) {
   const todayDow    = (new Date().getDay() + 6) % 7;
   const tomorrowDow = (todayDow + 1) % 7;
   const [startDow, setStartDow] = useState(todayDow);
+  // How many days from today the plan starts (0 = today, 1 = tomorrow)
+  const planStartOffset = startDow === todayDow ? 0 : 1;
   const [planSport, setPlanSport] = useState(() => {
     const t = coach?.profile?.targetSport;
     return (t === 'running' || t === 'cycling' || t === 'mixed') ? t : 'mixed';
@@ -245,6 +248,37 @@ export function PlanTab({ workout: w, history, coach }) {
     });
   }, [plan, coachPrescription, readinessForecast, shouldAttachCoachSession, planSport, profileTarget]);
   const alignedPlan = coachAligned?.alignedDays?.length ? coachAligned.alignedDays : plan;
+
+  const [enrichedDays, setEnrichedDays] = useState(null);
+  const [enriching,    setEnriching]    = useState(false);
+
+  useEffect(() => {
+    if (!alignedPlan?.length) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setEnriching(true);
+      const ctx = buildDescribeContext({
+        athleteDigest: coach?.athleteDigest,
+        recentWorkouts: histWorkouts,
+        readiness,
+        load: { tsb: lastTSB?.tsb ?? 0 },
+        weather: weather.days.length ? { tempC: weather.days[0].tempC, windKmh: weather.days[0].windKmh } : null,
+      });
+      const days = await describeWeekPlan(alignedPlan, ctx);
+      if (!cancelled) {
+        setEnrichedDays(days);
+        setEnriching(false);
+      }
+    }, 800);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [
+    alignedPlan.map(d => d.type).join(','),
+    coach?.athleteDigest,
+    lastTSB?.tsb,
+    readiness?.score,
+  ]);
+
+  const displayDays = enrichedDays ?? alignedPlan;
 
   useEffect(() => {
     if (!coach?.saveWeeklyPlan || !alignedPlan?.length) return;
@@ -412,44 +446,22 @@ export function PlanTab({ workout: w, history, coach }) {
         </div>
       </div>
 
+      {enriching && (
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
+          Coach enriching plan…
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-        {alignedPlan.map((day, i) => (
+        {displayDays.map((day, i) => (
           <DayCard
             key={day.day}
             day={day}
-            weather={weather.days[i]}
+            weather={weather.days[i + planStartOffset]}
             index={i}
             revealed={revealed}
           />
         ))}
       </div>
-
-      <Card style={{ padding: 'var(--sp-4) var(--sp-3)' }}>
-        <CardLabel>Coach Alignment · Weekly Plan</CardLabel>
-        <div style={{
-          background: coachAligned?.fallbackUsed ? 'rgba(249,115,22,0.1)' : 'rgba(74,222,128,0.08)',
-          border: `1px solid ${coachAligned?.fallbackUsed ? 'rgba(249,115,22,0.35)' : 'rgba(74,222,128,0.3)'}`,
-          borderRadius: 'var(--r-md)',
-          padding: 'var(--sp-3)',
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {coachPrescription?.title || 'No prescription'}
-          </div>
-          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
-            {coachAligned?.reason || 'Coach workout not aligned yet.'}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
-            Coherence score: <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{coachAligned?.coherence ?? 0}/100</span>
-            {' · '}
-            Readiness gate: <span style={{ fontFamily: 'var(--font-mono)' }}>{coachAligned?.chosenReadiness ?? 0}/{coachAligned?.requiredReadiness ?? 0}</span>
-          </div>
-          {!shouldAttachCoachSession && (
-            <div style={{ marginTop: 8, fontSize: 11, color: '#f97316', fontFamily: 'var(--font-mono)' }}>
-              Coach sessions are attached only to the target-sport plan.
-            </div>
-          )}
-        </div>
-      </Card>
 
       <Card style={{ padding: 'var(--sp-4) var(--sp-3)' }}>
         <CardLabel>Weather (OpenWeather)</CardLabel>
@@ -534,7 +546,7 @@ export function PlanTab({ workout: w, history, coach }) {
         )}
         {!weather.loading && !weather.error && weather.days.length > 0 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-2)' }}>
-            {weather.days.map((d, i) => (
+            {weather.days.slice(planStartOffset, planStartOffset + alignedPlan.length).map((d, i) => (
               <div key={i} style={{
                 background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)',
                 borderRadius:'var(--r-sm)', padding:'var(--sp-2) var(--sp-3)',
@@ -640,22 +652,7 @@ export function DayCard({ day, weather, index, revealed }) {
                 {weather.tempC}°C · wind {weather.windKmh} km/h {weather.windDir}
               </div>
             )}
-            {day.coachSession && (
-              <div style={{
-                marginTop: 6,
-                background: day.coachSession.fallbackUsed ? 'rgba(249,115,22,0.12)' : 'rgba(74,222,128,0.1)',
-                border: `1px solid ${day.coachSession.fallbackUsed ? 'rgba(249,115,22,0.35)' : 'rgba(74,222,128,0.35)'}`,
-                borderRadius: 6,
-                padding: '6px 8px',
-              }}>
-                <div style={{ fontSize: 10, color: day.coachSession.fallbackUsed ? '#f97316' : '#4ade80', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
-                  COACH SESSION {day.coachSession.fallbackUsed ? '· FALLBACK' : ''}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.45 }}>
-                  {day.coachSession.session}
-                </div>
-              </div>
-            )}
+            <AiSessionBadge day={day} />
           </div>
         </div>
         <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -675,6 +672,56 @@ export function DayCard({ day, weather, index, revealed }) {
           boxShadow: highlight ? `0 0 6px ${day.color}55` : 'none',
         }} />
       </div>
+    </div>
+  );
+}
+
+export function AiSessionBadge({ day }) {
+  if (!day.aiTitle && !day.aiCues?.length && !day.aiFueling?.length && !day.aiWhy) return null;
+  return (
+    <div style={{
+      marginTop: 6,
+      background: 'rgba(168,85,247,0.10)',
+      border:     '1px solid rgba(168,85,247,0.30)',
+      borderRadius: 6,
+      padding:    '5px 8px',
+    }}>
+      <div style={{
+        fontSize: 9, color: '#a855f7',
+        fontFamily: 'var(--font-mono)', marginBottom: 2,
+        letterSpacing: '0.06em',
+      }}>
+        COACH SESSION
+      </div>
+      {day.aiTitle && (
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+          {day.aiTitle}
+        </div>
+      )}
+      {day.aiCues?.length > 0 && (
+        <ul style={{ margin: '3px 0 0', paddingLeft: 14 }}>
+          {day.aiCues.map((cue, i) => (
+            <li key={i} style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{cue}</li>
+          ))}
+        </ul>
+      )}
+      {day.aiFueling?.length > 0 && (
+        <>
+          <div style={{ fontSize: 9, color: '#a855f7', fontFamily: 'var(--font-mono)', marginTop: 6, marginBottom: 2, letterSpacing: '0.06em' }}>
+            FUELING
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 14 }}>
+            {day.aiFueling.map((f, i) => (
+              <li key={i} style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{f}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {day.aiWhy && (
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+          {day.aiWhy}
+        </div>
+      )}
     </div>
   );
 }

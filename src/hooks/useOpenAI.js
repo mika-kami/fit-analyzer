@@ -56,7 +56,7 @@ function pickDailyForecastFrom3h(list = [], dayIndex = 0) {
 
 let _weatherCache = { data: null, ts: 0, key: '' };
 
-async function getWeather(workout) {
+export async function getWeather(workout) {
   if (!OW_KEY) return null;
   const points = workout?.timeSeries ?? [];
   const gps = points.find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
@@ -104,7 +104,7 @@ async function getWeather(workout) {
 
 // ── Prompt formatters ─────────────────────────────────────────────────────────
 
-function formatWeatherForSystem(weatherData) {
+export function formatWeatherForSystem(weatherData) {
   if (!weatherData?.days?.length) return '';
   const now = new Date();
   const lines = weatherData.days.map((d, i) => {
@@ -378,5 +378,8 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
   }, [hasKey, isStreaming, saveChatMessage, conversationWorkoutId, messages, contextWorkout, recentWorkoutsFn, athleteDigest, mode, attachedWorkout]);
 
   const clearHistory = useCallback(() => setMessages([]), []);
-  return { messages, isStreaming, hasKey, send, clearHistory };
+  const inject = useCallback((role, content) => {
+    setMessages((prev) => [...prev, { role, content }]);
+  }, []);
+  return { messages, isStreaming, hasKey, send, clearHistory, inject };
 }

@@ -147,7 +147,6 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
       />
       <InsightsCard title="Key Limiters" items={insights.limiters} />
       <InsightsCard title="Performance Opportunities" items={insights.opportunities} />
-      <WorkoutPrescriptionCard workout={nextWorkout} />
 
       {/* Period selector */}
       <div style={{ display: 'flex', gap: 6 }}>
@@ -327,30 +326,6 @@ function InsightsCard({ title, items = [] }) {
   );
 }
 
-function WorkoutPrescriptionCard({ workout }) {
-  if (!workout) return null;
-  return (
-    <Card>
-      <CardLabel>Workout Prescription (Phase 2)</CardLabel>
-      <div style={{
-        background: 'rgba(74,222,128,0.08)',
-        border: '1px solid rgba(74,222,128,0.3)',
-        borderRadius: 'var(--r-md)',
-        padding: 'var(--sp-3)',
-      }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#4ade80', marginBottom: 4 }}>{workout.title}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{workout.objective}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.6 }}>{workout.session}</div>
-      </div>
-      <div style={{ marginTop: 'var(--sp-3)', display: 'grid', gap: 6 }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>WHY THIS SESSION</div>
-        {(workout.why || []).map((w, i) => (
-          <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>• {w}</div>
-        ))}
-      </div>
-    </Card>
-  );
-}
 
 // ── Form Summary Card ────────────────────────────────────────────────────────
 function FormSummaryCard({ lastTSB, formState, peak, workoutCount }) {

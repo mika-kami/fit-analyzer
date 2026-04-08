@@ -45,6 +45,9 @@ export function TimeSeriesChart({
   yDomain = ['auto', 'auto'],
   xTickFormatter = v => `${Number(v).toFixed(0)} km`,
   gradientOpacity = [0.3, 0.02],
+  interpolationType = 'monotone',
+  yTickFormatter,
+  yTicks,
 }) {
   const gradId = `grad_${dataKey}`;
 
@@ -80,6 +83,8 @@ export function TimeSeriesChart({
           axisLine={false}
           tickLine={false}
           width={36}
+          tickFormatter={yTickFormatter}
+          ticks={yTicks}
         />
 
         <Tooltip
@@ -88,7 +93,7 @@ export function TimeSeriesChart({
         />
 
         <Area
-          type="monotone"
+          type={interpolationType}
           dataKey={dataKey}
           stroke={color}
           strokeWidth={1.5}

@@ -44,7 +44,7 @@ export function ChartsTab({ workout: w }) {
     { key: 'groundContactTimeMs',  label: 'Ground Contact Time',  unit: 'ms',     color: '#0ea5e9' },
     { key: 'stamina',              label: 'Stamina',              unit: '%',      color: '#84cc16', yDomain: [0, 100] },
     { key: 'staminaPotential',     label: 'Stamina Potential',    unit: '%',      color: '#65a30d', yDomain: [0, 100] },
-    { key: 'runWalkState',         label: 'Run/Walk',             unit: '',       color: '#eab308', yDomain: [-0.1, 1.1] },
+    { key: 'runWalkState',         label: 'Run/Walk',             unit: '',       color: '#eab308', yDomain: [-0.1, 1.1], interpolationType: 'stepAfter', yTicks: [0, 1], yTickFormatter: v => v === 1 ? 'Run' : v === 0 ? 'Walk' : '' },
     // Keep speed for cycling and generic activities
     { key: 'speedKmh',             label: 'Speed',             unit: 'km/h',   color: '#60a5fa' },
   ];
@@ -71,6 +71,9 @@ export function ChartsTab({ workout: w }) {
             unit={c.unit}
             height={130}
             yDomain={c.yDomain ?? ['auto', 'auto']}
+            interpolationType={c.interpolationType}
+            yTickFormatter={c.yTickFormatter}
+            yTicks={c.yTicks}
           />
         </Card>
       ))}

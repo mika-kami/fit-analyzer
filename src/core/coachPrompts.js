@@ -13,7 +13,11 @@ export function buildActionPrompt(actionType, ctx) {
   const readiness = ctx?.readiness;
   const athleteDigest = ctx?.athleteDigest || 'Athlete digest unavailable.';
   const weather = ctx?.weather || null;
+  const forecastText = ctx?.forecastText || null;
   const coachTake = ctx?.coachTake || null;
+
+  // Use rich 5-day forecast when available, fall back to current conditions snapshot
+  const weatherSection = forecastText || weatherLine(weather);
 
   const snapshot = buildWorkoutSnapshot(workout);
   const trend = buildHistoryDigest(recent.slice(0, 10));
@@ -23,11 +27,11 @@ export function buildActionPrompt(actionType, ctx) {
   }
 
   if (actionType === 'plan_week') {
-    return `${BASE_PERSONA}\nAthlete: ${athleteDigest}\n${trend}\nReadiness: ${readiness?.score ?? 'n/a'} (${readiness?.label || 'unknown'}).\n${weatherLine(weather)}\nBuild a practical 7-day plan with day-by-day session goals.`;
+    return `${BASE_PERSONA}\nAthlete: ${athleteDigest}\n${trend}\nReadiness: ${readiness?.score ?? 'n/a'} (${readiness?.label || 'unknown'}).\n${weatherSection}\nBuild a practical 7-day plan with day-by-day session goals.`;
   }
 
   if (actionType === 'wearing') {
-    return `${BASE_PERSONA}\n${weatherLine(weather)}\nSport: ${workout?.sportLabel || ctx?.targetSport || 'endurance training'}.\nGive clothing and gear recommendation for today's session in 3 bullets.`;
+    return `${BASE_PERSONA}\n${weatherSection}\nSport: ${workout?.sportLabel || ctx?.targetSport || 'endurance training'}.\nGive clothing and gear recommendation for today's session in 3 bullets.`;
   }
 
   if (actionType === 'recovery_check') {
@@ -36,7 +40,7 @@ export function buildActionPrompt(actionType, ctx) {
   }
 
   if (actionType === 'nutrition') {
-    return `${BASE_PERSONA}\nAthlete: ${athleteDigest}\n${snapshot}\n${weatherLine(weather)}\nCreate pre/during/post fueling plan with quantities and timing.`;
+    return `${BASE_PERSONA}\nAthlete: ${athleteDigest}\n${snapshot}\n${weatherSection}\nCreate pre/during/post fueling plan with quantities and timing.`;
   }
 
   if (actionType === 'weekly_review') {

@@ -1,9 +1,22 @@
 import { useCallback, useMemo, useState } from 'react';
 import { buildActionPrompt } from '../core/coachPrompts.js';
+import { getWeather, formatWeatherForSystem } from './useOpenAI.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
 const MODEL = import.meta.env.VITE_LLM_MODEL ?? 'gpt-4o-mini';
 const API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
+const BASE_MAX_TOKENS = parseInt(import.meta.env.VITE_LLM_MAX_TOKENS ?? '2000', 10);
+
+// Token budgets per action — reasoning models consume tokens before writing output
+const ACTION_MAX_TOKENS = {
+  plan_week:      Math.max(BASE_MAX_TOKENS, 2000),
+  weekly_review:  Math.max(BASE_MAX_TOKENS, 2000),
+  deep_analysis:  Math.max(BASE_MAX_TOKENS, 1500),
+  analyze_ride:   Math.max(BASE_MAX_TOKENS, 1200),
+  recovery_check: Math.max(BASE_MAX_TOKENS, 1200),
+  nutrition:      Math.max(BASE_MAX_TOKENS, 1200),
+  wearing:        Math.max(BASE_MAX_TOKENS, 800),
+};
 
 const ACTION_TTL_MS = {
   analyze_ride: 24 * 3600 * 1000,
@@ -67,13 +80,15 @@ export function useCoachActions(userId, contextBuilder) {
     setError('');
 
     try {
-      const prompt = buildActionPrompt(actionType, ctx);
+      const forecastData = await getWeather(ctx?.workout ?? null);
+      const forecastText = forecastData ? formatWeatherForSystem(forecastData) : null;
+      const prompt = buildActionPrompt(actionType, { ...ctx, forecastText });
       const res = await fetch(OPENAI_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
         body: JSON.stringify({
           model: MODEL,
-          max_completion_tokens: 550,
+          max_completion_tokens: ACTION_MAX_TOKENS[actionType] ?? BASE_MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         }),
       });

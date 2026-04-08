@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 export function CoachPanel({ open, onToggle, chat, contextLabel, actionButtons = [] }) {
   const { messages, isStreaming, hasKey, send } = chat;
@@ -57,7 +58,9 @@ export function CoachPanel({ open, onToggle, chat, contextLabel, actionButtons =
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? (
+                    <ReactMarkdown components={mdComponents}>{m.content}</ReactMarkdown>
+                  ) : m.content}
                 </div>
               ))}
               {isStreaming && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Coach is typing...</div>}
@@ -92,6 +95,9 @@ function floatingBtnStyle(open) {
     border: '1px solid rgba(232,168,50,0.45)',
     background: open ? 'rgba(232,168,50,0.18)' : 'rgba(232,168,50,0.12)',
     color: 'var(--accent)',
+    display: open ? 'none' : 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     fontSize: 18,
     cursor: 'pointer',
   };
@@ -161,4 +167,28 @@ const sendStyle = {
   padding: '8px 10px',
   fontSize: 12,
   cursor: 'pointer',
+};
+
+const mdComponents = {
+  p: ({ children }) => <p style={{ margin: '0 0 6px', lineHeight: 1.55 }}>{children}</p>,
+  ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ul>,
+  ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ol>,
+  li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
+  strong: ({ children }) => <strong style={{ color: 'var(--accent)', fontWeight: 600 }}>{children}</strong>,
+  em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
+  code: ({ inline, children }) =>
+    inline ? (
+      <code style={{ background: 'var(--bg-overlay)', borderRadius: 3, padding: '1px 4px', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{children}</code>
+    ) : (
+      <pre style={{ background: 'var(--bg-overlay)', borderRadius: 6, padding: '8px 10px', overflowX: 'auto', margin: '6px 0' }}>
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{children}</code>
+      </pre>
+    ),
+  h1: ({ children }) => <h1 style={{ fontSize: 14, fontWeight: 700, margin: '8px 0 4px', color: 'var(--text-primary)' }}>{children}</h1>,
+  h2: ({ children }) => <h2 style={{ fontSize: 13, fontWeight: 700, margin: '8px 0 4px', color: 'var(--text-primary)' }}>{children}</h2>,
+  h3: ({ children }) => <h3 style={{ fontSize: 12, fontWeight: 600, margin: '6px 0 3px', color: 'var(--text-secondary)' }}>{children}</h3>,
+  hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '8px 0' }} />,
+  blockquote: ({ children }) => (
+    <blockquote style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 10, margin: '6px 0', color: 'var(--text-secondary)' }}>{children}</blockquote>
+  ),
 };

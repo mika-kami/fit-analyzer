@@ -205,8 +205,9 @@ export default function App() {
   const runCoachAction = useCallback(async (actionType) => {
     setCoachOpen(true);
     setLastCoachAction(actionType);
-    await coachActions.runAction(actionType);
-  }, [coachActions]);
+    const result = await coachActions.runAction(actionType);
+    if (result) globalChat.inject('assistant', result);
+  }, [coachActions, globalChat]);
 
   // Show loading spinner while checking auth
   if (auth.loading) return (

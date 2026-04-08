@@ -4,6 +4,7 @@
  * Props: { workout }
  */
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { MetricCard }                                     from '../MetricCard.jsx';
 import { ZoneBar }                                       from '../ZoneBar.jsx';
 import { fmtKm, fmtDuration, fmtDurationShort, fmtNum } from '../../core/format.js';
@@ -131,8 +132,12 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
 
       <Card>
         <CardLabel>Coach Take</CardLabel>
-        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{coachTake.verdict}</div>
-        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>{coachTake.next}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+          <ReactMarkdown components={mdComponents}>{coachTake.verdict}</ReactMarkdown>
+        </div>
+        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <ReactMarkdown components={mdComponents}>{coachTake.next}</ReactMarkdown>
+        </div>
         <div style={{ marginTop: 10 }}>
           <button onClick={onDeepAnalysis} style={{
             background: 'var(--bg-raised)',
@@ -145,7 +150,11 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
           }}>Deep Analysis</button>
         </div>
         {deepAnalysisLoading && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>Analyzing...</div>}
-        {deepAnalysisResult && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55 }}>{deepAnalysisResult}</div>}
+        {deepAnalysisResult && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55 }}>
+            <ReactMarkdown components={mdComponents}>{deepAnalysisResult}</ReactMarkdown>
+          </div>
+        )}
       </Card>
 
       {/* Recommendations */}
@@ -377,3 +386,24 @@ function ClimbRow({ climb, rank }) {
     </div>
   );
 }
+
+const mdComponents = {
+  p: ({ children }) => <p style={{ margin: '0 0 4px', lineHeight: 1.6 }}>{children}</p>,
+  ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 16 }}>{children}</ul>,
+  ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 16 }}>{children}</ol>,
+  li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
+  strong: ({ children }) => <strong style={{ color: 'var(--accent)', fontWeight: 600 }}>{children}</strong>,
+  em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
+  code: ({ inline, children }) =>
+    inline ? (
+      <code style={{ background: 'var(--bg-overlay)', borderRadius: 3, padding: '1px 4px', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{children}</code>
+    ) : (
+      <pre style={{ background: 'var(--bg-overlay)', borderRadius: 6, padding: '8px 10px', overflowX: 'auto', margin: '4px 0' }}>
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{children}</code>
+      </pre>
+    ),
+  h3: ({ children }) => <h3 style={{ fontSize: 12, fontWeight: 700, margin: '6px 0 2px', color: 'var(--text-primary)' }}>{children}</h3>,
+  blockquote: ({ children }) => (
+    <blockquote style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 8, margin: '4px 0', color: 'var(--text-secondary)' }}>{children}</blockquote>
+  ),
+};
