@@ -1,4 +1,4 @@
-/**
+﻿/**
  * App.jsx -- Root orchestrator (production).
  * Screens: 'auth' | 'dashboard' | 'detail'
  */
@@ -310,7 +310,7 @@ export default function App() {
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
             {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
             {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
-            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} coach={coach} />}
+            {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} coach={coach} prescription={prescription} />}
             {activeTab === 'analytics' && (
               <AnalyticsTab
                 history={workouts}

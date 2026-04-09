@@ -29,14 +29,6 @@ export function CoachBriefingCard({ briefing, onAction, onOpenCoach, actionLoadi
         </div>
       </div>
 
-      <div style={{ marginBottom: 'var(--sp-3)', background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-md)', padding: 'var(--sp-3)' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>TODAY'S SESSION</div>
-        <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{briefing.todaySession}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>
-          <ReactMarkdown components={mdComponents}>{briefing.why}</ReactMarkdown>
-        </div>
-      </div>
-
       {briefing.alerts?.length > 0 && (
         <div style={{ marginBottom: 'var(--sp-3)' }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>ALERTS</div>
@@ -59,7 +51,9 @@ export function CoachBriefingCard({ briefing, onAction, onOpenCoach, actionLoadi
         <button onClick={onOpenCoach} style={btnStyle}>Ask Coach</button>
       </div>
 
-      {actionLoading && <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>Running: {actionLoading}...</div>}
+      {actionLoading && (
+        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>Running: {actionLoading}...</div>
+      )}
       {actionResult && (
         <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55, background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-3)' }}>
           <ReactMarkdown components={mdComponents}>{actionResult}</ReactMarkdown>
