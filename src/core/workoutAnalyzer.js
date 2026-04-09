@@ -742,6 +742,78 @@ export function computeVAM(ascentM, timeSeries) {
   return Math.round((ascentM / climbSec) * 3600);
 }
 
+// ─── Medication impact detection ─────────────────────────────────────────────
+
+const MEDS_AFFECTING_HR = {
+  beta_blocker: {
+    keywords: ['metoprolol','atenolol','bisoprolol','propranolol','carvedilol','nebivolol','beta-blocker','beta blocker'],
+    hrReduction: 0.15,
+    note: 'Beta-blocker detected — HR zones shifted down ~15%. Use RPE as primary guide.',
+  },
+  calcium_channel: {
+    keywords: ['verapamil','diltiazem'],
+    hrReduction: 0.08,
+    note: 'Calcium channel blocker may lower max HR. Consider RPE-based training.',
+  },
+};
+
+/**
+ * detectMedicationImpact — check if profile medications affect HR zones.
+ * Returns null if no relevant meds found.
+ */
+export function detectMedicationImpact(medicalProfile) {
+  const meds = ((medicalProfile?.currentMedications ?? '') + ' ' + (medicalProfile?.doctorNotes ?? '')).toLowerCase();
+  for (const [type, config] of Object.entries(MEDS_AFFECTING_HR)) {
+    if (config.keywords.some(kw => meds.includes(kw))) {
+      return { type, ...config };
+    }
+  }
+  return null;
+}
+
+// ─── Pacing analysis ──────────────────────────────────────────────────────────
+
+/**
+ * analyzePacing — evaluate pacing quality from timeSeries and laps.
+ * Returns { splitType, hrDrift, cvPace, zoneCreeepPct }.
+ */
+export function analyzePacing(timeSeries, laps) {
+  const pts = (timeSeries ?? []).filter(p => p.heartRate > 0 && p.speed > 0);
+  if (pts.length < 20) return null;
+
+  const firstQuarter = pts.slice(0, Math.floor(pts.length * 0.25));
+  const lastQuarter  = pts.slice(Math.floor(pts.length * 0.75));
+  const avgHrFirst   = firstQuarter.reduce((s, p) => s + p.heartRate, 0) / firstQuarter.length;
+  const avgHrLast    = lastQuarter.reduce((s, p) => s + p.heartRate, 0) / lastQuarter.length;
+  const hrDrift      = avgHrFirst > 0 ? ((avgHrLast - avgHrFirst) / avgHrFirst) * 100 : 0;
+
+  // Split analysis from laps
+  let splitType = 'unknown';
+  if ((laps ?? []).length >= 2) {
+    const firstHalf = laps.slice(0, Math.floor(laps.length / 2));
+    const secondHalf = laps.slice(Math.floor(laps.length / 2));
+    const avgPaceFirst  = firstHalf.reduce((s, l) => s + (l.avgPace ?? 0), 0) / firstHalf.length;
+    const avgPaceSecond = secondHalf.reduce((s, l) => s + (l.avgPace ?? 0), 0) / secondHalf.length;
+    if (avgPaceFirst > 0 && avgPaceSecond > 0) {
+      const diff = (avgPaceSecond - avgPaceFirst) / avgPaceFirst;
+      if (diff < -0.03) splitType = 'negative'; // second half faster
+      else if (diff > 0.03) splitType = 'positive'; // second half slower
+      else splitType = 'even';
+    }
+  }
+
+  // Pace CV from timeSeries
+  const speeds = pts.map(p => p.speed).filter(s => s > 0);
+  const avgSpd = speeds.reduce((s, v) => s + v, 0) / speeds.length;
+  const sdSpd  = Math.sqrt(speeds.reduce((s, v) => s + (v - avgSpd) ** 2, 0) / speeds.length);
+  const cvPace = avgSpd > 0 ? parseFloat((sdSpd / avgSpd).toFixed(3)) : null;
+  const paceConsistency = cvPace == null ? 'unknown' : cvPace < 0.05 ? 'excellent' : cvPace < 0.10 ? 'good' : 'erratic';
+
+  const zoneCreeepPct = null; // computed in workoutModel from hrZones
+
+  return { splitType, hrDrift: parseFloat(hrDrift.toFixed(1)), cvPace, paceConsistency, zoneCreeepPct };
+}
+
 // ─── Athlete max HR persistence (legacy compat) ───────────────────────────────
 // These were used in an older version. Kept as no-ops for import compatibility.
 const _maxHrKey = 'fit_athlete_max_hr';

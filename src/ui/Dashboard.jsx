@@ -200,6 +200,42 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
 }
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
+const ALERT_BORDER = { high: '#ef4444', medium: '#f97316', low: '#60a5fa' };
+const ALERT_BG     = { high: 'rgba(239,68,68,0.06)', medium: 'rgba(249,115,22,0.06)', low: 'rgba(96,165,250,0.06)' };
+
+function AlertBanner({ alerts, onDismiss, onCoachAction }) {
+  if (!alerts?.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
+      {alerts.map(alert => (
+        <div key={alert.id} style={{
+          background: ALERT_BG[alert.severity] ?? 'var(--bg-overlay)',
+          border: `1px solid ${ALERT_BORDER[alert.severity] ?? 'var(--border-subtle)'}`,
+          borderLeft: `3px solid ${ALERT_BORDER[alert.severity] ?? 'var(--border-mid)'}`,
+          borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
+          display: 'flex', alignItems: 'flex-start', gap: 'var(--sp-3)',
+        }}>
+          {alert.severity === 'high' && (
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', marginTop: 4, flexShrink: 0, animation: 'pulse 1.5s ease infinite' }} />
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{alert.title}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{alert.body}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexShrink: 0 }}>
+            {alert.action && onCoachAction && (
+              <button onClick={() => onCoachAction(alert.action)} style={{ background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '3px 8px', fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+                Ask Coach
+              </button>
+            )}
+            <button onClick={() => onDismiss(alert.id)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 14, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Dashboard({
   history,
   user,
@@ -219,6 +255,8 @@ export function Dashboard({
   onSignOut,
   isLoading,
   loadError,
+  alerts,
+  onDismissAlert,
 }) {
   const [period, setPeriod] = useState(30);
   const [bulkFiles, setBulkFiles] = useState(null);
@@ -241,6 +279,26 @@ export function Dashboard({
       />
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)' }}>
+        <AlertBanner alerts={alerts} onDismiss={onDismissAlert} onCoachAction={onCoachAction} />
+
+        {onPlans && (
+          <button onClick={onPlans} style={{
+            width: '100%', marginBottom: 'var(--sp-4)',
+            background: 'rgba(232,168,50,0.07)', border: '1px solid rgba(232,168,50,0.25)',
+            borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            cursor: 'pointer', color: 'var(--accent)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+              <span style={{ fontSize: 16 }}>📅</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Training Plan</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Mesocycle · week-by-week schedule</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>›</span>
+          </button>
+        )}
         {loadError && (
           <div style={{
             background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',

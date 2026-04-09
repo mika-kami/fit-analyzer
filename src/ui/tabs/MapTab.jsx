@@ -4,9 +4,10 @@
  * Falls back gracefully when no GPS data is present.
  * Props: { workout }
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Card, CardLabel } from './OverviewTab.jsx';
 import { downloadGPX }   from '../../core/gpxExport.js';
+import { fingerprint, findRouteMatches } from '../../core/routeMatcher.js';
 
 // HR zone colours (matches rest of app)
 const HR_COLORS = ['#4ade80','#a3e635','#fbbf24','#f97316','#ef4444'];
@@ -33,7 +34,7 @@ function loadLeaflet(cb) {
   document.head.appendChild(js);
 }
 
-export function MapTab({ workout: w }) {
+export function MapTab({ workout: w, history }) {
   const mapRef    = useRef(null);
   const mapInst   = useRef(null);
   const [ready,   setReady]   = useState(false);
@@ -41,6 +42,19 @@ export function MapTab({ workout: w }) {
 
   // Extract GPS points with HR
   const pts = (w.timeSeries ?? []).filter(p => p.lat != null && p.lon != null);
+
+  // Find best previous matching route for overlay
+  const prevRoute = useMemo(() => {
+    if (pts.length < 20) return null;
+    const fp = fingerprint(w.timeSeries);
+    if (!fp) return null;
+    const histWorkouts = history?.history ?? [];
+    const matches = findRouteMatches(fp, histWorkouts.filter(h => h.date !== w.date));
+    if (!matches.length) return null;
+    const best = matches[0].workout;
+    const prevPts = (best.timeSeries ?? []).filter(p => p.lat != null && p.lon != null);
+    return prevPts.length > 0 ? { pts: prevPts, date: best.date } : null;
+  }, [w.date, w.timeSeries, pts.length, history]);
 
   useEffect(() => {
     if (pts.length === 0) { setNoGps(true); return; }
@@ -69,6 +83,14 @@ export function MapTab({ workout: w }) {
         maxZoom: 19,
       }
     ).addTo(map);
+
+    // Faded overlay: previous matching route
+    if (prevRoute) {
+      const prevLatLons = prevRoute.pts.map(p => [p.lat, p.lon]);
+      L.polyline(prevLatLons, { color: '#6b7280', weight: 2, opacity: 0.35, dashArray: '4 4' })
+        .bindPopup(`<b>Previous run</b><br>${prevRoute.date}`)
+        .addTo(map);
+    }
 
     // Draw coloured polyline segments
     for (let i = 1; i < pts.length; i++) {
@@ -108,7 +130,7 @@ export function MapTab({ workout: w }) {
       map.remove();
       mapInst.current = null;
     };
-  }, [ready]);
+  }, [ready, prevRoute]);
 
   if (noGps) {
     return (
@@ -151,6 +173,13 @@ export function MapTab({ workout: w }) {
         )}
         <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
       </div>
+
+      {prevRoute && (
+        <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)', display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+          <div style={{ width: 28, height: 3, background: '#6b7280', borderRadius: 2, opacity: 0.5, flexShrink: 0, backgroundImage: 'repeating-linear-gradient(90deg, #6b7280 0 4px, transparent 4px 8px)' }} />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Previous run on this route · {prevRoute.date}</div>
+        </div>
+      )}
 
       {/* HR legend */}
       <Card>

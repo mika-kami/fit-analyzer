@@ -2,6 +2,7 @@
 import { supabase } from '../lib/supabase.js';
 import { DEFAULT_ATHLETE_PROFILE, defaultDailyCheckin, defaultWorkoutReflection } from '../core/coachEngine.js';
 import { buildAthleteDigest } from '../core/coachDigest.js';
+import { generateMesocycle } from '../core/trainingEngine.js';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -90,11 +91,33 @@ function parseWorkoutKey(workoutKey) {
   return { workoutId: null, workoutDate: null };
 }
 
+function mesocycleStorageKey(userId) {
+  return `coach_mesocycle_v1_${userId || 'anon'}`;
+}
+
+function readMesocycle(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeMesocycle(key, mc) {
+  try {
+    localStorage.setItem(key, mc ? JSON.stringify(mc) : '');
+  } catch {}
+}
+
 export function useCoachState(userId) {
   const key = useMemo(() => storageKey(userId), [userId]);
   const digestKey = useMemo(() => digestStorageKey(userId), [userId]);
+  const mcKey = useMemo(() => mesocycleStorageKey(userId), [userId]);
   const [state, setState] = useState(initialState);
   const [athleteDigest, setAthleteDigest] = useState(() => readDigest(digestKey));
+  const [mesocycle, setMesocycle] = useState(() => readMesocycle(mesocycleStorageKey(userId)));
+  const [labValues, setLabValues] = useState([]);
 
   const fetchSharedMedicalDocs = useCallback(async () => {
     if (!userId) return [];
@@ -183,7 +206,11 @@ export function useCoachState(userId) {
       if (!alive) return;
       setState(merged);
       try { localStorage.setItem(key, JSON.stringify(merged)); } catch {}
-      const docs = await fetchSharedMedicalDocs().catch(() => []);
+      const [docs, labRes] = await Promise.all([
+        fetchSharedMedicalDocs().catch(() => []),
+        supabase.from('lab_values').select('*').eq('user_id', userId).order('test_date', { ascending: false }).catch(() => ({ data: [] })),
+      ]);
+      if (alive && labRes?.data?.length) setLabValues(labRes.data);
       const digest = buildAthleteDigest(merged.profile, docs);
       setAthleteDigest(digest);
       writeDigest(digestKey, digest);
@@ -296,6 +323,24 @@ export function useCoachState(userId) {
     }
   }, [persistLocal, state, userId]);
 
+  const regenerateMesocycle = useCallback((historyWorkouts = []) => {
+    const mc = generateMesocycle(state.profile, historyWorkouts);
+    setMesocycle(mc);
+    writeMesocycle(mcKey, mc);
+    if (userId) {
+      supabase.from('mesocycles').upsert({
+        user_id:     userId,
+        goal_date:   mc.meta.goalDate || null,
+        goal_description: mc.meta.goal || null,
+        total_weeks: mc.meta.totalWeeks,
+        weeks:       mc.weeks,
+        meta:        mc.meta,
+        is_active:   true,
+      }, { onConflict: 'user_id,is_active' }).then(() => {}).catch(() => {});
+    }
+    return mc;
+  }, [state.profile, mcKey, userId]);
+
   const saveWeeklyPlan = useCallback(async (payload) => {
     if (!userId || !payload?.weekStartDate || !payload?.planSport) return;
     await supabase.from('coach_weekly_plans').upsert({
@@ -334,6 +379,9 @@ export function useCoachState(userId) {
     getWorkoutNote,
     saveWorkoutNote,
     saveWeeklyPlan,
+    mesocycle,
+    regenerateMesocycle,
+    labValues,
     todayIso: todayIso(),
   };
 }

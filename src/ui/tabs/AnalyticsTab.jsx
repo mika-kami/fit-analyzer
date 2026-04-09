@@ -12,6 +12,7 @@ import {
   buildDailyStress, computeATL, computeCTL, computeTSB,
   detectFormState, predictPeakForm, computeAET, computeTETrend,
 } from '../../core/analyticsEngine.js';
+import { computeACWR, computeMonotony, acwrRiskLabel } from '../../core/injuryRisk.js';
 import {
   computeReadinessScore,
   computeTrainingStatus,
@@ -59,7 +60,11 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
 
   const peak = useMemo(() => predictPeakForm(tsbSeries), [tsbSeries]);
 
-  const teTrend = useMemo(() => computeTETrend(workouts), [workouts]);
+  const teTrend   = useMemo(() => computeTETrend(workouts), [workouts]);
+  const acwrData  = useMemo(() => computeACWR(workouts, period), [workouts, period]);
+  const monotony  = useMemo(() => computeMonotony(workouts), [workouts]);
+  const latestACWR = acwrData.length ? acwrData[acwrData.length - 1]?.acwr : null;
+  const acwrRisk   = acwrRiskLabel(latestACWR);
 
   // AET: auto-detect sport band from history
   const aetData = useMemo(() => {
@@ -180,6 +185,40 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
       <Card>
         <CardLabel>Training effect</CardLabel>
         <TETrendChart data={teTrend} workouts={workouts} onSelectWorkout={onSelectWorkout} />
+      </Card>
+
+      {/* Injury Risk */}
+      <Card>
+        <CardLabel>Injury risk · ACWR</CardLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>ACWR</div>
+            <div style={{ fontSize: 28, fontWeight: 600, color: acwrRisk.color, fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+              {latestACWR != null ? latestACWR.toFixed(2) : '—'}
+            </div>
+            <div style={{ fontSize: 10, color: acwrRisk.color, marginTop: 4 }}>{acwrRisk.label}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>MONOTONY</div>
+            <div style={{ fontSize: 28, fontWeight: 600, color: monotony.monotony > 2 ? '#ef4444' : monotony.monotony > 1 ? '#fbbf24' : '#4ade80', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+              {monotony.monotony.toFixed(1)}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{monotony.variation}</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>STRAIN</div>
+            <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
+              {monotony.strain.toFixed(1)}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>load × monotony</div>
+          </div>
+        </div>
+        {latestACWR != null && (
+          <div style={{ height: 4, background: 'var(--bg-raised)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{ height: '100%', width: `${Math.min(100, (latestACWR / 2) * 100)}%`, background: acwrRisk.color, borderRadius: 2, transition: 'width 0.6s var(--ease-snappy)' }} />
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Safe zone: 0.8 – 1.3 · Danger: &gt;1.5</div>
       </Card>
     </div>
   );

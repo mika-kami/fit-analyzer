@@ -28,6 +28,7 @@ import { CoachPanel } from './ui/CoachPanel.jsx';
 import { downloadWorkoutPDF } from './core/pdfReport.js';
 import { computeReadinessScore, computeTrainingStatus, analyzePerformanceLimiters, prescribeNextWorkout } from './core/coachEngine.js';
 import { calcTrainingLoad } from './core/trainingEngine.js';
+import { useAlerts } from './hooks/useAlerts.js';
 import { buildDailyBriefing } from './core/coachBriefing.js';
 import { buildCoachTake } from './core/coachVerdicts.js';
 import './styles/tokens.css';
@@ -57,9 +58,9 @@ export default function App() {
   const [lastCoachAction, setLastCoachAction] = useState('');
 
   const auth     = useAuth();
-  const workouts = useWorkouts(auth.user);       // Supabase-backed history
   const workout  = useWorkout();                  // current open workout
   const coach    = useCoachState(auth.user?.id);
+  const workouts = useWorkouts(auth.user, coach?.mesocycle);       // Supabase-backed history
   const globalChat = useOpenAI(
     workout.workout,
     workouts.recentWorkouts,
@@ -90,6 +91,15 @@ export default function App() {
     insights,
     weatherScore: todayCheckin?.weatherScore ?? 70,
   }), [coach?.profile, readiness, trainingStatus, insights, todayCheckin?.weatherScore]);
+
+  const { alerts, dismiss: dismissAlert } = useAlerts({
+    load,
+    readiness,
+    historyWorkouts: workouts.history ?? [],
+    profile: coach?.profile,
+    mesocycle: coach?.mesocycle,
+    dailyCheckins: coach?.getDailyCheckin ? undefined : {},
+  });
 
   const briefing = useMemo(() => buildDailyBriefing({
     readiness,
@@ -190,12 +200,9 @@ export default function App() {
   }, [profileReturnScreen]);
 
   const handleOpenPlans = useCallback(() => {
-    const latest = workouts.history?.[0];
-    if (!latest) return;
-    workout.loadFromSummary(latest);
     setScreen('detail');
     setActiveTab('plan');
-  }, [workouts.history, workout]);
+  }, []);
 
   const handleDownloadPdf = useCallback(() => {
     if (!workout.workout) return;
@@ -273,6 +280,8 @@ export default function App() {
           onSignOut={auth.signOut}
           isLoading={workout.status === 'loading'}
           loadError={workout.status === 'error' ? workout.error : null}
+          alerts={alerts}
+          onDismissAlert={dismissAlert}
         />
       ) : screen === 'profile' ? (
         <ProfilePage
@@ -302,14 +311,15 @@ export default function App() {
             {activeTab === 'overview' && (
               <OverviewTab
                 workout={workout.workout}
+                history={workouts}
                 onDeepAnalysis={() => runCoachAction('deep_analysis')}
                 deepAnalysisLoading={coachActions.loadingAction === 'deep_analysis'}
                 deepAnalysisResult={coachActions.results?.deep_analysis || ''}
               />
             )}
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}
-            {activeTab === 'map'      && <MapTab      workout={workout.workout} />}
-            {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} />}
+            {activeTab === 'map'      && <MapTab      workout={workout.workout} history={workouts} />}
+            {activeTab === 'zones'    && <ZonesTab    workout={workout.workout} medicalProfile={coach?.profile?.medical} />}
             {activeTab === 'plan'     && <PlanTab     workout={workout.workout} history={workouts} coach={coach} prescription={prescription} />}
             {activeTab === 'analytics' && (
               <AnalyticsTab

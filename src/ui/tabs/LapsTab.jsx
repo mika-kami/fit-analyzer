@@ -1,7 +1,8 @@
 /**
- * LapsTab.jsx — Per-lap breakdown from FIT data.
+ * LapsTab.jsx — Per-lap breakdown from FIT data with pacing analysis.
  * Props: { workout }
  */
+import { analyzePacing } from '../../core/workoutAnalyzer.js';
 
 function fmtTime(seconds) {
   if (!seconds) return '—';
@@ -45,7 +46,8 @@ const TD = ({ children, highlight, color }) => (
 );
 
 export function LapsTab({ workout: w }) {
-  const laps = w.laps ?? [];
+  const laps   = w.laps ?? [];
+  const pacing = analyzePacing(w.timeSeries, laps);
 
   if (laps.length === 0) {
     return (
@@ -98,6 +100,33 @@ export function LapsTab({ workout: w }) {
           </div>
         ))}
       </div>
+
+      {/* Pacing analysis */}
+      {pacing && (
+        <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8, letterSpacing: '0.1em' }}>PACING ANALYSIS</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--sp-3)' }}>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>SPLIT TYPE</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: { negative: '#4ade80', even: '#60a5fa', positive: '#f97316', unknown: '#6b7280' }[pacing.splitType] ?? '#6b7280' }}>
+                {pacing.splitType === 'negative' ? 'Negative split' : pacing.splitType === 'even' ? 'Even split' : pacing.splitType === 'positive' ? 'Positive split' : '—'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>HR DRIFT</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: Math.abs(pacing.hrDrift) > 10 ? '#f97316' : '#4ade80' }}>
+                {pacing.hrDrift > 0 ? '+' : ''}{pacing.hrDrift}%
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>CONSISTENCY</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: { excellent: '#4ade80', good: '#60a5fa', erratic: '#f97316' }[pacing.paceConsistency] ?? '#6b7280' }}>
+                {pacing.paceConsistency}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{

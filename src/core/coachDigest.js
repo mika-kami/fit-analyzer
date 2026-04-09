@@ -1,4 +1,6 @@
 import { calcTrainingLoad } from './trainingEngine.js';
+import { buildLabDigest } from './labTracker.js';
+import { detectMedicationImpact } from './workoutAnalyzer.js';
 
 function clean(value) {
   if (value == null) return '';
@@ -40,7 +42,7 @@ function fmtDuration(seconds) {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-export function buildAthleteDigest(profile = {}, medDocs = []) {
+export function buildAthleteDigest(profile = {}, medDocs = [], labValues = []) {
   const medical = profile?.medical ?? {};
   const parts = [];
 
@@ -75,6 +77,14 @@ export function buildAthleteDigest(profile = {}, medDocs = []) {
     .filter(Boolean)
     .slice(0, 3);
   if (findings.length) parts.push(`medical findings: ${findings.join(' | ')}`);
+
+  // Medication impact note
+  const medImpact = detectMedicationImpact(medical);
+  if (medImpact) pushIf(parts, medImpact.note);
+
+  // Lab trends
+  const labDigest = buildLabDigest(labValues);
+  if (labDigest) pushIf(parts, labDigest);
 
   if (!parts.length) return 'Athlete digest: no profile details provided yet.';
   return `Athlete digest: ${parts.join('. ')}.`;

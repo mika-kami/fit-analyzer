@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardLabel } from './tabs/OverviewTab.jsx';
 import { computeReadinessScore, computeTrainingStatus } from '../core/coachEngine.js';
 import { supabase } from '../lib/supabase.js';
+import { GearPanel } from './GearPanel.jsx';
+import { flaggedMarkers, ENDURANCE_MARKERS, trendAnalysis, parseLabValuesFromAI } from '../core/labTracker.js';
 
 const AI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const AI_URL     = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
@@ -29,7 +31,14 @@ async function analyzeDocumentWithAI(doc) {
   const isPdf   = type === 'application/pdf';
   const isText  = type.startsWith('text/') || doc.file_name?.endsWith('.txt');
 
-  const EXTRACT_PROMPT = `You are a medical document analyzer for a sports coaching app. Extract ONLY the clinically relevant findings that affect athletic training and performance. Be concise — output a single paragraph of key values, diagnoses, and flags. Format: "Metric: value (status), ..." Example: "Ferritin: 28 ng/mL (low), Vitamin D: 18 ng/mL (deficient), TSH: 2.1 mIU/L (normal), RBC: 4.8 M/μL (normal), no anemia." If the document is not a medical record, say "Not a medical document." Do not include patient personal data (name, DOB, address, ID numbers).`;
+  const EXTRACT_PROMPT = `You are a medical document analyzer for a sports coaching app. Extract clinically relevant findings that affect athletic training and performance.
+
+Output TWO sections:
+1. A single paragraph summary: "Metric: value (status), ..." e.g. "Ferritin: 28 ng/mL (low), Vitamin D: 18 ng/mL (deficient), TSH: 2.1 mIU/L (normal)."
+2. If the document contains lab values, output a JSON block: {"labValues": [{"marker": "ferritin", "value": 28, "unit": "ng/mL", "refLow": 12, "refHigh": 300, "flagged": true}]}
+
+Known markers: ferritin, hemoglobin, vitamin_d, tsh, crp, cortisol_am, testosterone, creatine_kinase, hematocrit, b12.
+If the document is not a medical record, say "Not a medical document." Do not include patient personal data (name, DOB, address, ID numbers).`;
 
   let messages;
 
@@ -78,10 +87,26 @@ async function analyzeDocumentWithAI(doc) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+const GEAR_KEY = (userId) => `gear_items_v1_${userId ?? 'anon'}`;
+
+function useGear(userId) {
+  const key = GEAR_KEY(userId);
+  const [gear, setGear] = useState(() => { try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; } });
+  const save = useCallback((items) => { setGear(items); try { localStorage.setItem(key, JSON.stringify(items)); } catch {} }, [key]);
+  const addGear = useCallback((item) => {
+    save([...gear, { ...item, id: `gear_${Date.now()}`, total_distance_m: 0, total_sessions: 0, is_retired: false, added_at: new Date().toISOString() }]);
+  }, [gear, save]);
+  const retireGear = useCallback((id) => {
+    save(gear.map(g => g.id === id ? { ...g, is_retired: true } : g));
+  }, [gear, save]);
+  return { gear, addGear, retireGear };
+}
+
 export function ProfilePage({ user, coach, onBack, onSignOut }) {
   const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
   const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
   const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
+  const { gear, addGear, retireGear } = useGear(user?.id);
 
   useEffect(() => { setProfileDraft(coach?.profile ?? {}); }, [coach?.profile]);
   useEffect(() => { if (coach?.getDailyCheckin) setCheckinDraft(coach.getDailyCheckin(todayIso)); }, [coach, todayIso]);
@@ -127,6 +152,13 @@ export function ProfilePage({ user, coach, onBack, onSignOut }) {
         <MedicalProfileCard medical={profileDraft.medical ?? {}} onChange={med => setProfileDraft(p => ({ ...p, medical: { ...(p.medical ?? {}), ...med } }))} onSave={() => coach?.saveProfile?.(profileDraft)} />
         <MedicalDocumentsCard userId={user?.id} onDigestChanged={() => coach?.rebuildAthleteDigest?.(profileDraft)} />
         <ReadinessCheckinCard checkin={checkinDraft} onChange={setCheckinDraft} onSave={() => coach?.saveDailyCheckin?.(todayIso, checkinDraft)} />
+
+        <LabMarkersCard labValues={coach?.labValues ?? []} />
+
+        <Card>
+          <CardLabel>Gear Tracker</CardLabel>
+          <GearPanel gear={gear} onAdd={addGear} onRetire={retireGear} />
+        </Card>
 
         {onSignOut && (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -312,6 +344,14 @@ function MedicalDocumentsCard({ userId, onDigestChanged }) {
       if (findings) {
         setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, key_findings: findings, share_with_coach: true } : d));
         await supabase.from('medical_documents').update({ key_findings: findings, share_with_coach: true }).eq('id', doc.id);
+
+        // Parse and store structured lab values if present
+        const labValues = parseLabValuesFromAI(findings, doc.id);
+        if (labValues.length > 0 && userId) {
+          const rows = labValues.map(v => ({ ...v, user_id: userId, test_date: doc.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10) }));
+          await supabase.from('lab_values').upsert(rows, { onConflict: 'document_id,marker' });
+        }
+
         if (onDigestChanged) await onDigestChanged();
       }
     } catch (e) {
@@ -319,7 +359,7 @@ function MedicalDocumentsCard({ userId, onDigestChanged }) {
     } finally {
       setAnalyzingId(null);
     }
-  }, [onDigestChanged]);
+  }, [userId, onDigestChanged]);
 
   const fmtSize = (bytes) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   const canAnalyze = (doc) => {
@@ -454,6 +494,46 @@ function ReadinessCheckinCard({ checkin, onChange, onSave }) {
         <Field label="Resting HR Delta (bpm)"><input type="number" min="-20" max="30" value={checkin.restingHrDelta ?? 0} onChange={e => set('restingHrDelta', Number(e.target.value || 0))} style={inputStyle} /></Field>
       </div>
       <SaveRow onSave={onSave} />
+    </Card>
+  );
+}
+
+// ── Lab Markers Card ──────────────────────────────────────────────────────────
+
+const TREND_COLOR = { improving: '#4ade80', declining: '#f97316', stable: '#60a5fa' };
+const ALERT_COLORS = { low: '#f97316', high: '#ef4444', optimal: '#4ade80' };
+
+function LabMarkersCard({ labValues }) {
+  if (!labValues || labValues.length === 0) return null;
+
+  const flagged = flaggedMarkers(labValues);
+  const allMarkers = Object.keys(ENDURANCE_MARKERS);
+  const markersWithData = allMarkers.filter(k => labValues.some(v => v.marker === k));
+  if (markersWithData.length === 0) return null;
+
+  return (
+    <Card>
+      <CardLabel>Lab Markers</CardLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--sp-2)' }}>
+        {markersWithData.map(key => {
+          const meta = ENDURANCE_MARKERS[key];
+          const trend = trendAnalysis(labValues, key);
+          const flag = flagged.find(f => f.marker === key);
+          const alertColor = flag ? (flag.value < meta.athleteLow ? ALERT_COLORS.low : ALERT_COLORS.high) : ALERT_COLORS.optimal;
+          return (
+            <div key={key} style={{ background: 'var(--bg-raised)', border: `1px solid ${alertColor}30`, borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{key.replace(/_/g, ' ').toUpperCase()}</div>
+                {trend && trend.trend !== 'insufficient' && <div style={{ fontSize: 10, color: TREND_COLOR[trend.trend] ?? '#6b7280', fontFamily: 'var(--font-mono)' }}>{trend.trend === 'improving' ? '↑' : '↓'}</div>}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: alertColor, fontFamily: 'var(--font-display)', marginTop: 2 }}>
+                {trend?.lastValue ?? '—'} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>{meta.unit}</span>
+              </div>
+              {flag && <div style={{ fontSize: 10, color: alertColor, fontFamily: 'var(--font-mono)', marginTop: 2 }}>{meta.warning}</div>}
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }

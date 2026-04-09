@@ -6,12 +6,14 @@
 import { useState, useEffect }                                           from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardLabel }  from './OverviewTab.jsx';
+import { detectMedicationImpact } from '../../core/workoutAnalyzer.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Zones
 // ═══════════════════════════════════════════════════════════════════════════════
-export function ZonesTab({ workout: w }) {
+export function ZonesTab({ workout: w, medicalProfile }) {
   const [model, setModel] = useState('garmin5');
+  const medImpact = detectMedicationImpact(medicalProfile);
   const multi = w.multiZones ?? {};
   const zones = multi[model] ?? [];
   const lt2   = w.thresholdHr || 0;
@@ -51,6 +53,17 @@ export function ZonesTab({ workout: w }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+
+      {/* Medication adjustment banner */}
+      {medImpact && (
+        <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderLeft: '3px solid #fbbf24', borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#fbbf24', marginBottom: 3 }}>Zone adjustment active</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{medImpact.note}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+            Max HR reduced ~{Math.round(medImpact.hrReduction * 100)}% · zone boundaries shifted accordingly
+          </div>
+        </div>
+      )}
 
       {/* Model switcher */}
       <div style={{ display: 'flex', gap: 6 }}>

@@ -10,7 +10,9 @@ import { ZoneBar }                                       from '../ZoneBar.jsx';
 import { fmtKm, fmtDuration, fmtDurationShort, fmtNum } from '../../core/format.js';
 import { downloadGPX } from '../../core/gpxExport.js';
 import { computeAerobicEfficiency, computeVAM, detectClimbs } from '../../core/workoutAnalyzer.js';
-import { buildCoachTake } from '../../core/coachVerdicts.js';
+import { buildCoachTake, buildAutoVerdict } from '../../core/coachVerdicts.js';
+import { requestAutoVerdict } from '../../hooks/useOpenAI.js';
+import { findRouteMatches, compareRoutePerformance } from '../../core/routeMatcher.js';
 
 // ─── Shared card wrapper ─────────────────────────────────────────────────────
 export function Card({ children, style = {} }) {
@@ -80,10 +82,32 @@ export function RecCard({ rec }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Overview
 // ═══════════════════════════════════════════════════════════════════════════════
-export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading }) {
+export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading, history }) {
   const [zonesReady, setZonesReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setZonesReady(true), 200); return () => clearTimeout(t); }, []);
   const coachTake = buildCoachTake(w);
+
+  // Auto-verdict: deterministic first, then AI if warranted
+  const complianceResult = w?.complianceResult ?? null;
+  const deterministicVerdict = buildAutoVerdict(w, complianceResult);
+  const [aiVerdict, setAiVerdict] = useState(w?.autoVerdict ?? null);
+  useEffect(() => {
+    if (!w) return;
+    // Use cached if available
+    if (w.autoVerdict) { setAiVerdict(w.autoVerdict); return; }
+    const te = w.trainingEffect?.aerobic ?? 0;
+    const loadLevel = w.load?.level;
+    const shouldDeepAnalyze = te >= 4.0 || complianceResult?.verdict === 'off_target' || loadLevel === 'high';
+    if (!shouldDeepAnalyze) return;
+    requestAutoVerdict(w, complianceResult).then(v => { if (v) setAiVerdict(v); }).catch(() => {});
+  }, [w?.date]);
+  const verdict = aiVerdict ?? deterministicVerdict;
+
+  // Route comparison
+  const historyWorkouts = history?.history ?? [];
+  const routeMatches = w?.routeFingerprint ? findRouteMatches(w.routeFingerprint, historyWorkouts.filter(h => h.date !== w.date)) : [];
+  const bestMatch = routeMatches[0] ?? null;
+  const routeComparison = bestMatch ? compareRoutePerformance(w, bestMatch.workout) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
@@ -97,6 +121,43 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
         <MetricCard label="Ascent"          value={w.elevation.ascent}     unit="m"      sub={`−${w.elevation.descent} m`} accent="var(--z3)" />
         <MetricCard label="Calories"        value={w.calories}             unit="kcal"   accent="var(--warning)" />
       </div>
+
+      {/* Route comparison */}
+      {routeComparison && (
+        <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderLeft: '3px solid #60a5fa', borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)' }}>
+          <div style={{ fontSize: 9, color: '#60a5fa', fontFamily: 'var(--font-mono)', marginBottom: 6, letterSpacing: '0.1em' }}>SAME ROUTE · vs {routeComparison.date.previous}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--sp-2)' }}>
+            {[
+              { label: 'Speed', delta: routeComparison.speedDelta, unit: 'km/h', better: routeComparison.speedDelta > 0 },
+              { label: 'Avg HR', delta: routeComparison.hrDelta, unit: 'bpm', better: routeComparison.hrDelta < 0 },
+              { label: 'Efficiency', delta: routeComparison.aeDelta, unit: '', better: routeComparison.aeDelta > 0 },
+            ].map(m => m.delta != null && (
+              <div key={m.label} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{m.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: m.better ? '#4ade80' : '#f97316' }}>
+                  {m.delta > 0 ? '+' : ''}{typeof m.delta === 'number' ? m.delta.toFixed(m.unit === '' ? 3 : 1) : '—'}{m.unit}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Auto-verdict card */}
+      {verdict && (
+        <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderLeft: '3px solid var(--accent)', borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)' }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 6, letterSpacing: '0.1em' }}>SESSION VERDICT{aiVerdict && !aiVerdict.deterministic ? ' · AI' : ''}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>{verdict.line1}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{verdict.line2}</div>
+          {complianceResult && (
+            <div style={{ marginTop: 6, display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: { nailed_it: '#4ade80', close: '#fbbf24', off_target: '#f97316', skipped: '#ef4444' }[complianceResult.verdict] ?? 'var(--text-muted)' }}>
+                Plan: {complianceResult.score}% — {complianceResult.verdict.replace('_', ' ')}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Training Effect */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
@@ -308,7 +369,6 @@ export function CyclingAnalytics({ workout: w }) {
 }
 
 function PowerSummary({ workout: w }) {
-  const ts = w.timeSeries ?? [];
   // Compute power distribution from timeSeries if available
   // Otherwise just show avg/max
   return (

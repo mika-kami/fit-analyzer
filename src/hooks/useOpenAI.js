@@ -250,6 +250,40 @@ Answer in English or Russian, matching the user's language.`;
   return sections.filter(Boolean).join('\n\n');
 }
 
+// ── Auto-verdict (single-shot, non-chat) ─────────────────────────────────────
+
+export async function requestAutoVerdict(workout, complianceResult) {
+  if (!API_KEY || !workout) return null;
+  const z1 = Number(workout?.hrZones?.[0]?.pct ?? 0);
+  const z2 = Number(workout?.hrZones?.[1]?.pct ?? 0);
+  const snap = [
+    `sport:${workout.sportLabel ?? workout.sport}`,
+    `dist:${((workout.distance ?? 0) / 1000).toFixed(1)}km`,
+    `te:${workout.trainingEffect?.aerobic?.toFixed(1)}`,
+    `z1z2:${Math.round(z1 + z2)}%`,
+    `hr:${workout.heartRate?.avg}bpm`,
+  ].join(' ');
+  const compStr = complianceResult
+    ? `Plan compliance: ${complianceResult.score}% (${complianceResult.verdict})`
+    : 'No plan data';
+  const prompt = `Coach. Session: ${snap}. ${compStr}. Return JSON: { line1: '≤12 words — what happened', line2: '≤12 words — what to do next' }`;
+  try {
+    const res = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({ model: MODEL, max_completion_tokens: 80, messages: [{ role: 'user', content: prompt }] }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim() ?? '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage, athleteDigest, options = {}) {

@@ -17,6 +17,18 @@
 //   - Rebuild phases after detraining use progressive overload starting at 50-60%
 //     of previous volume.
 
+// ─── Session intent metadata ──────────────────────────────────────────────────
+// Added to each plan day so compliance and pacing engines know what was intended.
+export const SESSION_INTENTS = {
+  rest:     { maxHr: null,          targetZone: null,     pacingStrategy: null       },
+  recovery: { maxHr: 'z1_ceiling',  targetZone: 'z1',     pacingStrategy: 'even'     },
+  aerobic:  { maxHr: 'z2_ceiling',  targetZone: 'z1-z2',  pacingStrategy: 'even'     },
+  tempo:    { maxHr: 'z3_ceiling',  targetZone: 'z3',     pacingStrategy: 'even'     },
+  interval: { maxHr: null,          targetZone: 'z4-z5',  pacingStrategy: 'intervals'},
+  long:     { maxHr: 'z2_ceiling',  targetZone: 'z1-z2',  pacingStrategy: 'negative_split' },
+  test:     { maxHr: null,          targetZone: 'z1-z2',  pacingStrategy: 'even'     },
+};
+
 export const TYPE_COLOR = {
   rest:     '#374151',
   recovery: '#4ade80',
@@ -218,6 +230,162 @@ export const PHASE_PLANS = {
 };
 
 
+// ── Mesocycle helpers ─────────────────────────────────────────────────────────
+
+function _addDaysToIso(isoDate, n) {
+  const d = new Date(isoDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function phaseForWeek(weekIndex, totalWeeks) {
+  if (totalWeeks <= 0) return 'base';
+  const ratio = weekIndex / totalWeeks;
+  if (ratio < 0.40) return 'base';
+  if (ratio < 0.70) return 'build';
+  if (ratio < 0.85) return 'peak';
+  return 'taper';
+}
+
+export function isRecoveryWeek(weekIndex) {
+  return (weekIndex + 1) % 4 === 0;
+}
+
+export function computeWeekVolume(weekIndex, totalWeeks, peakKm) {
+  if (isRecoveryWeek(weekIndex)) return Math.round(peakKm * 0.40);
+  const phase = phaseForWeek(weekIndex, totalWeeks);
+  if (phase === 'taper') {
+    const taperStart = Math.floor(totalWeeks * 0.85);
+    const taperPos   = weekIndex - taperStart;
+    const factors    = [0.75, 0.60, 0.40, 0.25];
+    return Math.round(peakKm * (factors[Math.min(taperPos, factors.length - 1)] ?? 0.25));
+  }
+  const baseEnd  = Math.floor(totalWeeks * 0.40);
+  const buildEnd = Math.floor(totalWeeks * 0.70);
+  if (phase === 'base') {
+    const pos = weekIndex / Math.max(baseEnd, 1);
+    return Math.round(peakKm * (0.50 + pos * 0.25));
+  }
+  if (phase === 'build') {
+    const pos = (weekIndex - baseEnd) / Math.max(buildEnd - baseEnd, 1);
+    return Math.round(peakKm * (0.75 + pos * 0.15));
+  }
+  // peak
+  const peakEnd = Math.floor(totalWeeks * 0.85);
+  const pos = (weekIndex - buildEnd) / Math.max(peakEnd - buildEnd, 1);
+  return Math.round(peakKm * (0.90 + pos * 0.10));
+}
+
+export const PHASE_COLORS = {
+  base:     '#60a5fa',
+  build:    '#f97316',
+  peak:     '#ef4444',
+  taper:    '#4ade80',
+  recovery: '#6b7280',
+};
+
+export const PHASE_LABELS = {
+  base:     'Base Building',
+  build:    'Build Phase',
+  peak:     'Peak Phase',
+  taper:    'Taper',
+  recovery: 'Recovery',
+};
+
+function _templateKeyForPhase(phase, load, zones) {
+  if (phase === 'base')     return 'base_rebuild';
+  if (phase === 'build')    return (load?.tsb < -20 || zones?.balance === 'overreached') ? 'overreached' : 'active';
+  if (phase === 'peak')     return load?.tsb < -20 ? 'overreached' : 'too_easy';
+  if (phase === 'taper')    return 'significant';
+  return 'base_rebuild';
+}
+
+function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, phase) {
+  const cfg         = sportConfig(workout);
+  const T           = cfg.templates;
+  const load        = calcTrainingLoad(historyWorkouts);
+  const zones       = analyzeRecentZones(historyWorkouts);
+  const templateKey = _templateKeyForPhase(phase, load, zones);
+  const planFn      = PHASE_PLANS[templateKey] ?? PHASE_PLANS.base_rebuild;
+  const rawDays     = planFn(T, weekVolKm);
+
+  const weekStart = new Date(weekStartIso + 'T00:00:00Z');
+  return rawDays.map((d, i) => {
+    const dayDate = new Date(weekStart);
+    dayDate.setUTCDate(weekStart.getUTCDate() + i);
+    const dateIso = dayDate.toISOString().slice(0, 10);
+    return {
+      ...d,
+      day:     DAY_LABELS[i],
+      date:    dateIso.slice(5).replace('-', '/'),
+      dateIso,
+      dow:     i,
+      color:   TYPE_COLOR[d.type] ?? '#6b7280',
+      intent:  SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
+    };
+  });
+}
+
+/**
+ * generateMesocycle — public API for multi-week plan generation.
+ * Returns { weeks[], currentWeekIndex, meta }.
+ */
+export function generateMesocycle(profile, historyWorkouts = []) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  let goalDate   = profile?.goalDate ?? '';
+  let totalWeeks;
+
+  if (goalDate) {
+    const msUntilGoal = new Date(goalDate) - new Date(todayIso);
+    const daysUntilGoal = Math.ceil(msUntilGoal / 86400000);
+    totalWeeks = Math.ceil(daysUntilGoal / 7);
+    totalWeeks = Math.min(16, Math.max(4, totalWeeks));
+  } else {
+    totalWeeks = 4;
+    goalDate   = _addDaysToIso(todayIso, 28);
+  }
+
+  // Determine peak km from history + detraining
+  const refKm      = refWeeklyKm(historyWorkouts);
+  const detraining = assessDetraining(historyWorkouts);
+  const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
+  const cfg        = sportConfig(sportObj);
+  const floor      = cfg.weekFloors['active'] ?? cfg.defaultWeek;
+  const baseKm     = refKm > 0 ? Math.max(refKm * detraining.factor, floor) : floor;
+  const peakKm     = Math.round(baseKm * 1.25);
+
+  // Start mesocycle from current Monday
+  const todayJs = new Date(todayIso + 'T00:00:00Z');
+  const todayDow = todayJs.getUTCDay(); // 0=Sun...6=Sat
+  const daysToMon = todayDow === 0 ? -6 : 1 - todayDow;
+  const msStart = new Date(todayJs);
+  msStart.setUTCDate(todayJs.getUTCDate() + daysToMon);
+  const msStartIso = msStart.toISOString().slice(0, 10);
+
+  const weeks = [];
+  for (let w = 0; w < totalWeeks; w++) {
+    const weekStartIso = _addDaysToIso(msStartIso, w * 7);
+    const weekEndIso   = _addDaysToIso(weekStartIso, 6);
+    const phase        = phaseForWeek(w, totalWeeks);
+    const isRecovery   = isRecoveryWeek(w);
+    const weekKm       = computeWeekVolume(w, totalWeeks, peakKm);
+    const effectPhase  = isRecovery ? 'recovery' : phase;
+    const days         = _generateWeekDays(sportObj, historyWorkouts, weekStartIso, weekKm, effectPhase);
+    weeks.push({ weekIndex: w, startDate: weekStartIso, endDate: weekEndIso, phase, isRecovery, targetKm: weekKm, days });
+  }
+
+  const currentWeekIndex = Math.max(0, weeks.findIndex(wk => todayIso >= wk.startDate && todayIso <= wk.endDate));
+  const msEndIso = weeks.length ? weeks[weeks.length - 1].endDate : _addDaysToIso(msStartIso, totalWeeks * 7 - 1);
+
+  return {
+    weeks,
+    currentWeekIndex,
+    meta: { totalWeeks, peakKm, startDate: msStartIso, endDate: msEndIso, goalDate, goal: profile?.primaryGoal ?? '', sport: profile?.targetSport ?? 'mixed' },
+  };
+}
+
+// Legacy entry point kept for backward compat — internal plan generation.
 export function generateTrainingPlan(workout, historyWorkouts = [], startDow = null) {
   const detraining = assessDetraining(historyWorkouts);
   const load       = calcTrainingLoad(historyWorkouts);
@@ -255,14 +423,16 @@ export function generateTrainingPlan(workout, historyWorkouts = [], startDow = n
   const days = rawDays.map((d, i) => {
     const dayDow  = (dow0 + i) % 7;
     const date    = new Date(today);
-    date.setDate(today.getDate() + i);          // absolute calendar date
-    const dateStr = date.toISOString().slice(5, 10).replace('-', '/'); // MM/DD
+    date.setDate(today.getDate() + i);
+    const dateStr = date.toISOString().slice(5, 10).replace('-', '/');
     return {
       ...d,
       day:        DAY_LABELS[dayDow],
       date:       dateStr,
+      dateIso:    date.toISOString().slice(0, 10),
       dow:        dayDow,
       color:      TYPE_COLOR[d.type] ?? '#6b7280',
+      intent:     SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
       isToday:    i === 0 && dow0 === todayDow,
       isTomorrow: i === 0 && dow0 === (todayDow + 1) % 7,
     };

@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { parseFit } from '../core/fitParser.js';
 import { buildWorkoutModel } from '../core/workoutAnalyzer.js';
+import { findPlannedDay, computeCompliance } from '../core/complianceEngine.js';
+import { fingerprint as routeFingerprint } from '../core/routeMatcher.js';
 
 // Convert WorkoutModel → DB row
 function toRow(workout, userId) {
@@ -108,10 +110,14 @@ function dataRichness(w) {
   return score;
 }
 
-export function useWorkouts(user) {
+export function useWorkouts(user, mesocycle = null) {
   const [history,   setHistory]   = useState([]);
   const [loadingDb, setLoadingDb] = useState(true);
   const [error,     setError]     = useState(null);
+
+  // Keep a stable ref so callbacks always see latest mesocycle
+  const mesocycleRef = { current: mesocycle };
+  mesocycleRef.current = mesocycle;
 
   // Load workouts from Supabase on mount / user change
   useEffect(() => {
@@ -134,7 +140,26 @@ export function useWorkouts(user) {
   const saveWorkout = useCallback(async (workout, fitFile = null) => {
     if (!user) return false;
     try {
-      const row = toRow(workout, user.id);
+      // Attach compliance if mesocycle is available
+      const plannedDay = findPlannedDay(mesocycleRef.current, workout.date);
+      const complianceResult = plannedDay ? computeCompliance(plannedDay, workout) : null;
+
+      // Attach route fingerprint
+      const fp = routeFingerprint(workout.timeSeries);
+
+      const enrichedWorkout = {
+        ...workout,
+        complianceResult,
+        routeFingerprint: fp,
+      };
+
+      const row = toRow(enrichedWorkout, user.id);
+      // Store compliance + fingerprint in summary_json
+      row.summary_json = {
+        ...row.summary_json,
+        complianceResult,
+        routeFingerprint: fp,
+      };
 
       // Upload FIT to Storage if provided
       if (fitFile) {
