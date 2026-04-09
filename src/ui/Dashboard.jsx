@@ -1,11 +1,11 @@
 /**
  * Dashboard.jsx — Home screen showing workout history.
- * Primary entry point of the app. Replaces the upload-first flow.
- * Shows saved workouts, quick stats, and load options.
+ * Uses AppHeader from Shell.jsx for a consistent header across all screens.
  */
 import { useState, useRef } from 'react';
 import { BulkUploadModal } from './BulkUploadModal.jsx';
 import { CoachBriefingCard } from './CoachBriefingCard.jsx';
+import { AppHeader } from './Shell.jsx';
 
 const LOAD_COLOR = {
   high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151'
@@ -38,11 +38,11 @@ function PeriodStats({ workouts }) {
   const avgTE    = workouts.reduce((s, w) => s + (w.trainingEffect?.aerobic ?? 0), 0) / workouts.length;
 
   const stats = [
-    { label: 'Workouts', value: workouts.length, unit: '' },
-    { label: 'Distance',  value: totalKm.toFixed(0), unit: 'km' },
-    { label: 'Time',      value: fmtDur(totalH * 3600), unit: '' },
-    { label: 'Ascent',      value: Math.round(totalAsc).toLocaleString(), unit: 'm' },
-    { label: 'Avg TE',    value: avgTE.toFixed(1), unit: '/5' },
+    { label: 'Workouts', value: workouts.length,              unit: ''   },
+    { label: 'Distance', value: totalKm.toFixed(0),           unit: 'km' },
+    { label: 'Time',     value: fmtDur(totalH * 3600),        unit: ''   },
+    { label: 'Ascent',   value: Math.round(totalAsc).toLocaleString(), unit: 'm' },
+    { label: 'Avg TE',   value: avgTE.toFixed(1),             unit: '/5' },
   ];
 
   return (
@@ -54,11 +54,8 @@ function PeriodStats({ workouts }) {
     }}>
       {stats.map(s => (
         <div key={s.label} style={{
-          background: 'var(--bg-overlay)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--r-md)',
-          padding: 'var(--sp-3) var(--sp-3)',
-          textAlign: 'center',
+          background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--r-md)', padding: 'var(--sp-3)', textAlign: 'center',
         }}>
           <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{s.label}</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', lineHeight: 1 }}>
@@ -90,40 +87,29 @@ function WorkoutCard({ w, onSelect, onDelete }) {
         position: 'relative',
       }}
     >
-      {/* Load bar on left edge */}
       <div style={{
         position: 'absolute', left: 0, top: 16, bottom: 16,
         width: 3, borderRadius: '0 2px 2px 0',
         background: loadColor, opacity: 0.8,
       }} />
-
       <div style={{ paddingLeft: 'var(--sp-3)' }}>
-        {/* Header row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--sp-2)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
             <span style={{ fontSize: 18 }}>{sportIcon(w.sport)}</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                {w.sport}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {w.date} · {w.startTime}
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>{w.sport}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{w.date} · {w.startTime}</div>
             </div>
           </div>
           <button
             onClick={e => { e.stopPropagation(); onDelete(w.date); }}
             style={{
-              background: 'none', border: 'none',
-              color: 'var(--text-dim)', fontSize: 16,
+              background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 16,
               cursor: 'pointer', padding: '2px 6px',
-              opacity: hovered ? 0.6 : 0,
-              transition: 'opacity var(--t-base)',
+              opacity: hovered ? 0.6 : 0, transition: 'opacity var(--t-base)',
             }}
           >×</button>
         </div>
-
-        {/* Metrics row */}
         <div style={{ display: 'flex', gap: 'var(--sp-5)', flexWrap: 'wrap' }}>
           {[
             { v: `${(w.distance / 1000).toFixed(1)} km` },
@@ -133,8 +119,7 @@ function WorkoutCard({ w, onSelect, onDelete }) {
             { v: `TE ${w.trainingEffect?.aerobic?.toFixed(1) ?? '—'}`, accent: true },
           ].map((m, i) => (
             <span key={i} style={{
-              fontSize: 12,
-              fontFamily: 'var(--font-mono)',
+              fontSize: 12, fontFamily: 'var(--font-mono)',
               color: m.accent ? 'var(--accent)' : 'var(--text-secondary)',
               fontWeight: m.accent ? 600 : 400,
             }}>{m.v}</span>
@@ -145,19 +130,27 @@ function WorkoutCard({ w, onSelect, onDelete }) {
   );
 }
 
-// ── Drop zone for file upload ─────────────────────────────────────────────────
+// ── Drop zone ─────────────────────────────────────────────────────────────────
 function DropZone({ onFile, onBulk, isLoading, compact }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef();
 
   const onDrop = e => {
     e.preventDefault(); setDrag(false);
-    const fitFiles = Array.from(e.dataTransfer.files).filter(
-      f => f.name.toLowerCase().endsWith('.fit')
-    );
+    const fitFiles = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
     if (fitFiles.length === 1) onFile(fitFiles[0]);
     else if (fitFiles.length > 1) onBulk(fitFiles);
   };
+
+  const fileInput = (
+    <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
+      onChange={e => {
+        const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
+        if (fitFiles.length === 1) onFile(fitFiles[0]);
+        else if (fitFiles.length > 1) onBulk(fitFiles);
+        e.target.value = '';
+      }} />
+  );
 
   if (compact) {
     return (
@@ -165,26 +158,17 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
         onClick={() => inputRef.current?.click()}
         disabled={isLoading}
         style={{
-          background: 'var(--bg-overlay)',
-          border: '1px dashed var(--border-mid)',
-          borderRadius: 'var(--r-md)',
-          padding: 'var(--sp-3) var(--sp-4)',
-          color: 'var(--text-secondary)',
-          fontSize: 13, cursor: isLoading ? 'wait' : 'pointer',
+          background: 'var(--bg-overlay)', border: '1px dashed var(--border-mid)',
+          borderRadius: 'var(--r-md)', padding: 'var(--sp-3) var(--sp-4)',
+          color: 'var(--text-secondary)', fontSize: 13,
+          cursor: isLoading ? 'wait' : 'pointer',
           fontFamily: 'var(--font-body)',
-          display: 'flex', alignItems: 'center', gap: 8,
-          width: '100%',
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
           transition: 'all var(--t-base) var(--ease-snappy)',
         }}
       >
         {isLoading ? '⏳ Loading...' : '↑ Upload FIT (multiple files allowed)'}
-        <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
-          onChange={e => {
-            const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
-            if (fitFiles.length === 1) onFile(fitFiles[0]);
-            else if (fitFiles.length > 1) onBulk(fitFiles);
-            e.target.value = '';
-          }} />
+        {fileInput}
       </button>
     );
   }
@@ -197,9 +181,7 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
       onClick={() => inputRef.current?.click()}
       style={{
         border: `2px dashed ${drag ? 'var(--accent)' : 'var(--border-mid)'}`,
-        borderRadius: 'var(--r-lg)',
-        padding: 'var(--sp-10)',
-        textAlign: 'center',
+        borderRadius: 'var(--r-lg)', padding: 'var(--sp-10)', textAlign: 'center',
         cursor: isLoading ? 'wait' : 'pointer',
         transition: 'all var(--t-base) var(--ease-snappy)',
         background: drag ? 'rgba(232,168,50,0.04)' : 'transparent',
@@ -212,13 +194,7 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
       <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
         Garmin · Wahoo · Polar · Suunto
       </div>
-      <input ref={inputRef} type="file" accept=".fit" multiple style={{ display: 'none' }}
-        onChange={e => {
-          const fitFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.fit'));
-          if (fitFiles.length === 1) onFile(fitFiles[0]);
-          else if (fitFiles.length > 1) onBulk(fitFiles);
-          e.target.value = '';
-        }} />
+      {fileInput}
     </div>
   );
 }
@@ -251,84 +227,20 @@ export function Dashboard({
   const now      = new Date();
   const cutoff   = new Date(now); cutoff.setDate(now.getDate() - period);
   const recent   = workouts.filter(w => new Date(w.date) >= cutoff);
-
-  const isEmpty = workouts.length === 0;
+  const isEmpty  = workouts.length === 0;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
-      {/* Header */}
-      <div style={{
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--bg-surface)',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div style={{
-          maxWidth: 760, margin: '0 auto',
-          padding: 'var(--sp-4) var(--sp-5)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>
-              ◈ FIT ANALYZER
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
-              Training history
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            {onProfile && (
-              <button onClick={onProfile} style={{
-                background: 'var(--bg-overlay)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
-                color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-              }}>Profile</button>
-            )}
-            {onPlans && (
-              <button onClick={onPlans} style={{
-                background: 'rgba(232,168,50,0.08)',
-                border: '1px solid rgba(232,168,50,0.25)',
-                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
-                color: 'var(--accent)', fontSize: 11, cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-              }}>Plans</button>
-            )}
-            {onStrava && (
-              <button onClick={onStrava} style={{
-                background: stravaStatus === 'connected' ? 'rgba(252,76,2,0.1)' : 'var(--bg-overlay)',
-                border: `1px solid ${stravaStatus === 'connected' ? 'rgba(252,76,2,0.35)' : 'var(--border-subtle)'}`,
-                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
-                color: stravaStatus === 'connected' ? '#fc4c02' : 'var(--text-secondary)',
-                fontSize: 11, cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-              }}>{stravaStatus === 'connected' ? '◈ Strava' : '⊕ Strava'}</button>
-            )}
-            {onGarmin && (
-              <button onClick={onGarmin} style={{
-                background: 'rgba(232,168,50,0.08)',
-                border: '1px solid rgba(232,168,50,0.25)',
-                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
-                color: 'var(--accent)', fontSize: 11, cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-              }}>⊕ Garmin</button>
-            )}
-            {onSignOut && (
-              <button onClick={onSignOut} style={{
-                background: 'none',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--r-md)', padding: 'var(--sp-2) var(--sp-3)',
-                color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-              }}>Log out</button>
-            )}
-          </div>
-        </div>
-      </div>
+      <AppHeader
+        title="Training history"
+        onProfile={onProfile}
+        onGarmin={onGarmin}
+        onStrava={onStrava}
+        stravaStatus={stravaStatus}
+        onSignOut={onSignOut}
+      />
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)' }}>
-
-        {/* Error */}
         {loadError && (
           <div style={{
             background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
@@ -341,7 +253,7 @@ export function Dashboard({
         )}
 
         {isEmpty ? (
-          /* ── Empty state ─────────────────────────────────────────────── */
+          /* ── Empty state ── */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
             <div style={{ textAlign: 'center', padding: 'var(--sp-6) 0' }}>
               <div style={{ fontSize: 48, marginBottom: 'var(--sp-3)' }}>🚴</div>
@@ -364,11 +276,11 @@ export function Dashboard({
               color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
               fontFamily: 'var(--font-body)',
             }}>
-              Open sample - 50 km, road cycling
+              Open sample — 50 km, road cycling
             </button>
           </div>
         ) : (
-          /* ── History view ────────────────────────────────────────────── */
+          /* ── History view ── */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
             <CoachBriefingCard
               briefing={coachBriefing}
@@ -442,4 +354,3 @@ export function Dashboard({
     </div>
   );
 }
-
