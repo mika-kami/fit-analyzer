@@ -122,10 +122,54 @@ function mapMesocycleFromDb(row) {
   const idx = weeks.findIndex((wk) => today >= wk?.startDate && today <= wk?.endDate);
 
   return {
+    id: row.id ?? null,
     weeks,
     meta,
+    revisionNo: row.revision_no ?? null,
+    status: row.status ?? null,
+    effectiveFrom: row.effective_from ?? null,
+    lockedBeforeDate: row.locked_before_date ?? null,
     currentWeekIndex: Math.max(0, idx),
   };
+}
+
+function addDaysIso(isoDate, delta) {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function firstUncompletedPlannedDate(weeks = [], historyWorkouts = [], todayIsoValue = todayIso()) {
+  const done = new Set((historyWorkouts || []).map((w) => w?.date).filter(Boolean));
+  const planned = [];
+  for (const wk of weeks || []) {
+    for (const day of wk?.days || []) {
+      if (!day?.dateIso) continue;
+      if (day.type === 'rest') continue;
+      if (day.dateIso < todayIsoValue) continue;
+      planned.push(day.dateIso);
+    }
+  }
+  planned.sort();
+  const next = planned.find((d) => !done.has(d));
+  return next || todayIsoValue;
+}
+
+function mergeWeeksByPivot(oldWeeks = [], newWeeks = [], pivotDate) {
+  const oldByDate = new Map();
+  for (const wk of oldWeeks || []) {
+    for (const d of wk?.days || []) {
+      if (d?.dateIso) oldByDate.set(d.dateIso, d);
+    }
+  }
+  return (newWeeks || []).map((wk) => ({
+    ...wk,
+    days: (wk.days || []).map((d) => {
+      if (!d?.dateIso) return d;
+      if (d.dateIso < pivotDate && oldByDate.has(d.dateIso)) return oldByDate.get(d.dateIso);
+      return d;
+    }),
+  }));
 }
 
 export function useCoachState(userId) {
@@ -198,7 +242,7 @@ export function useCoachState(userId) {
         supabase.from('workout_reflections').select('*').eq('user_id', userId),
         supabase
           .from('mesocycles')
-          .select('weeks,meta')
+          .select('id,weeks,meta,revision_no,status,effective_from,locked_before_date')
           .eq('user_id', userId)
           .eq('is_active', true)
           .order('updated_at', { ascending: false })
@@ -356,49 +400,102 @@ export function useCoachState(userId) {
     }
   }, [persistLocal, state, userId]);
 
-  // Extracted helper so we can call it at two points: before and after enrichment.
-  const _saveMesocycleToDb = useCallback(async (mc) => {
-    if (!userId) return;
-    const payload = {
-      user_id:          userId,
-      goal_date:        mc.meta.goalDate || null,
-      goal_description: mc.meta.goal || null,
-      total_weeks:      mc.meta.totalWeeks,
-      weeks:            mc.weeks,
-      meta:             mc.meta,
-      is_active:        true,
-    };
+  const _commitMesocycleRevision = useCallback(async (mc, opts = {}) => {
+    if (!userId || !mc?.weeks?.length) return null;
+    const kind = opts.kind ?? 'initial';
+    const reason = opts.reason ?? 'manual_regenerate';
+    const historyWorkouts = opts.historyWorkouts ?? [];
     try {
-      const { data: activeRows, error } = await supabase
+      const { data: activeRows, error: activeError } = await supabase
         .from('mesocycles')
-        .select('id')
+        .select('id,revision_no,weeks,meta')
         .eq('user_id', userId)
         .eq('is_active', true)
         .limit(20);
-      if (error) throw error;
+      if (activeError) throw activeError;
+
+      const current = activeRows?.[0] ?? null;
+      const pivotDate = kind === 'future_adjustment'
+        ? firstUncompletedPlannedDate(current?.weeks || mc.weeks, historyWorkouts, todayIso())
+        : (mc.meta?.planStartDate || mc.meta?.startDate || todayIso());
+
+      const mergedWeeks = kind === 'future_adjustment'
+        ? mergeWeeksByPivot(current?.weeks || [], mc.weeks || [], pivotDate)
+        : mc.weeks;
+
+      const mergedMc = {
+        ...mc,
+        weeks: mergedWeeks,
+        meta: {
+          ...(mc.meta || {}),
+          revisionKind: kind,
+          pivotDate,
+        },
+      };
+
       if (activeRows?.length) {
-        await supabase.from('mesocycles').update(payload).in('id', activeRows.map(r => r.id));
-      } else {
-        await supabase.from('mesocycles').insert(payload);
+        await supabase
+          .from('mesocycles')
+          .update({
+            is_active: false,
+            status: 'superseded',
+            effective_to: addDaysIso(pivotDate, -1),
+          })
+          .in('id', activeRows.map((r) => r.id));
       }
+
+      const insertPayload = {
+        user_id: userId,
+        goal_date: mergedMc.meta.goalDate || null,
+        goal_description: mergedMc.meta.goal || null,
+        total_weeks: mergedMc.meta.totalWeeks,
+        weeks: mergedMc.weeks,
+        meta: mergedMc.meta,
+        is_active: true,
+        status: 'active',
+        revision_no: (current?.revision_no ?? 0) + 1,
+        parent_mesocycle_id: current?.id ?? null,
+        effective_from: pivotDate,
+        effective_to: null,
+        locked_before_date: pivotDate,
+        change_reason: reason,
+        plan_kind: kind,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('mesocycles')
+        .insert(insertPayload)
+        .select('id,revision_no,status,effective_from,locked_before_date')
+        .single();
+      if (insertError) throw insertError;
+
+      const committed = {
+        ...mergedMc,
+        id: inserted?.id ?? null,
+        revisionNo: inserted?.revision_no ?? null,
+        status: inserted?.status ?? 'active',
+        effectiveFrom: inserted?.effective_from ?? pivotDate,
+        lockedBeforeDate: inserted?.locked_before_date ?? pivotDate,
+      };
+      setMesocycle(committed);
+      writeMesocycle(mcKey, committed);
+      return committed;
     } catch (e) {
-      console.error('[useCoachState] mesocycle persistence failed', e);
+      console.error('[useCoachState] mesocycle commit failed', e);
+      return null;
     }
-  }, [userId]);
+  }, [userId, mcKey]);
 
   const regenerateMesocycle = useCallback(async (historyWorkouts = [], startDate = null, weather = null, profileOverrides = null) => {
     const profileForPlan = profileOverrides ? { ...state.profile, ...profileOverrides } : state.profile;
 
-    // 1. Generate synchronously and render immediately
+    // 1) Generate synchronously and show preview immediately.
     const mc = generateMesocycle(profileForPlan, historyWorkouts, startDate);
     setMesocycle(mc);
     writeMesocycle(mcKey, mc);
 
-    // 2. Save raw plan to DB immediately — guarantees new startDate is persisted
-    //    before the LLM enrichment (which can be slow or fail).
-    _saveMesocycleToDb(mc);
-
-    // 3. Enrich current week only (~2 000 tokens)
+    // 2) Enrich current week only (~2k tokens). If it fails, commit raw plan.
+    let finalMc = mc;
     const cwIdx = mc.currentWeekIndex ?? 0;
     const currentWeekDays = mc.weeks?.[cwIdx]?.days;
     if (currentWeekDays?.length) {
@@ -418,18 +515,61 @@ export function useCoachState(userId) {
             i === cwIdx ? { ...w, days: enrichedDays } : w
           ),
         };
-        setMesocycle(enrichedMc);
-        writeMesocycle(mcKey, enrichedMc);
-        // Update DB with enriched plan (AI descriptions)
-        _saveMesocycleToDb(enrichedMc);
-        return enrichedMc;
+        finalMc = enrichedMc;
       } catch {
-        // Silent fallback — raw algo plan already visible and already saved
+        // keep raw
       }
     }
 
-    return mc;
-  }, [state.profile, athleteDigest, mcKey, _saveMesocycleToDb]);
+    const committed = await _commitMesocycleRevision(finalMc, {
+      kind: 'initial',
+      reason: 'manual_regenerate',
+      historyWorkouts,
+    });
+    return committed || finalMc;
+  }, [state.profile, athleteDigest, mcKey, _commitMesocycleRevision]);
+
+  const updateFutureMesocycle = useCallback(async (historyWorkouts = [], weather = null, profileOverrides = null) => {
+    const profileForPlan = profileOverrides ? { ...state.profile, ...profileOverrides } : state.profile;
+    const existing = mesocycle;
+    const startDate = existing?.meta?.planStartDate || existing?.meta?.startDate || null;
+
+    const candidate = generateMesocycle(profileForPlan, historyWorkouts, startDate);
+    setMesocycle(candidate);
+    writeMesocycle(mcKey, candidate);
+
+    let finalCandidate = candidate;
+    const cwIdx = candidate.currentWeekIndex ?? 0;
+    const currentWeekDays = candidate.weeks?.[cwIdx]?.days;
+    if (currentWeekDays?.length) {
+      try {
+        const ctx = buildDescribeContext({
+          athleteDigest,
+          recentWorkouts: (historyWorkouts ?? []).slice(0, 6),
+          load: calcTrainingLoad(historyWorkouts ?? []),
+          readiness: null,
+          weather,
+          sport: candidate.meta?.sport ?? state.profile?.targetSport ?? 'running',
+        });
+        const enrichedDays = await describeWeekPlan(currentWeekDays, ctx);
+        finalCandidate = {
+          ...candidate,
+          weeks: candidate.weeks.map((w, i) =>
+            i === cwIdx ? { ...w, days: enrichedDays } : w
+          ),
+        };
+      } catch {
+        // keep raw
+      }
+    }
+
+    const committed = await _commitMesocycleRevision(finalCandidate, {
+      kind: 'future_adjustment',
+      reason: 'manual_update_future',
+      historyWorkouts,
+    });
+    return committed || finalCandidate;
+  }, [state.profile, mesocycle, mcKey, athleteDigest, _commitMesocycleRevision]);
 
   const enrichWeekDays = useCallback(async (weekIndex, weekDays, weather = null, historyWorkouts = [], sport = 'running') => {
     if (!weekDays?.length) return;
@@ -499,6 +639,7 @@ export function useCoachState(userId) {
     saveWeeklyPlan,
     mesocycle,
     regenerateMesocycle,
+    updateFutureMesocycle,
     enrichWeekDays,
     labValues,
     todayIso: todayIso(),

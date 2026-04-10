@@ -11,6 +11,7 @@ import { useOpenAI }    from './hooks/useOpenAI.js';
 import { useCoachActions } from './hooks/useCoachActions.js';
 import { useGarmin }    from './hooks/useGarmin.js';
 import { useCoachState } from './hooks/useCoachState.js';
+import { useGear } from './hooks/useGear.js';
 import { AuthPage }     from './ui/auth/AuthPage.jsx';
 import { Dashboard }    from './ui/Dashboard.jsx';
 import { Shell }        from './ui/Shell.jsx';
@@ -32,6 +33,7 @@ import { useAlerts } from './hooks/useAlerts.js';
 import { buildDailyBriefing } from './core/coachBriefing.js';
 import { buildCoachTake } from './core/coachVerdicts.js';
 import { buildPlanDigest } from './core/coachDigest.js';
+import { deriveGearStats } from './core/gearModel.js';
 import './styles/tokens.css';
 
 const GLOBAL_STYLES = `
@@ -61,7 +63,12 @@ export default function App() {
   const auth     = useAuth();
   const workout  = useWorkout();                  // current open workout
   const coach    = useCoachState(auth.user?.id);
-  const workouts = useWorkouts(auth.user, coach?.mesocycle);       // Supabase-backed history
+  const gearState = useGear(auth.user);
+  const workouts = useWorkouts(auth.user, coach?.mesocycle, gearState.items);       // Supabase-backed history
+  const gear = useMemo(
+    () => deriveGearStats(gearState.items, workouts.history ?? []),
+    [gearState.items, workouts.history]
+  );
   const currentWeekDays = useMemo(() => {
     const weeks = coach?.mesocycle?.weeks ?? [];
     const idx   = coach?.mesocycle?.currentWeekIndex ?? 0;
@@ -106,6 +113,7 @@ export default function App() {
     historyWorkouts: workouts.history ?? [],
     profile: coach?.profile,
     mesocycle: coach?.mesocycle,
+    gear,
     dailyCheckins: coach?.getDailyCheckin ? undefined : {},
   });
 
@@ -164,14 +172,18 @@ export default function App() {
 
   // When file loaded successfully → save + open detail
   useEffect(() => {
+    let cancelled = false;
     if (workout.status === 'ready' && workout.workout && screen === 'dashboard') {
       setScreen('detail');
       setActiveTab('overview');
       if (auth.user) {
-        workouts.saveWorkout(workout.workout);
+        workouts.saveWorkout(workout.workout).then((saved) => {
+          if (!cancelled && saved) workout.loadFromSummary(saved);
+        });
       }
     }
-  }, [workout.status]);
+    return () => { cancelled = true; };
+  }, [auth.user, screen, workout.status, workout.workout, workout.loadFromSummary, workouts.saveWorkout]);
 
   const handleSelectFromHistory = useCallback((summary) => {
     workout.loadFromSummary(summary);
@@ -188,10 +200,11 @@ export default function App() {
   const handleSave = useCallback(async () => {
     if (!workout.workout) return;
     setSaveStatus('saving');
-    const ok = await workouts.saveWorkout(workout.workout);
-    setSaveStatus(ok ? 'saved' : null);
+    const saved = await workouts.saveWorkout(workout.workout);
+    if (saved) workout.loadFromSummary(saved);
+    setSaveStatus(saved ? 'saved' : null);
     setTimeout(() => setSaveStatus(null), 2500);
-  }, [workout.workout, workouts]);
+  }, [workout.workout, workout.loadFromSummary, workouts.saveWorkout]);
 
   const handleLoadSample = useCallback(() => {
     workout.loadSample();
@@ -217,6 +230,14 @@ export default function App() {
     if (!workout.workout) return;
     downloadWorkoutPDF(workout.workout);
   }, [workout.workout]);
+
+  const handleSaveGearAssignment = useCallback(async (workoutId, gearIds) => {
+    const updated = await workouts.updateWorkoutGear?.(workoutId, gearIds);
+    if (updated && workout.workout?.id === workoutId) {
+      workout.loadFromSummary(updated);
+    }
+    return updated;
+  }, [workout, workouts]);
 
   const runCoachAction = useCallback(async (actionType) => {
     setCoachOpen(true);
@@ -261,9 +282,11 @@ export default function App() {
       )}
      {stravaOpen && <StravaPanel strava={strava} onClose={() => setStravaOpen(false)} onImport={async (w) => {
         if (auth.user) {
-          await workouts.saveWorkout(w);
+          const saved = await workouts.saveWorkout(w);
+          workout.loadFromSummary(saved || w);
+        } else {
+          workout.loadFromSummary(w);
         }
-        workout.loadFromSummary(w);
         setScreen('detail');
         setActiveTab('overview');
         setStravaOpen(false);
@@ -296,6 +319,13 @@ export default function App() {
         <ProfilePage
           user={auth.user}
           coach={coach}
+          gear={gear}
+          gearLoading={gearState.loading}
+          gearError={gearState.error}
+          onAddGear={gearState.addGear}
+          onUpdateGear={gearState.updateGear}
+          onRetireGear={gearState.retireGear}
+          onBackfillGear={workouts.backfillGearToHistory}
           onBack={handleCloseProfile}
           onSignOut={auth.signOut}
         />
@@ -321,6 +351,8 @@ export default function App() {
               <OverviewTab
                 workout={workout.workout}
                 history={workouts}
+                gear={gear}
+                onSaveGearAssignment={handleSaveGearAssignment}
                 onDeepAnalysis={() => runCoachAction('deep_analysis')}
                 deepAnalysisLoading={coachActions.loadingAction === 'deep_analysis'}
                 deepAnalysisResult={coachActions.results?.deep_analysis || ''}

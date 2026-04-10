@@ -13,6 +13,7 @@ import { computeAerobicEfficiency, computeVAM, detectClimbs } from '../../core/w
 import { buildCoachTake, buildAutoVerdict } from '../../core/coachVerdicts.js';
 import { requestAutoVerdict } from '../../hooks/useOpenAI.js';
 import { findRouteMatches, compareRoutePerformance } from '../../core/routeMatcher.js';
+import { ActivityGearCard } from '../ActivityGearCard.jsx';
 
 // ─── Shared card wrapper ─────────────────────────────────────────────────────
 export function Card({ children, style = {} }) {
@@ -82,7 +83,7 @@ export function RecCard({ rec }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Overview
 // ═══════════════════════════════════════════════════════════════════════════════
-export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading, history }) {
+export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading, history, gear = [], onSaveGearAssignment }) {
   const [zonesReady, setZonesReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setZonesReady(true), 200); return () => clearTimeout(t); }, []);
   const coachTake = buildCoachTake(w);
@@ -225,6 +226,12 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
         </div>
         {w.recommendations.map((r, i) => <RecCard key={i} rec={r} />)}
       </div>
+
+      <ActivityGearCard
+        workout={w}
+        gear={gear}
+        onSaveAssignment={onSaveGearAssignment}
+      />
 
       {/* ── Cycling-specific analytics ── */}
       {isCycling(w) && <CyclingAnalytics workout={w} />}
@@ -467,3 +474,4 @@ const mdComponents = {
     <blockquote style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 8, margin: '4px 0', color: 'var(--text-secondary)' }}>{children}</blockquote>
   ),
 };
+

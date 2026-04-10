@@ -410,6 +410,16 @@ export function PlanTab({ workout: w, history, coach }) {
     }
   };
 
+  const handleUpdateFuture = () => {
+    if (coach?.updateFutureMesocycle) {
+      coach.updateFutureMesocycle(
+        histWorkouts,
+        null,
+        { targetSport: planSport }
+      );
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────────
   const phaseColor = displayedWeek ? PHASE_COLORS[displayedWeek.isRecovery ? 'recovery' : displayedWeek.phase] ?? '#60a5fa' : '#60a5fa';
   const phaseLabel = displayedWeek ? (displayedWeek.isRecovery ? 'Recovery Week' : (PHASE_LABELS[displayedWeek.phase] ?? displayedWeek.phase)) : '';
@@ -523,8 +533,12 @@ export function PlanTab({ workout: w, history, coach }) {
           />
         )}
         <button
-          onClick={handleRegenerate}
+          onClick={handleUpdateFuture}
           style={{ marginLeft: 'auto', background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
+        >Update Future</button>
+        <button
+          onClick={handleRegenerate}
+          style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
         >Regenerate</button>
       </div>
 

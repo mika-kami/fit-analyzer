@@ -1,3 +1,4 @@
+import { gearStatus } from './gearModel.js';
 /**
  * alertEngine.js — Proactive coach alert rules.
  * Each rule is a pure function: (context) => Alert | null
@@ -219,15 +220,26 @@ export const ALERT_RULES = [
     id: 'gear_replacement',
     check: (ctx) => {
       const gear = ctx.gear ?? [];
-      const overdue = gear.filter(g => !g.is_retired && g.max_distance_m > 0 && g.total_distance_m >= g.max_distance_m * 0.9);
-      if (overdue.length) {
-        const item = overdue[0];
-        const km = Math.round(item.total_distance_m / 1000);
-        const maxKm = Math.round(item.max_distance_m / 1000);
+      const warned = gear
+        .filter((item) => !item.is_retired)
+        .map((item) => ({ item, status: gearStatus(item) }))
+        .filter(({ status }) => status.alert === 'overdue' || status.alert === 'soon')
+        .sort((a, b) => {
+          const left = a.status.alert === 'overdue' ? 2 : 1;
+          const right = b.status.alert === 'overdue' ? 2 : 1;
+          return right - left;
+        });
+      if (warned.length) {
+        const { item, status } = warned[0];
+        const km = Math.round((item.total_distance_m ?? 0) / 1000);
+        const intervalKm = Math.round(((item.service_interval_m || item.max_distance_m) ?? 0) / 1000);
+        const isService = !!item.service_interval_m;
         return {
-          severity: 'low',
-          title: `${item.name} approaching replacement`,
-          body: `${km} km used (limit: ${maxKm} km). Performance and protection may be degrading.`,
+          severity: status.alert === 'overdue' ? 'medium' : 'low',
+          title: `${item.name} ${isService ? 'needs service' : 'needs attention'}`,
+          body: isService
+            ? `${km} km logged since the last service cycle (target ${intervalKm} km).`
+            : `${km} km used out of ${intervalKm} km planned lifecycle.`,
           action: null,
         };
       }
@@ -251,3 +263,4 @@ export function evaluateAlerts(context) {
     .filter(Boolean)
     .sort((a, b) => severityOrder(b.severity) - severityOrder(a.severity));
 }
+

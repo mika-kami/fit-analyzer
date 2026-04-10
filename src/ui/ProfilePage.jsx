@@ -87,26 +87,22 @@ If the document is not a medical record, say "Not a medical document." Do not in
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-const GEAR_KEY = (userId) => `gear_items_v1_${userId ?? 'anon'}`;
-
-function useGear(userId) {
-  const key = GEAR_KEY(userId);
-  const [gear, setGear] = useState(() => { try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; } });
-  const save = useCallback((items) => { setGear(items); try { localStorage.setItem(key, JSON.stringify(items)); } catch {} }, [key]);
-  const addGear = useCallback((item) => {
-    save([...gear, { ...item, id: `gear_${Date.now()}`, total_distance_m: 0, total_sessions: 0, is_retired: false, added_at: new Date().toISOString() }]);
-  }, [gear, save]);
-  const retireGear = useCallback((id) => {
-    save(gear.map(g => g.id === id ? { ...g, is_retired: true } : g));
-  }, [gear, save]);
-  return { gear, addGear, retireGear };
-}
-
-export function ProfilePage({ user, coach, onBack, onSignOut }) {
+export function ProfilePage({
+  user,
+  coach,
+  gear = [],
+  gearLoading = false,
+  gearError = '',
+  onAddGear,
+  onUpdateGear,
+  onRetireGear,
+  onBackfillGear,
+  onBack,
+  onSignOut,
+}) {
   const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
   const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
   const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
-  const { gear, addGear, retireGear } = useGear(user?.id);
 
   useEffect(() => { setProfileDraft(coach?.profile ?? {}); }, [coach?.profile]);
   useEffect(() => { if (coach?.getDailyCheckin) setCheckinDraft(coach.getDailyCheckin(todayIso)); }, [coach, todayIso]);
@@ -157,7 +153,20 @@ export function ProfilePage({ user, coach, onBack, onSignOut }) {
 
         <Card>
           <CardLabel>Gear Tracker</CardLabel>
-          <GearPanel gear={gear} onAdd={addGear} onRetire={retireGear} />
+          {gearError ? (
+            <div style={{ fontSize: 11, color: '#fca5a5', marginBottom: 'var(--sp-2)' }}>{gearError}</div>
+          ) : null}
+          {gearLoading ? (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading gear...</div>
+          ) : (
+            <GearPanel
+              gear={gear}
+              onAdd={onAddGear}
+              onUpdate={onUpdateGear}
+              onRetire={onRetireGear}
+              onBackfill={onBackfillGear}
+            />
+          )}
         </Card>
 
         {onSignOut && (

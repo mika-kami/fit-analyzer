@@ -3,12 +3,13 @@
  * Stores workouts in Supabase instead of window.storage.
  * API is compatible with useHistory so Dashboard/HistoryTab need no changes.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { parseFit } from '../core/fitParser.js';
 import { buildWorkoutModel } from '../core/workoutAnalyzer.js';
 import { findPlannedDay, computeCompliance } from '../core/complianceEngine.js';
 import { fingerprint as routeFingerprint } from '../core/routeMatcher.js';
+import { defaultGearForWorkout, matchGearToWorkout } from '../core/gearModel.js';
 
 // Convert WorkoutModel → DB row
 function toRow(workout, userId) {
@@ -27,6 +28,8 @@ function toRow(workout, userId) {
     aerobic_te:         workout.trainingEffect?.aerobic ?? null,
     load_level:         workout.load?.level ?? null,
     garmin_activity_id: workout.garminActivityId ?? null,
+    plan_mesocycle_id:  workout.planMesocycleId ?? null,
+    planned_day_date:   workout.plannedDayDate ?? null,
     summary_json: {
       // Store everything needed for Dashboard cards + Plan
       date:            workout.date,
@@ -48,6 +51,10 @@ function toRow(workout, userId) {
       thresholdHr:     workout.thresholdHr,
       recommendations: workout.recommendations,
       laps:            workout.laps ?? [],
+      gearIds:         workout.gearIds ?? [],
+      gearNames:       workout.gearNames ?? [],
+      complianceResult: workout.complianceResult ?? null,
+      routeFingerprint: workout.routeFingerprint ?? null,
       // Downsample timeSeries to every 4th point (~60KB) for Charts + Map
       timeSeries: (workout.timeSeries ?? []).filter((_, i) => i % 4 === 0),
     },
@@ -77,6 +84,10 @@ function fromRow(row) {
     date:             row.workout_date,
     timeSeries:       row.summary_json?.timeSeries ?? [],
     garminActivityId: row.garmin_activity_id ?? null,
+    planMesocycleId: row.plan_mesocycle_id ?? null,
+    plannedDayDate: row.planned_day_date ?? null,
+    gearIds:         row.summary_json?.gearIds ?? [],
+    gearNames:       row.summary_json?.gearNames ?? [],
     source:           row.source ?? 'upload',
     fit_path:         row.fit_path ?? null,
   };
@@ -110,14 +121,79 @@ function dataRichness(w) {
   return score;
 }
 
-export function useWorkouts(user, mesocycle = null) {
+function buildGearMap(gear = []) {
+  return new Map((gear ?? []).map((item) => [item.id, item]));
+}
+
+function chooseBikeChild(candidates = []) {
+  if (!candidates.length) return null;
+  const defaults = candidates.filter((item) => item.default_for_new);
+  return defaults[0] ?? candidates[0];
+}
+
+function normalizeBikeChildren(selectedIds, gear) {
+  const map = buildGearMap(gear);
+  const selected = new Set((selectedIds ?? []).filter(Boolean));
+  const selectedItems = [...selected].map((id) => map.get(id)).filter(Boolean);
+  const selectedBikeIds = selectedItems.filter((item) => item.type === 'bike').map((item) => item.id);
+
+  // If bike is selected, ensure child mileage can be tracked by selecting one active child per component slot.
+  for (const bikeId of selectedBikeIds) {
+    const children = (gear ?? []).filter((item) => !item.is_retired && item.parent_gear_id === bikeId);
+    const byType = new Map();
+    for (const item of children) {
+      const list = byType.get(item.type) ?? [];
+      list.push(item);
+      byType.set(item.type, list);
+    }
+    for (const [type, list] of byType.entries()) {
+      const selectedOfType = list.filter((item) => selected.has(item.id));
+      if (selectedOfType.length > 1 && type === 'tires') {
+        // Only one tire set can receive mileage for a single activity.
+        selectedOfType.slice(1).forEach((item) => selected.delete(item.id));
+      } else if (selectedOfType.length === 0) {
+        const chosen = chooseBikeChild(list);
+        if (chosen) selected.add(chosen.id);
+      }
+    }
+  }
+
+  // Enforce "single tire set per bike per activity" even if no bike parent itself was selected.
+  const tireGroups = new Map();
+  for (const id of [...selected]) {
+    const item = map.get(id);
+    if (!item || item.type !== 'tires' || !item.parent_gear_id) continue;
+    const key = item.parent_gear_id;
+    const group = tireGroups.get(key) ?? [];
+    group.push(item);
+    tireGroups.set(key, group);
+  }
+  for (const group of tireGroups.values()) {
+    if (group.length <= 1) continue;
+    const keep = chooseBikeChild(group)?.id;
+    for (const item of group) {
+      if (item.id !== keep) selected.delete(item.id);
+    }
+  }
+
+  return [...selected];
+}
+
+export function useWorkouts(user, mesocycle = null, gear = []) {
   const [history,   setHistory]   = useState([]);
   const [loadingDb, setLoadingDb] = useState(true);
   const [error,     setError]     = useState(null);
 
-  // Keep a stable ref so callbacks always see latest mesocycle
-  const mesocycleRef = { current: mesocycle };
-  mesocycleRef.current = mesocycle;
+  const mesocycleRef = useRef(mesocycle);
+  const gearRef = useRef(gear);
+
+  useEffect(() => {
+    mesocycleRef.current = mesocycle;
+  }, [mesocycle]);
+
+  useEffect(() => {
+    gearRef.current = gear;
+  }, [gear]);
 
   // Load workouts from Supabase on mount / user change
   useEffect(() => {
@@ -143,14 +219,32 @@ export function useWorkouts(user, mesocycle = null) {
       // Attach compliance if mesocycle is available
       const plannedDay = findPlannedDay(mesocycleRef.current, workout.date);
       const complianceResult = plannedDay ? computeCompliance(plannedDay, workout) : null;
+      const planMesocycleId = mesocycleRef.current?.id ?? null;
 
       // Attach route fingerprint
       const fp = routeFingerprint(workout.timeSeries);
+
+      const existing = history.find(h => h.date === workout.date);
+      const hasExplicitGearIds = Array.isArray(workout?.gearIds);
+      const defaultGearIds = defaultGearForWorkout(gearRef.current, workout).map((item) => item.id);
+      const initialGearIds = hasExplicitGearIds
+        ? [...new Set((workout.gearIds ?? []).filter(Boolean))]
+        : existing?.gearIds?.length
+          ? existing.gearIds
+          : defaultGearIds;
+      const gearIds = normalizeBikeChildren(initialGearIds, gearRef.current);
+      const gearNames = gearRef.current
+        .filter((item) => gearIds.includes(item.id))
+        .map((item) => item.name);
 
       const enrichedWorkout = {
         ...workout,
         complianceResult,
         routeFingerprint: fp,
+        planMesocycleId,
+        plannedDayDate: plannedDay?.dateIso ?? null,
+        gearIds,
+        gearNames,
       };
 
       const row = toRow(enrichedWorkout, user.id);
@@ -171,9 +265,8 @@ export function useWorkouts(user, mesocycle = null) {
       }
 
      // Find existing workout for this date (any source) — never downgrade richer data
-     const existing = history.find(h => h.date === workout.date);
      if (existing && dataRichness(workout) < dataRichness(existing)) {
-       return true; // keep existing richer record
+       return existing; // keep existing richer record
      }
       const { data, error: dbErr } = existing?.id
         ? await supabase.from('workouts').update(row).eq('id', existing.id).select().single()
@@ -187,7 +280,7 @@ export function useWorkouts(user, mesocycle = null) {
           b.date.localeCompare(a.date)
         );
       });
-      return true;
+      return fromRow(data);
     } catch (e) {
       console.error('[useWorkouts] save failed', e);
       setError(e.message);
@@ -282,6 +375,69 @@ export function useWorkouts(user, mesocycle = null) {
       });
   }, [user?.id]);
 
+  const updateWorkoutGear = useCallback(async (workoutId, gearIds = []) => {
+    if (!user || !workoutId) return null;
+    const existing = history.find((item) => item.id === workoutId);
+    if (!existing) return null;
+
+    const nextGearIds = normalizeBikeChildren([...new Set((gearIds ?? []).filter(Boolean))], gearRef.current);
+    const nextGearNames = gearRef.current
+      .filter((item) => nextGearIds.includes(item.id))
+      .map((item) => item.name);
+
+    const row = toRow({
+      ...existing,
+      gearIds: nextGearIds,
+      gearNames: nextGearNames,
+      planMesocycleId: existing.planMesocycleId ?? null,
+      plannedDayDate: existing.plannedDayDate ?? null,
+    }, user.id);
+
+    const { data, error: dbErr } = await supabase
+      .from('workouts')
+      .update(row)
+      .eq('id', workoutId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (dbErr) {
+      setError(dbErr.message);
+      return null;
+    }
+
+    const updated = fromRow(data);
+    setHistory((prev) => prev.map((item) => (item.id === workoutId ? updated : item)));
+    return updated;
+  }, [history, user]);
+
+  const backfillGearToHistory = useCallback(async (gearItem) => {
+    if (!user || !gearItem?.id) return 0;
+
+    const candidates = history.filter((workout) =>
+      matchGearToWorkout([gearItem], workout.sport ?? workout.sportLabel, workout).length > 0
+    );
+    if (!candidates.length) return 0;
+
+    let updatedCount = 0;
+    const updates = await Promise.all(candidates.map(async (workout) => {
+      let nextGearIds = [...new Set([...(workout.gearIds ?? []), gearItem.id])];
+      if (gearItem.type === 'tires' && gearItem.parent_gear_id) {
+        nextGearIds = nextGearIds.filter((id) => {
+          const item = gearRef.current.find((g) => g.id === id);
+          if (!item || item.id === gearItem.id) return true;
+          return !(item.type === 'tires' && item.parent_gear_id === gearItem.parent_gear_id);
+        });
+      }
+      nextGearIds = normalizeBikeChildren(nextGearIds, gearRef.current);
+      if (nextGearIds.length === (workout.gearIds ?? []).length) return null;
+      updatedCount += 1;
+      return updateWorkoutGear(workout.id, nextGearIds);
+    }));
+
+    return updates.filter(Boolean).length || updatedCount;
+  }, [history, updateWorkoutGear, user]);
+
   // Best guess at athlete's true max HR from history
   // Uses 95th percentile of session peaks to avoid outliers
   const historicalMaxHr = (() => {
@@ -320,16 +476,20 @@ export function useWorkouts(user, mesocycle = null) {
         model.source           = 'garmin';
         if (!model.fileName) model.fileName = item.activity_name;
 
-        const row = {
-          ...toRow(model, user.id),
-          garmin_activity_id: item.garmin_activity_id,
-          source: 'garmin',
-        };
-
         // Check for existing: exact garmin_activity_id match, or same date (Strava duplicate)
         const exactMatch = history.find(h => h.garminActivityId === item.garmin_activity_id);
         const dateMatch  = !exactMatch && history.find(h => h.date === model.date);
         const existing   = exactMatch || dateMatch;
+        const defaultGearIds = defaultGearForWorkout(gearRef.current, model).map((gearItem) => gearItem.id);
+        const gearIds = existing?.gearIds?.length ? existing.gearIds : defaultGearIds;
+        const gearNames = gearRef.current
+          .filter((gearItem) => gearIds.includes(gearItem.id))
+          .map((gearItem) => gearItem.name);
+        const row = {
+          ...toRow({ ...model, gearIds, gearNames }, user.id),
+          garmin_activity_id: item.garmin_activity_id,
+          source: 'garmin',
+        };
 
         if (existing) {
           // Only update if new data is richer (e.g. Garmin FIT replacing Strava)
@@ -382,6 +542,7 @@ export function useWorkouts(user, mesocycle = null) {
     saveWorkout, deleteWorkout, recentWorkouts, aggregateStats,
     // New:
     uploadFit, reload, error, getChatHistory, saveChatMessage, saveGarminActivities,
+    updateWorkoutGear, backfillGearToHistory,
     historicalMaxHr,
   };
 }
