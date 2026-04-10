@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase.js';
 import { DEFAULT_ATHLETE_PROFILE, defaultDailyCheckin, defaultWorkoutReflection } from '../core/coachEngine.js';
 import { buildAthleteDigest } from '../core/coachDigest.js';
 import { generateMesocycle } from '../core/trainingEngine.js';
+import { describeWeekPlan, buildDescribeContext } from '../core/coachPlanMatcher.js';
+import { calcTrainingLoad } from '../core/trainingEngine.js';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -323,42 +325,108 @@ export function useCoachState(userId) {
     }
   }, [persistLocal, state, userId]);
 
-  const regenerateMesocycle = useCallback((historyWorkouts = [], startDate = null) => {
-    const mc = generateMesocycle(state.profile, historyWorkouts, startDate);
+  // Extracted helper so we can call it at two points: before and after enrichment.
+  const _saveMesocycleToDb = useCallback(async (mc) => {
+    if (!userId) return;
+    const payload = {
+      user_id:          userId,
+      goal_date:        mc.meta.goalDate || null,
+      goal_description: mc.meta.goal || null,
+      total_weeks:      mc.meta.totalWeeks,
+      weeks:            mc.weeks,
+      meta:             mc.meta,
+      is_active:        true,
+    };
+    try {
+      const { data: activeRows, error } = await supabase
+        .from('mesocycles')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .limit(20);
+      if (error) throw error;
+      if (activeRows?.length) {
+        await supabase.from('mesocycles').update(payload).in('id', activeRows.map(r => r.id));
+      } else {
+        await supabase.from('mesocycles').insert(payload);
+      }
+    } catch (e) {
+      console.error('[useCoachState] mesocycle persistence failed', e);
+    }
+  }, [userId]);
+
+  const regenerateMesocycle = useCallback(async (historyWorkouts = [], startDate = null, weather = null, profileOverrides = null) => {
+    const profileForPlan = profileOverrides ? { ...state.profile, ...profileOverrides } : state.profile;
+
+    // 1. Generate synchronously and render immediately
+    const mc = generateMesocycle(profileForPlan, historyWorkouts, startDate);
     setMesocycle(mc);
     writeMesocycle(mcKey, mc);
-    if (userId) {
-      const payload = {
-        user_id: userId,
-        goal_date: mc.meta.goalDate || null,
-        goal_description: mc.meta.goal || null,
-        total_weeks: mc.meta.totalWeeks,
-        weeks: mc.weeks,
-        meta: mc.meta,
-        is_active: true,
-      };
 
-      (async () => {
-        try {
-          const { data: activeRow } = await supabase
-            .from('mesocycles')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .maybeSingle();
+    // 2. Save raw plan to DB immediately — guarantees new startDate is persisted
+    //    before the LLM enrichment (which can be slow or fail).
+    _saveMesocycleToDb(mc);
 
-          if (activeRow?.id) {
-            await supabase.from('mesocycles').update(payload).eq('id', activeRow.id);
-          } else {
-            await supabase.from('mesocycles').insert(payload);
-          }
-        } catch {
-          // Keep UI responsive even if persistence fails.
-        }
-      })();
+    // 3. Enrich current week only (~2 000 tokens)
+    const cwIdx = mc.currentWeekIndex ?? 0;
+    const currentWeekDays = mc.weeks?.[cwIdx]?.days;
+    if (currentWeekDays?.length) {
+      try {
+        const ctx = buildDescribeContext({
+          athleteDigest,
+          recentWorkouts: (historyWorkouts ?? []).slice(0, 6),
+          load: calcTrainingLoad(historyWorkouts ?? []),
+          readiness: null,
+          weather,
+          sport: mc.meta?.sport ?? state.profile?.targetSport ?? 'running',
+        });
+        const enrichedDays = await describeWeekPlan(currentWeekDays, ctx);
+        const enrichedMc = {
+          ...mc,
+          weeks: mc.weeks.map((w, i) =>
+            i === cwIdx ? { ...w, days: enrichedDays } : w
+          ),
+        };
+        setMesocycle(enrichedMc);
+        writeMesocycle(mcKey, enrichedMc);
+        // Update DB with enriched plan (AI descriptions)
+        _saveMesocycleToDb(enrichedMc);
+        return enrichedMc;
+      } catch {
+        // Silent fallback — raw algo plan already visible and already saved
+      }
     }
+
     return mc;
-  }, [state.profile, mcKey, userId]);
+  }, [state.profile, athleteDigest, mcKey, _saveMesocycleToDb]);
+
+  const enrichWeekDays = useCallback(async (weekIndex, weekDays, weather = null, historyWorkouts = [], sport = 'running') => {
+    if (!weekDays?.length) return;
+    try {
+      const ctx = buildDescribeContext({
+        athleteDigest,
+        recentWorkouts: (historyWorkouts ?? []).slice(0, 6),
+        load: calcTrainingLoad(historyWorkouts ?? []),
+        readiness: null,
+        weather,
+        sport,
+      });
+      const enrichedDays = await describeWeekPlan(weekDays, ctx);
+      setMesocycle(prev => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          weeks: prev.weeks.map((w, i) =>
+            i === weekIndex ? { ...w, days: enrichedDays } : w
+          ),
+        };
+        writeMesocycle(mcKey, updated);
+        return updated;
+      });
+    } catch {
+      // Silent — user still sees raw plan
+    }
+  }, [athleteDigest, mcKey]);
 
   const saveWeeklyPlan = useCallback(async (payload) => {
     if (!userId || !payload?.weekStartDate || !payload?.planSport) return;
@@ -400,6 +468,7 @@ export function useCoachState(userId) {
     saveWeeklyPlan,
     mesocycle,
     regenerateMesocycle,
+    enrichWeekDays,
     labValues,
     todayIso: todayIso(),
   };

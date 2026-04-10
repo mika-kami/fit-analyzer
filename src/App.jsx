@@ -31,6 +31,7 @@ import { calcTrainingLoad } from './core/trainingEngine.js';
 import { useAlerts } from './hooks/useAlerts.js';
 import { buildDailyBriefing } from './core/coachBriefing.js';
 import { buildCoachTake } from './core/coachVerdicts.js';
+import { buildPlanDigest } from './core/coachDigest.js';
 import './styles/tokens.css';
 
 const GLOBAL_STYLES = `
@@ -150,6 +151,7 @@ export default function App() {
     weather: dashboardWeather,
     targetSport: coach?.profile?.targetSport,
     coachTake: buildCoachTake(workout.workout),
+    planDigest: buildPlanDigest(currentWeekDays),
   }));
   const garmin   = useGarmin(async (results) => {
     // Called by useGarmin after /sync → save all new FIT files to DB

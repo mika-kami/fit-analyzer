@@ -27,7 +27,33 @@ export function buildActionPrompt(actionType, ctx) {
   }
 
   if (actionType === 'plan_week') {
-    return `${BASE_PERSONA}\nAthlete: ${athleteDigest}\n${trend}\nReadiness: ${readiness?.score ?? 'n/a'} (${readiness?.label || 'unknown'}).\n${weatherSection}\nBuild a practical 7-day plan with day-by-day session goals.`;
+    const planDigest = ctx?.planDigest || '';
+    const hasPlan = planDigest.length > 0;
+
+    if (hasPlan) {
+      return `${BASE_PERSONA}
+Athlete: ${athleteDigest}
+${trend}
+Readiness: ${readiness?.score ?? 'n/a'} (${readiness?.label || 'unknown'}).
+${weatherSection}
+
+THIS WEEK'S PLAN (computed by training engine — do NOT regenerate):
+${planDigest}
+
+Walk the athlete through this week's plan. For each training day:
+- Confirm the session type and target makes sense given current TSB and readiness
+- Give 1–2 concrete execution tips (HR zone, pace, cadence, or RPE)
+- Flag any day that looks misaligned with today's readiness or weather
+
+Keep it under 200 words. Be direct. End with one sentence on what to focus on most this week.`;
+    }
+
+    return `${BASE_PERSONA}
+Athlete: ${athleteDigest}
+${trend}
+Readiness: ${readiness?.score ?? 'n/a'} (${readiness?.label || 'unknown'}).
+${weatherSection}
+No training plan is active yet. Suggest a practical 7-day structure with session types and rough targets. Keep it under 150 words.`;
   }
 
   if (actionType === 'wearing') {

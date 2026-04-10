@@ -141,7 +141,9 @@ function DayCard({ day, weather, index, revealed, compliance }) {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: highlight ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{day.label}</span>
+              <span style={{ fontSize: 13, color: highlight ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                {day.aiTitle ?? day.label}
+              </span>
               {day.current && (
                 <span style={{ fontSize: 9, color: day.color, fontFamily: 'var(--font-mono)', background: `${day.color}18`, border: `1px solid ${day.color}40`, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.06em' }}>TODAY</span>
               )}
@@ -149,7 +151,22 @@ function DayCard({ day, weather, index, revealed, compliance }) {
                 <span style={{ fontSize: 9, color: compBadge.color, fontFamily: 'var(--font-mono)', background: `${compBadge.color}18`, border: `1px solid ${compBadge.color}40`, borderRadius: 4, padding: '2px 6px' }}>{compBadge.label}</span>
               )}
             </div>
-            {day.desc && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{day.desc}</div>}
+            {(day.aiWhy ?? day.desc) && (
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                {day.aiWhy ?? day.desc}
+              </div>
+            )}
+            {day.aiCues?.length > 0 && (
+              <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {day.aiCues.map((cue, i) => (
+                  <span key={i} style={{
+                    fontSize: 9, color: 'var(--text-secondary)', background: 'var(--bg-raised)',
+                    border: '1px solid var(--border-subtle)', borderRadius: 3,
+                    padding: '2px 6px', fontFamily: 'var(--font-mono)',
+                  }}>{cue}</span>
+                ))}
+              </div>
+            )}
             {weather && (
               <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
                 {weather.tempC}°C · wind {weather.windKmh} km/h {weather.windDir}
@@ -246,14 +263,17 @@ export function PlanTab({ workout: w, history, coach }) {
 
   const histWorkouts = history?.history ?? [];
 
-  // Get or generate mesocycle
+  // Get or generate mesocycle.
+  // coach.mesocycle is always the source of truth — it is updated synchronously by
+  // regenerateMesocycle before any async work, so the display is always consistent
+  // with what gets saved. Local generation is only a fallback when no saved plan exists.
   const mesocycle = useMemo(() => {
-    if (coach?.mesocycle?.weeks?.length && startMode === 'auto') return coach.mesocycle;
-    // Fallback or custom start: generate on the fly
+    if (coach?.mesocycle?.weeks?.length) return coach.mesocycle;
+    // No saved mesocycle yet — generate locally for initial display only
     const profile = coach?.profile ?? {};
     const sportProfile = { ...profile, targetSport: planSport !== 'mixed' ? planSport : (profile.targetSport ?? 'running') };
     return generateMesocycle(sportProfile, histWorkouts, effectiveStartDate);
-  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate, startMode]);
+  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate]);
 
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(() => mesocycle?.currentWeekIndex ?? 0);
 
@@ -263,6 +283,17 @@ export function PlanTab({ workout: w, history, coach }) {
       setSelectedWeekIndex(mesocycle.currentWeekIndex);
     }
   }, [mesocycle?.currentWeekIndex]);
+
+  // Lazy-enrich future/past weeks when the user navigates to them
+  useEffect(() => {
+    const week = mesocycle?.weeks?.[selectedWeekIndex];
+    if (!week) return;
+    // Skip if already enriched (any day has an aiTitle)
+    if (week.days?.some(d => d.aiTitle)) return;
+    // Skip if it's the current week — regenerateMesocycle handles that
+    if (selectedWeekIndex === currentWeekIdx) return;
+    coach?.enrichWeekDays?.(selectedWeekIndex, week.days, null, histWorkouts, planSport);
+  }, [selectedWeekIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayedWeek  = mesocycle?.weeks?.[selectedWeekIndex] ?? null;
   const currentWeekIdx = mesocycle?.currentWeekIndex ?? 0;
@@ -353,8 +384,28 @@ export function PlanTab({ workout: w, history, coach }) {
   // Regenerate mesocycle with current start date selection
   const handleRegenerate = () => {
     if (coach?.regenerateMesocycle) {
-      coach.regenerateMesocycle(histWorkouts, effectiveStartDate);
+      coach.regenerateMesocycle(
+        histWorkouts,
+        effectiveStartDate,
+        null,
+        { targetSport: planSport }
+      );
     }
+  };
+
+  const triggerRegenerateWith = (nextStartMode, nextCustomDate, nextPlanSport) => {
+    if (!coach?.regenerateMesocycle) return;
+    const nextEffectiveStartDate =
+      nextStartMode === 'today' ? todayIsoStr()
+      : nextStartMode === 'tomorrow' ? tomorrowIsoStr()
+      : nextStartMode === 'custom' ? nextCustomDate
+      : null;
+    coach.regenerateMesocycle(
+      histWorkouts,
+      nextEffectiveStartDate,
+      null,
+      { targetSport: nextPlanSport }
+    );
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -422,7 +473,11 @@ export function PlanTab({ workout: w, history, coach }) {
         </div>
         <select
           value={planSport}
-          onChange={e => setPlanSport(e.target.value)}
+          onChange={e => {
+            const nextSport = e.target.value;
+            setPlanSport(nextSport);
+            triggerRegenerateWith(startMode, customDate, nextSport);
+          }}
           style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
         >
           <option value="mixed">Mixed</option>
@@ -442,7 +497,10 @@ export function PlanTab({ workout: w, history, coach }) {
         ].map(opt => (
           <button
             key={opt.id}
-            onClick={() => setStartMode(opt.id)}
+            onClick={() => {
+              setStartMode(opt.id);
+              triggerRegenerateWith(opt.id, customDate, planSport);
+            }}
             style={{
               background: startMode === opt.id ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
               border: `1px solid ${startMode === opt.id ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`,
@@ -456,7 +514,13 @@ export function PlanTab({ workout: w, history, coach }) {
           <input
             type="date"
             value={customDate}
-            onChange={e => setCustomDate(e.target.value)}
+            onChange={e => {
+              const nextDate = e.target.value;
+              setCustomDate(nextDate);
+              if (startMode === 'custom') {
+                triggerRegenerateWith('custom', nextDate, planSport);
+              }
+            }}
             style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
           />
         )}
