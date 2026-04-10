@@ -1,11 +1,5 @@
 /**
- * format.js — Pure formatting utilities. No dependencies.
- * fmtKm, fmtDuration, fmtDurationShort, fmtNum
- */
-
-/**
- * format.js
- * Pure display-formatting utilities. No side effects, no imports.
+ * format.js - Pure formatting utilities. No dependencies.
  */
 
 /** Format seconds as H:MM:SS */
@@ -33,7 +27,7 @@ export function fmtKm(meters) {
   return (meters / 1000).toFixed(2);
 }
 
-/** Format a number to fixed decimal places, returning '—' for null */
+/** Format a number to fixed decimal places */
 export function fmtNum(value, decimals = 1) {
   if (value == null || isNaN(value)) return '—';
   return Number(value).toFixed(decimals);
@@ -48,14 +42,25 @@ export function fmtPace(speedKmh) {
   return `${m}:${String(s).padStart(2, '0')} /km`;
 }
 
-/** Abbreviated large numbers: 1234 → "1.2k" */
+/** Abbreviated large numbers: 1234 -> "1.2k" */
 export function fmtCompact(n) {
   if (n == null) return '—';
   if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(Math.round(n));
 }
 
+/** Format ISO date (YYYY-MM-DD) as DD.MM */
+export function fmtDateDM(isoDate) {
+  if (!isoDate || typeof isoDate !== 'string') return '—';
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return isoDate;
+  return `${m[3]}.${m[2]}`;
+}
 
-// ────────────────────────────────────────────────────────────
-
-
+/** Format ISO date (YYYY-MM-DD) as DD.MM.YYYY */
+export function fmtDateDMY(isoDate) {
+  if (!isoDate || typeof isoDate !== 'string') return '—';
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return isoDate;
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}

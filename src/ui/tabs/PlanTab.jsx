@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateMesocycle, PHASE_COLORS, PHASE_LABELS } from '../../core/trainingEngine.js';
+import { fmtDateDM, fmtDateDMY } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
@@ -137,7 +138,7 @@ function DayCard({ day, weather, index, revealed, compliance }) {
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-start', flex: 1 }}>
           <div style={{ minWidth: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: highlight ? day.color : 'var(--text-secondary)', fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>{day.day}</div>
-            {day.date && <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{day.date}</div>}
+            {(day.dateIso || day.date) && <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{fmtDateDM(day.dateIso ?? day.date)}</div>}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -246,8 +247,9 @@ function tomorrowIsoStr() {
 
 export function PlanTab({ workout: w, history, coach }) {
   const [viewMode, setViewMode] = useState('week');
+  const [hasManualPlanControls, setHasManualPlanControls] = useState(false);
   const [planSport, setPlanSport] = useState(() => {
-    const t = coach?.profile?.targetSport;
+    const t = coach?.mesocycle?.meta?.sport ?? coach?.profile?.targetSport;
     return (t === 'running' || t === 'cycling' || t === 'mixed') ? t : 'mixed';
   });
   // 'auto' = current Monday (legacy default), 'today', 'tomorrow', 'custom'
@@ -263,17 +265,32 @@ export function PlanTab({ workout: w, history, coach }) {
 
   const histWorkouts = history?.history ?? [];
 
-  // Get or generate mesocycle.
-  // coach.mesocycle is always the source of truth — it is updated synchronously by
-  // regenerateMesocycle before any async work, so the display is always consistent
-  // with what gets saved. Local generation is only a fallback when no saved plan exists.
+  // When DB mesocycle arrives, keep sport selector in sync with the stored plan
+  // until the user manually changes plan controls.
+  useEffect(() => {
+    if (hasManualPlanControls) return;
+    const savedSport = coach?.mesocycle?.meta?.sport;
+    if (savedSport === 'running' || savedSport === 'cycling' || savedSport === 'mixed') {
+      setPlanSport(savedSport);
+    }
+  }, [coach?.mesocycle?.meta?.sport, hasManualPlanControls]);
+
+  // Get or generate mesocycle for display.
+  // DB is only updated via explicit Regenerate click.
+  // Until then, control changes can preview a local (unsaved) plan.
   const mesocycle = useMemo(() => {
-    if (coach?.mesocycle?.weeks?.length) return coach.mesocycle;
-    // No saved mesocycle yet — generate locally for initial display only
+    const saved = coach?.mesocycle;
+    const savedSport = saved?.meta?.sport ?? coach?.profile?.targetSport ?? 'mixed';
+    const isSportChanged = planSport !== savedSport;
+
+    // Use persisted plan only when controls still match the saved "auto + sport" context.
+    if (saved?.weeks?.length && startMode === 'auto' && !isSportChanged) return saved;
+
+    // Preview mode (unsaved): local generation from current controls.
     const profile = coach?.profile ?? {};
     const sportProfile = { ...profile, targetSport: planSport !== 'mixed' ? planSport : (profile.targetSport ?? 'running') };
     return generateMesocycle(sportProfile, histWorkouts, effectiveStartDate);
-  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate]);
+  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate, startMode]);
 
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(() => mesocycle?.currentWeekIndex ?? 0);
 
@@ -393,21 +410,6 @@ export function PlanTab({ workout: w, history, coach }) {
     }
   };
 
-  const triggerRegenerateWith = (nextStartMode, nextCustomDate, nextPlanSport) => {
-    if (!coach?.regenerateMesocycle) return;
-    const nextEffectiveStartDate =
-      nextStartMode === 'today' ? todayIsoStr()
-      : nextStartMode === 'tomorrow' ? tomorrowIsoStr()
-      : nextStartMode === 'custom' ? nextCustomDate
-      : null;
-    coach.regenerateMesocycle(
-      histWorkouts,
-      nextEffectiveStartDate,
-      null,
-      { targetSport: nextPlanSport }
-    );
-  };
-
   // ── Render ───────────────────────────────────────────────────────────────────
   const phaseColor = displayedWeek ? PHASE_COLORS[displayedWeek.isRecovery ? 'recovery' : displayedWeek.phase] ?? '#60a5fa' : '#60a5fa';
   const phaseLabel = displayedWeek ? (displayedWeek.isRecovery ? 'Recovery Week' : (PHASE_LABELS[displayedWeek.phase] ?? displayedWeek.phase)) : '';
@@ -429,8 +431,8 @@ export function PlanTab({ workout: w, history, coach }) {
               Week {selectedWeekIndex + 1} of {mesocycle?.meta?.totalWeeks ?? '?'} · {phaseLabel}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {displayedWeek?.startDate} → {displayedWeek?.endDate}
-              {mesocycle?.meta?.goalDate && ` · Goal: ${mesocycle.meta.goalDate}`}
+              {fmtDateDMY(displayedWeek?.startDate)} → {fmtDateDMY(displayedWeek?.endDate)}
+              {mesocycle?.meta?.goalDate && ` · Goal: ${fmtDateDMY(mesocycle.meta.goalDate)}`}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -448,7 +450,7 @@ export function PlanTab({ workout: w, history, coach }) {
       {isPreviewMode && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
           <span style={{ fontSize: 11, color: '#60a5fa', fontFamily: 'var(--font-mono)' }}>
-            Previewing week {selectedWeekIndex + 1} (starts {displayedWeek?.startDate})
+            Previewing week {selectedWeekIndex + 1} (starts {fmtDateDMY(displayedWeek?.startDate)})
           </span>
           <button
             onClick={() => setSelectedWeekIndex(currentWeekIdx)}
@@ -474,9 +476,8 @@ export function PlanTab({ workout: w, history, coach }) {
         <select
           value={planSport}
           onChange={e => {
-            const nextSport = e.target.value;
-            setPlanSport(nextSport);
-            triggerRegenerateWith(startMode, customDate, nextSport);
+            setHasManualPlanControls(true);
+            setPlanSport(e.target.value);
           }}
           style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
         >
@@ -498,8 +499,8 @@ export function PlanTab({ workout: w, history, coach }) {
           <button
             key={opt.id}
             onClick={() => {
+              setHasManualPlanControls(true);
               setStartMode(opt.id);
-              triggerRegenerateWith(opt.id, customDate, planSport);
             }}
             style={{
               background: startMode === opt.id ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
@@ -515,11 +516,8 @@ export function PlanTab({ workout: w, history, coach }) {
             type="date"
             value={customDate}
             onChange={e => {
-              const nextDate = e.target.value;
-              setCustomDate(nextDate);
-              if (startMode === 'custom') {
-                triggerRegenerateWith('custom', nextDate, planSport);
-              }
+              setHasManualPlanControls(true);
+              setCustomDate(e.target.value);
             }}
             style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
           />

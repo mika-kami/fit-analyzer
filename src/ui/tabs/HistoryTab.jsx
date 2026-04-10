@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardLabel }             from './OverviewTab.jsx';
+import { fmtDateDM, fmtDateDMY } from '../../core/format.js';
 
 const LOAD_COLOR = { high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151' };
 const WEEKDAYS   = ['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -77,7 +78,7 @@ export function HeatmapCalendar({ history, onSelect, selectedDate }) {
                   <div
                     key={wi}
                     onClick={() => w && onSelect(cell.date)}
-                    title={w ? `${cell.date}: ${(w.distance/1000).toFixed(1)}km, TE ${w.trainingEffect?.aerobic}` : cell.date}
+                    title={w ? `${fmtDateDMY(cell.date)}: ${(w.distance/1000).toFixed(1)}km, TE ${w.trainingEffect?.aerobic}` : fmtDateDMY(cell.date)}
                     style={{
                       width:12, height:12, borderRadius:2,
                       background: bg, opacity,
@@ -130,7 +131,7 @@ export function WorkoutRow({ w, selected, onSelect, onDelete }) {
       {/* Date + sport */}
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:12, fontWeight:600, color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>
-          {w.date.slice(5)} <span style={{ color:'var(--text-muted)', fontWeight:400 }}>{w.startTime}</span>
+          {fmtDateDM(w.date)} <span style={{ color:'var(--text-muted)', fontWeight:400 }}>{w.startTime}</span>
         </div>
         <div style={{ fontSize:11, color:'var(--text-secondary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {w.sport}{w.bike ? ` · ${w.bike}` : ''}
@@ -216,7 +217,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
           <div>
             <div style={{ fontSize:11, color:'var(--accent)', fontFamily:'var(--font-mono)', marginBottom:2 }}>CURRENT WORKOUT</div>
             <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
-              {currentWorkout.date} · {(currentWorkout.distance/1000).toFixed(1)} km · TE {currentWorkout.trainingEffect?.aerobic}
+              {fmtDateDMY(currentWorkout.date)} · {(currentWorkout.distance/1000).toFixed(1)} km · TE {currentWorkout.trainingEffect?.aerobic}
             </div>
           </div>
           <button
@@ -304,7 +305,7 @@ export function HistoryTab({ history, currentWorkout, onSave, onLoadFromHistory 
       {/* Selected workout detail */}
       {selectedWorkout && (
         <Card style={{ borderColor:'rgba(232,168,50,0.25)' }}>
-          <CardLabel>Details · {selectedWorkout.date}</CardLabel>
+          <CardLabel>Details · {fmtDateDMY(selectedWorkout.date)}</CardLabel>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-3)' }}>
             {selectedWorkout.hrZones?.map(z => (
               <div key={z.id} style={{ display:'flex', alignItems:'center', gap:8 }}>

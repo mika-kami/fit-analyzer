@@ -6,6 +6,7 @@ import { useState, useRef } from 'react';
 import { BulkUploadModal } from './BulkUploadModal.jsx';
 import { CoachBriefingCard } from './CoachBriefingCard.jsx';
 import { AppHeader } from './Shell.jsx';
+import { fmtDateDMY } from '../core/format.js';
 
 const LOAD_COLOR = {
   high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151'
@@ -98,7 +99,7 @@ function WorkoutCard({ w, onSelect, onDelete }) {
             <span style={{ fontSize: 18 }}>{sportIcon(w.sport)}</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>{w.sport}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{w.date} · {w.startTime}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{fmtDateDMY(w.date)} · {w.startTime}</div>
             </div>
           </div>
           <button

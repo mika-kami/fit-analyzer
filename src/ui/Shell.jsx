@@ -1,4 +1,4 @@
-﻿import { fmtKm, fmtDurationShort } from '../core/format.js';
+﻿import { fmtKm, fmtDurationShort, fmtDateDMY } from '../core/format.js';
 
 /**
  * Shell.jsx
@@ -16,7 +16,7 @@ const TABS = [
   { id: 'laps',      label: 'Laps'      },
 ];
 
-// ── Shared button style helpers ───────────────────────────────────────────────
+// -- Shared button style helpers -----------------------------------------------
 function btnBase(extra = {}) {
   return {
     background:   'var(--bg-overlay)',
@@ -56,7 +56,7 @@ function Btn({ onClick, title, active, accent, children, style: extraStyle }) {
   );
 }
 
-// ── AppHeader ─────────────────────────────────────────────────────────────────
+// -- AppHeader -----------------------------------------------------------------
 /**
  * Shared header shell used by Dashboard (history) and Shell (detail).
  *
@@ -220,7 +220,7 @@ export function AppHeader({
   );
 }
 
-// ── Shell (detail view) ───────────────────────────────────────────────────────
+// -- Shell (detail view) -------------------------------------------------------
 export function Shell({
   workout: w,
   activeTab,
@@ -236,7 +236,7 @@ export function Shell({
   onProfile,
 }) {
   const title    = w ? `${w.sportLabel}${w.bike ? ` — ${w.bike}` : ''}` : 'Training Plan';
-  const subtitle = w ? `${w.date}${w.startTime ? ' · ' + w.startTime : ''} · ${fmtKm(w.distance ?? 0)} km · ${fmtDurationShort(w.duration?.active ?? 0)}` : null;
+  const subtitle = w ? `${fmtDateDMY(w.date)}${w.startTime ? ' · ' + w.startTime : ''} · ${fmtKm(w.distance ?? 0)} km · ${fmtDurationShort(w.duration?.active ?? 0)}` : null;
   const eyebrow  = w ? `◈ FIT ANALYZER · ${w.fileName}` : '◈ FIT ANALYZER';
 
   return (
@@ -284,3 +284,4 @@ export function Shell({
     </AppHeader>
   );
 }
+

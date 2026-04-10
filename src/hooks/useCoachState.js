@@ -112,6 +112,22 @@ function writeMesocycle(key, mc) {
   } catch {}
 }
 
+function mapMesocycleFromDb(row) {
+  if (!row) return null;
+  const weeks = Array.isArray(row.weeks) ? row.weeks : [];
+  const meta = { ...(row.meta || {}) };
+  if (!meta.totalWeeks) meta.totalWeeks = weeks.length || 0;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const idx = weeks.findIndex((wk) => today >= wk?.startDate && today <= wk?.endDate);
+
+  return {
+    weeks,
+    meta,
+    currentWeekIndex: Math.max(0, idx),
+  };
+}
+
 export function useCoachState(userId) {
   const key = useMemo(() => storageKey(userId), [userId]);
   const digestKey = useMemo(() => digestStorageKey(userId), [userId]);
@@ -158,12 +174,15 @@ export function useCoachState(userId) {
     let alive = true;
     const localState = readLocal(key);
     const localDigest = readDigest(digestKey);
+    const localMesocycle = readMesocycle(mcKey);
     setAthleteDigest(localDigest);
+    setMesocycle(localMesocycle);
 
     async function load() {
       if (!userId) {
         if (alive) {
           setState(localState);
+          setMesocycle(localMesocycle);
           if (!localDigest) {
             const digest = buildAthleteDigest(localState.profile, []);
             setAthleteDigest(digest);
@@ -173,10 +192,18 @@ export function useCoachState(userId) {
         return;
       }
 
-      const [profileRes, checkinsRes, notesRes] = await Promise.all([
+      const [profileRes, checkinsRes, notesRes, mesocycleRes] = await Promise.all([
         supabase.from('athlete_profiles').select('*').eq('user_id', userId).maybeSingle(),
         supabase.from('daily_readiness_checkins').select('*').eq('user_id', userId),
         supabase.from('workout_reflections').select('*').eq('user_id', userId),
+        supabase
+          .from('mesocycles')
+          .select('weeks,meta')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
       const dbProfile = profileRes?.data ? mapProfileFromDb(profileRes.data) : null;
@@ -208,6 +235,10 @@ export function useCoachState(userId) {
       if (!alive) return;
       setState(merged);
       try { localStorage.setItem(key, JSON.stringify(merged)); } catch {}
+      const dbMesocycle = mapMesocycleFromDb(mesocycleRes?.data);
+      const nextMesocycle = dbMesocycle || localMesocycle;
+      setMesocycle(nextMesocycle);
+      writeMesocycle(mcKey, nextMesocycle);
       const [docs, labRes] = await Promise.all([
         fetchSharedMedicalDocs().catch(() => []),
         supabase.from('lab_values').select('*').eq('user_id', userId).order('test_date', { ascending: false }).catch(() => ({ data: [] })),
@@ -223,7 +254,7 @@ export function useCoachState(userId) {
     });
 
     return () => { alive = false; };
-  }, [key, userId, digestKey, fetchSharedMedicalDocs]);
+  }, [key, userId, digestKey, mcKey, fetchSharedMedicalDocs]);
 
   const saveProfile = useCallback(async (patch) => {
     const next = {
