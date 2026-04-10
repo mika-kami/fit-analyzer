@@ -61,6 +61,12 @@ export default function App() {
   const workout  = useWorkout();                  // current open workout
   const coach    = useCoachState(auth.user?.id);
   const workouts = useWorkouts(auth.user, coach?.mesocycle);       // Supabase-backed history
+  const currentWeekDays = useMemo(() => {
+    const weeks = coach?.mesocycle?.weeks ?? [];
+    const idx   = coach?.mesocycle?.currentWeekIndex ?? 0;
+    return weeks[idx]?.days ?? [];
+  }, [coach?.mesocycle]);
+
   const globalChat = useOpenAI(
     workout.workout,
     workouts.recentWorkouts,
@@ -70,6 +76,7 @@ export default function App() {
     {
       mode: 'global',
       attachedWorkout: screen === 'detail' ? workout.workout : null,
+      weekDays: currentWeekDays,
     }
   );
 

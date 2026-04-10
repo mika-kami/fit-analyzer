@@ -150,3 +150,23 @@ export function buildHistoryDigest(recentWorkouts = []) {
 
   return `Last ${list.length} sessions: ${distribution}. Avg TE ${avgTe}/5. Hard sessions ${hardSessions}. CTL ${load.ctl.toFixed(1)}, ATL ${load.atl.toFixed(1)}, TSB ${load.tsb.toFixed(1)}. Weekly volume ~${weeklyVolume.toFixed(1)} km.`;
 }
+
+/**
+ * Serialise active week plan days into a compact one-liner for the system prompt.
+ * ~60–80 tokens for a full 7-day week. Called inside useOpenAI before each LLM request.
+ *
+ * @param {object[]} weekDays - days array from mesocycle.weeks[currentWeekIndex].days
+ * @returns {string}
+ */
+export function buildPlanDigest(weekDays) {
+  if (!Array.isArray(weekDays) || !weekDays.length) return '';
+  const lines = weekDays.map(d => {
+    const parts = [
+      d.aiTitle ?? d.type,
+      d.targetKm   ? `${d.targetKm}km`   : '',
+      d.targetMins ? `${d.targetMins}min` : '',
+    ].filter(Boolean).join(' ');
+    return `${d.day}(${d.dateIso ?? d.date ?? ''}): ${parts}`;
+  });
+  return lines.join('; ');
+}

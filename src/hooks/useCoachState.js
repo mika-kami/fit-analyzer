@@ -323,20 +323,39 @@ export function useCoachState(userId) {
     }
   }, [persistLocal, state, userId]);
 
-  const regenerateMesocycle = useCallback((historyWorkouts = []) => {
-    const mc = generateMesocycle(state.profile, historyWorkouts);
+  const regenerateMesocycle = useCallback((historyWorkouts = [], startDate = null) => {
+    const mc = generateMesocycle(state.profile, historyWorkouts, startDate);
     setMesocycle(mc);
     writeMesocycle(mcKey, mc);
     if (userId) {
-      supabase.from('mesocycles').upsert({
-        user_id:     userId,
-        goal_date:   mc.meta.goalDate || null,
+      const payload = {
+        user_id: userId,
+        goal_date: mc.meta.goalDate || null,
         goal_description: mc.meta.goal || null,
         total_weeks: mc.meta.totalWeeks,
-        weeks:       mc.weeks,
-        meta:        mc.meta,
-        is_active:   true,
-      }, { onConflict: 'user_id,is_active' }).then(() => {}).catch(() => {});
+        weeks: mc.weeks,
+        meta: mc.meta,
+        is_active: true,
+      };
+
+      (async () => {
+        try {
+          const { data: activeRow } = await supabase
+            .from('mesocycles')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (activeRow?.id) {
+            await supabase.from('mesocycles').update(payload).eq('id', activeRow.id);
+          } else {
+            await supabase.from('mesocycles').insert(payload);
+          }
+        } catch {
+          // Keep UI responsive even if persistence fails.
+        }
+      })();
     }
     return mc;
   }, [state.profile, mcKey, userId]);

@@ -314,12 +314,14 @@ function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, ph
     const dayDate = new Date(weekStart);
     dayDate.setUTCDate(weekStart.getUTCDate() + i);
     const dateIso = dayDate.toISOString().slice(0, 10);
+    // Label by actual day-of-week (Mon=0..Sun=6)
+    const isoDow = (dayDate.getUTCDay() + 6) % 7;
     return {
       ...d,
-      day:     DAY_LABELS[i],
+      day:     DAY_LABELS[isoDow],
       date:    dateIso.slice(5).replace('-', '/'),
       dateIso,
-      dow:     i,
+      dow:     isoDow,
       color:   TYPE_COLOR[d.type] ?? '#6b7280',
       intent:  SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
     };
@@ -328,9 +330,13 @@ function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, ph
 
 /**
  * generateMesocycle — public API for multi-week plan generation.
+ * @param {object} profile
+ * @param {object[]} historyWorkouts
+ * @param {string|null} startDate — ISO date (YYYY-MM-DD) for week 1 day 1.
+ *   Defaults to the current Monday when null.
  * Returns { weeks[], currentWeekIndex, meta }.
  */
-export function generateMesocycle(profile, historyWorkouts = []) {
+export function generateMesocycle(profile, historyWorkouts = [], startDate = null) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   let goalDate   = profile?.goalDate ?? '';
@@ -355,13 +361,18 @@ export function generateMesocycle(profile, historyWorkouts = []) {
   const baseKm     = refKm > 0 ? Math.max(refKm * detraining.factor, floor) : floor;
   const peakKm     = Math.round(baseKm * 1.25);
 
-  // Start mesocycle from current Monday
-  const todayJs = new Date(todayIso + 'T00:00:00Z');
-  const todayDow = todayJs.getUTCDay(); // 0=Sun...6=Sat
-  const daysToMon = todayDow === 0 ? -6 : 1 - todayDow;
-  const msStart = new Date(todayJs);
-  msStart.setUTCDate(todayJs.getUTCDate() + daysToMon);
-  const msStartIso = msStart.toISOString().slice(0, 10);
+  // Start mesocycle from the given date, or snap to current Monday by default
+  let msStartIso;
+  if (startDate) {
+    msStartIso = startDate;
+  } else {
+    const todayJs  = new Date(todayIso + 'T00:00:00Z');
+    const todayDow = todayJs.getUTCDay(); // 0=Sun...6=Sat
+    const daysToMon = todayDow === 0 ? -6 : 1 - todayDow;
+    const msStart  = new Date(todayJs);
+    msStart.setUTCDate(todayJs.getUTCDate() + daysToMon);
+    msStartIso = msStart.toISOString().slice(0, 10);
+  }
 
   const weeks = [];
   for (let w = 0; w < totalWeeks; w++) {
@@ -381,7 +392,7 @@ export function generateMesocycle(profile, historyWorkouts = []) {
   return {
     weeks,
     currentWeekIndex,
-    meta: { totalWeeks, peakKm, startDate: msStartIso, endDate: msEndIso, goalDate, goal: profile?.primaryGoal ?? '', sport: profile?.targetSport ?? 'mixed' },
+    meta: { totalWeeks, peakKm, startDate: msStartIso, endDate: msEndIso, goalDate, goal: profile?.primaryGoal ?? '', sport: profile?.targetSport ?? 'mixed', planStartDate: msStartIso },
   };
 }
 

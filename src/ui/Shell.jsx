@@ -235,11 +235,9 @@ export function Shell({
   onPDF,
   onProfile,
 }) {
-  if (!w) return null;
-
-  const title    = `${w.sportLabel}${w.bike ? ` — ${w.bike}` : ''}`;
-  const subtitle = `${w.date}${w.startTime ? ' · ' + w.startTime : ''} · ${fmtKm(w.distance ?? 0)} km · ${fmtDurationShort(w.duration?.active ?? 0)}`;
-  const eyebrow  = `◈ FIT ANALYZER · ${w.fileName}`;
+  const title    = w ? `${w.sportLabel}${w.bike ? ` — ${w.bike}` : ''}` : 'Training Plan';
+  const subtitle = w ? `${w.date}${w.startTime ? ' · ' + w.startTime : ''} · ${fmtKm(w.distance ?? 0)} km · ${fmtDurationShort(w.duration?.active ?? 0)}` : null;
+  const eyebrow  = w ? `◈ FIT ANALYZER · ${w.fileName}` : '◈ FIT ANALYZER';
 
   return (
     <AppHeader
@@ -259,7 +257,7 @@ export function Shell({
     >
       {/* Tab bar */}
       <nav style={{ display: 'flex', gap: 2, padding: '0 var(--sp-6)' }}>
-        {TABS.map(t => (
+        {(w ? TABS : TABS.filter(t => t.id === 'plan')).map(t => (
           <button
             key={t.id}
             onClick={() => onTabChange(t.id)}

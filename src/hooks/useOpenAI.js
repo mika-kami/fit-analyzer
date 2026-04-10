@@ -1,7 +1,7 @@
-/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
+﻿/** useOpenAI.js — Chat hook: OpenAI GPT-4o mini. Key from VITE_OPENAI_API_KEY env var. */
 
 import { useState, useCallback, useEffect } from 'react';
-import { buildHistoryDigest, buildWorkoutSnapshot } from '../core/coachDigest.js';
+import { buildHistoryDigest, buildWorkoutSnapshot, buildPlanDigest } from '../core/coachDigest.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
 const MODEL = import.meta.env.VITE_LLM_MODEL ?? 'gpt-4o-mini';
@@ -182,11 +182,14 @@ function detectRelevantContext(userMessage) {
     speed: /(speed|pace|km\/h|min\/km)/i.test(text),
   };
 
+  const planChange = /(skip|swap|move|change|reschedule|replace|rest instead|too tired|too sore|can i|instead of)/i.test(text);
+
   return {
     weather,
     medical,
     history,
     workout,
+    planChange,
     workoutDetails,
     any: weather || medical || history || workout,
     anyWorkoutDetail: Object.values(workoutDetails).some(Boolean),
@@ -219,12 +222,19 @@ function buildSystemPrompt({
   historyDigest,
   detailFlags,
   includeMedicalFocus,
+  planDigest,
 }) {
   const COACH_IDENTITY = `You are a harsh-but-fair endurance coach. Be direct, use numbers when available, and always prescribe clear next actions.
 Answer in English or Russian, matching the user's language.`;
 
   const sections = [COACH_IDENTITY];
   sections.push(`ATHLETE DIGEST:\n${athleteDigest || 'Athlete digest unavailable.'}`);
+
+  if (planDigest) {
+    sections.push(
+      `CURRENT WEEK PLAN (authoritative — computed by training engine):\n${planDigest}\n\nIMPORTANT: When the athlete asks about this week's training or what to do on any day, you MUST refer to this plan. Do NOT generate a new weekly schedule. You may explain, adjust intensity advice, or suggest swaps — but the session types and structure are fixed unless the athlete explicitly asks for a full plan replacement.`
+    );
+  }
 
   if (includeMedicalFocus) {
     sections.push('MEDICAL FOCUS: User asked a medical/injury topic. Prioritize safety and practical accommodations.');
@@ -293,6 +303,7 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
   const hasKey = API_KEY.startsWith('sk-') && API_KEY.length > 20;
   const mode = options?.mode === 'workout' ? 'workout' : 'global';
   const attachedWorkout = options?.attachedWorkout ?? null;
+  const weekDays = options?.weekDays ?? null;
   const contextWorkout = attachedWorkout || workout || null;
   const conversationWorkoutId = mode === 'global' ? null : (workout?.id ?? null);
 
@@ -342,6 +353,8 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
       const recent = recentWorkoutsFn ? recentWorkoutsFn(10) : [];
       const historyDigest = includeHistory ? buildHistoryDigest(recent) : '';
 
+      const planDigest = weekDays?.length ? buildPlanDigest(weekDays) : '';
+
       const systemPrompt = buildSystemPrompt({
         workout: contextWorkout,
         athleteDigest: athleteDigest || '',
@@ -353,7 +366,12 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
         historyDigest,
         detailFlags: contextFlags.workoutDetails,
         includeMedicalFocus,
+        planDigest,
       });
+
+      const finalSystemPrompt = (contextFlags.planChange && planDigest)
+        ? systemPrompt + "\n\nWhen the athlete asks to skip or swap a session: name the specific day and session type, state the training impact in ≤ 10 words (e.g. \"drops this week's interval stimulus\"), then offer the best alternative. Never silently agree to drop a key session."
+        : systemPrompt;
 
       const priorHistory = messages.filter((m) => !m.streaming).map(({ role, content }) => ({ role, content }));
       let recap = '';
@@ -372,7 +390,7 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
 
       historyForApi.push({ role: 'user', content: trimmed });
 
-      const payloadMessages = [{ role: 'system', content: systemPrompt }];
+      const payloadMessages = [{ role: 'system', content: finalSystemPrompt }];
       if (recap) payloadMessages.push({ role: 'system', content: recap });
       if (mode === 'global' && attachedWorkout) {
         payloadMessages.push({
@@ -409,7 +427,7 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
     } finally {
       setIsStreaming(false);
     }
-  }, [hasKey, isStreaming, saveChatMessage, conversationWorkoutId, messages, contextWorkout, recentWorkoutsFn, athleteDigest, mode, attachedWorkout]);
+  }, [hasKey, isStreaming, saveChatMessage, conversationWorkoutId, messages, contextWorkout, recentWorkoutsFn, athleteDigest, mode, attachedWorkout, weekDays]);
 
   const clearHistory = useCallback(() => setMessages([]), []);
   const inject = useCallback((role, content) => {

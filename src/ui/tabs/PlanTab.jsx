@@ -221,23 +221,39 @@ function WeekCard({ week, isCurrent, isSelected, onClick }) {
 
 // ── Main PlanTab ──────────────────────────────────────────────────────────────
 
+function todayIsoStr() { return new Date().toISOString().slice(0, 10); }
+function tomorrowIsoStr() {
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function PlanTab({ workout: w, history, coach }) {
   const [viewMode, setViewMode] = useState('week');
   const [planSport, setPlanSport] = useState(() => {
     const t = coach?.profile?.targetSport;
     return (t === 'running' || t === 'cycling' || t === 'mixed') ? t : 'mixed';
   });
+  // 'auto' = current Monday (legacy default), 'today', 'tomorrow', 'custom'
+  const [startMode, setStartMode] = useState('auto');
+  const [customDate, setCustomDate] = useState(() => todayIsoStr());
+
+  const effectiveStartDate = useMemo(() => {
+    if (startMode === 'today')    return todayIsoStr();
+    if (startMode === 'tomorrow') return tomorrowIsoStr();
+    if (startMode === 'custom')   return customDate;
+    return null; // auto → Monday snap inside generateMesocycle
+  }, [startMode, customDate]);
 
   const histWorkouts = history?.history ?? [];
 
   // Get or generate mesocycle
   const mesocycle = useMemo(() => {
-    if (coach?.mesocycle?.weeks?.length) return coach.mesocycle;
-    // Fallback: generate on the fly
+    if (coach?.mesocycle?.weeks?.length && startMode === 'auto') return coach.mesocycle;
+    // Fallback or custom start: generate on the fly
     const profile = coach?.profile ?? {};
     const sportProfile = { ...profile, targetSport: planSport !== 'mixed' ? planSport : (profile.targetSport ?? 'running') };
-    return generateMesocycle(sportProfile, histWorkouts);
-  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport]);
+    return generateMesocycle(sportProfile, histWorkouts, effectiveStartDate);
+  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate, startMode]);
 
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(() => mesocycle?.currentWeekIndex ?? 0);
 
@@ -334,10 +350,10 @@ export function PlanTab({ workout: w, history, coach }) {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRevealed(true), 80); return () => clearTimeout(t); }, []);
 
-  // Regenerate mesocycle
+  // Regenerate mesocycle with current start date selection
   const handleRegenerate = () => {
     if (coach?.regenerateMesocycle) {
-      coach.regenerateMesocycle(histWorkouts);
+      coach.regenerateMesocycle(histWorkouts, effectiveStartDate);
     }
   };
 
@@ -413,9 +429,40 @@ export function PlanTab({ workout: w, history, coach }) {
           <option value="running">Running</option>
           <option value="cycling">Cycling</option>
         </select>
+      </div>
+
+      {/* Start date + regenerate */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>START</div>
+        {[
+          { id: 'auto',     label: 'Mon (auto)' },
+          { id: 'today',    label: 'Today' },
+          { id: 'tomorrow', label: 'Tomorrow' },
+          { id: 'custom',   label: 'Pick date' },
+        ].map(opt => (
+          <button
+            key={opt.id}
+            onClick={() => setStartMode(opt.id)}
+            style={{
+              background: startMode === opt.id ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
+              border: `1px solid ${startMode === opt.id ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--r-sm)', padding: '4px 10px',
+              color: startMode === opt.id ? 'var(--accent)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+            }}
+          >{opt.label}</button>
+        ))}
+        {startMode === 'custom' && (
+          <input
+            type="date"
+            value={customDate}
+            onChange={e => setCustomDate(e.target.value)}
+            style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+          />
+        )}
         <button
           onClick={handleRegenerate}
-          style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '6px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
+          style={{ marginLeft: 'auto', background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
         >Regenerate</button>
       </div>
 
@@ -456,7 +503,7 @@ export function PlanTab({ workout: w, history, coach }) {
               <DayCard
                 key={day.dateIso ?? day.day}
                 day={day}
-                weather={weather.days[i]}
+                weather={weather.days[Math.round((new Date(day.dateIso) - new Date(todayIso)) / 86400000)]}
                 index={i}
                 revealed={revealed}
                 compliance={complianceByDate[day.dateIso]}
