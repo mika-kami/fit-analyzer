@@ -144,15 +144,88 @@ export function sportConfig(workout) {
     unit:         'km',
     // Day labels and descriptions specific to road cycling
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Full rest',                         intensity:0,  targetKm:0,              desc:'Recovery, stretching, sleep' }),
-      recovery:  (km) => ({ type:'recovery', label:'Recovery ride Z1',          intensity:15, targetKm:Math.max(Math.round(km*0.25), 25), desc:'Cadence 90+, HR <60% max, full freedom' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Aerobic base Z2',                      intensity:50, targetKm:Math.round(km*0.55), desc:'Cadence 85–95, HR 60–70%, conversational pace' }),
-      long:      (km) => ({ type:'long',     label:`Long ride Z2 (~${Math.round(km*0.80)} km)`,intensity:60, targetKm:Math.round(km*0.80), desc:'Steady pace, no accelerations, gels every 45 min' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Tempo Z3',                           intensity:65, targetKm:Math.round(km*0.45), desc:'Mid block 20–40 min in Z3, 15 min warm-up and cool-down' }),
-      interval:  (km) => ({ type:'interval', label:'Intervals Z4 — 4×8 min',               intensity:85, targetKm:Math.round(km*0.38), desc:'4 intervals of 8 min Z4, 4 min recovery Z1 in between' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max — 5×4 min Z5',                  intensity:90, targetKm:Math.round(km*0.32), desc:'5 intervals of 4 min >90% max HR, 4 min pause' }),
-      hills:     (km) => ({ type:'tempo',    label:'Strength climbs — 6×5 min',            intensity:78, targetKm:Math.round(km*0.38), desc:'Cadence 55–65, Z3–Z4 on climb, coast on descent' }),
-      test:      (km) => ({ type:'test',     label:'Assessment ride Z1–Z2',               intensity:35, targetKm:Math.round(km*0.35), desc:'Record HR and perceived effort — this is the baseline' }),
+      rest:     ()     => ({ type:'rest',     label:'Full rest',            intensity:0,  targetKm:0, desc:'Complete rest. Stretching, sleep, hydration.' }),
+      recovery: (weekKm) => {
+        const s   = Math.max(30, Math.round(weekKm * 0.18));
+        const h   = (s / 22).toFixed(1);
+        return { type:'recovery', label:`Recovery ride (${s} km)`, intensity:15, targetKm:s,
+          desc:`${s} km (~${h}h) Z1 only. HR <60% max, cadence 90+, flat terrain. No effort above Z1 — this actively aids recovery.` };
+      },
+      aerobic: (weekKm) => {
+        const s = Math.round(weekKm * 0.55);
+        const h = (s / 27).toFixed(1);
+        return { type:'aerobic', label:`Z2 Endurance (${s} km)`, intensity:50, targetKm:s,
+          desc:`${s} km (~${h}h) at Z2. HR 60–70%, cadence 85–95, fully conversational. Fuel every 45 min for rides over 90 min.` };
+      },
+      long: (weekKm) => {
+        const s    = Math.round(weekKm * 0.80);
+        const hNum = s / 25;
+        const h    = hNum.toFixed(1);
+        const gels = Math.max(1, Math.round(hNum * 60 / 45));
+        return { type:'long', label:`Long ride (${s} km)`, intensity:60, targetKm:s,
+          desc:`${s} km (~${h}h) steady Z2. No hard efforts. Fuel: 1 gel + 500 ml water every 45 min (~${gels} gels). Sit up and save legs in the final 30 min.` };
+      },
+      tempo: (weekKm) => {
+        const s       = Math.round(weekKm * 0.45);
+        const totMin  = Math.round(s / 25 * 60);
+        const workMin = Math.max(20, totMin - 30);
+        let label, desc;
+        if (workMin < 45) {
+          label = `Sweet spot — 1×${workMin} min SST (${s} km)`;
+          desc  = `${s} km total: 15 min Z2 warm-up → 1×${workMin} min sweet spot (88–93% FTP, HR ~78–85% max) → 15 min Z1 cool-down.`;
+        } else if (workMin < 70) {
+          const blk = Math.round(workMin / 2);
+          label = `Sweet spot — 2×${blk} min SST (${s} km)`;
+          desc  = `${s} km total: 15 min Z2 warm-up → 2×${blk} min SST (5 min Z1 between) → Z2 endurance → 15 min cool-down.`;
+        } else {
+          const blk = Math.round(workMin / 3);
+          label = `Sweet spot — 3×${blk} min SST (${s} km)`;
+          desc  = `${s} km total: 15 min Z2 warm-up → 3×${blk} min SST (5 min Z1 between) → Z2 endurance to complete distance → 15 min cool-down.`;
+        }
+        return { type:'tempo', label, intensity:65, targetKm:s, desc };
+      },
+      interval: (weekKm) => {
+        const s       = Math.round(weekKm * 0.38);
+        const totMin  = Math.round(s / 25 * 60);
+        const workMin = Math.max(30, totMin - 35);
+        let sets, repMin, recMin;
+        if (workMin < 50)       { sets = 3; repMin = 10; recMin = 5; }
+        else if (workMin < 80)  { sets = 2; repMin = 20; recMin = 5; }
+        else if (workMin < 110) { sets = 3; repMin = 15; recMin = 5; }
+        else                    { sets = 4; repMin = 15; recMin = 5; }
+        return { type:'interval',
+          label:  `FTP intervals — ${sets}×${repMin} min (${s} km)`, intensity:85, targetKm:s,
+          desc:   `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @FTP (${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
+      },
+      vo2: (weekKm) => {
+        const s       = Math.round(weekKm * 0.32);
+        const totMin  = Math.round(s / 25 * 60);
+        const workMin = Math.max(24, totMin - 35);
+        let sets, repMin, recMin;
+        if (workMin < 45)      { sets = 4; repMin = 4; recMin = 4; }
+        else if (workMin < 65) { sets = 5; repMin = 5; recMin = 5; }
+        else if (workMin < 85) { sets = 6; repMin = 5; recMin = 5; }
+        else                   { sets = 5; repMin = 6; recMin = 6; }
+        return { type:'interval',
+          label: `VO₂max — ${sets}×${repMin} min Z5 (${s} km)`, intensity:90, targetKm:s,
+          desc:  `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @VO₂max (>106% FTP / >90% HRmax, ${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
+      },
+      hills: (weekKm) => {
+        const s       = Math.round(weekKm * 0.38);
+        const totMin  = Math.round(s / 22 * 60); // hilly = slower avg
+        const workMin = Math.max(25, totMin - 30);
+        const climbMin = Math.min(8, Math.round(workMin / (workMin < 60 ? 5 : workMin < 90 ? 7 : 10)));
+        const reps     = Math.round(workMin / (climbMin + climbMin * 0.8)); // climb + ~same descent recovery
+        const repsC    = Math.max(4, Math.min(12, reps));
+        return { type:'tempo',
+          label: `Climbing repeats — ${repsC}×${climbMin} min (${s} km)`, intensity:78, targetKm:s,
+          desc:  `${s} km total: 15 min Z2 warm-up → ${repsC} climbs of ${climbMin} min Z3–Z4 (cadence 55–65, seated), coast descent for recovery → Z2 home. Hilly route.` };
+      },
+      test: (weekKm) => {
+        const s = Math.round(weekKm * 0.35);
+        return { type:'test', label:`FTP test ride (${s} km)`, intensity:35, targetKm:s,
+          desc:   `${s} km: 30 min Z2 warm-up → 5 min all-out → 5 min easy → 20 min time-trial effort at maximal sustainable power (record avg power + HR) → easy Z1 home. Do not eat for 2h before.` };
+      },
     },
   };
 
@@ -162,34 +235,115 @@ export function sportConfig(workout) {
     defaultWeek: 50,
     unit:        'km',
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Full rest',                        intensity:0,  targetKm:0,              desc:'Recovery, stretching' }),
-      recovery:  (km) => ({ type:'recovery', label:'Easy run Z1',                  intensity:15, targetKm:Math.round(km*0.15), desc:'HR <60% max, very slow, conversational pace' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Aerobic run Z2',                     intensity:50, targetKm:Math.round(km*0.22), desc:'HR 60–70%, comfortable pace' }),
-      long:      (km) => ({ type:'long',     label:`Long run (~${Math.round(km*0.35)} km)`, intensity:60, targetKm:Math.round(km*0.35), desc:'30–60 s/km slower than usual' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Tempo Z3',                              intensity:65, targetKm:Math.round(km*0.18), desc:'20–30 min at a pace slightly faster than marathon' }),
-      interval:  (km) => ({ type:'interval', label:'Intervals Z4 — 6×1 km',               intensity:85, targetKm:Math.round(km*0.15), desc:'6 reps of 1 km at race pace, 2 min pause' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max — 8×400 m Z5',                 intensity:90, targetKm:Math.round(km*0.12), desc:'8 sprints of 400 m >90% max HR' }),
-      hills:     (km) => ({ type:'tempo',    label:'Hill sprints — 8×200 m',                intensity:78, targetKm:Math.round(km*0.14), desc:'Uphill sprints, recovery jog down' }),
-      test:      (km) => ({ type:'test',     label:'Assessment run Z2',               intensity:35, targetKm:Math.round(km*0.15), desc:'Record pace and HR — baseline' }),
+      rest: () => ({ type:'rest', label:'Full rest', intensity:0, targetKm:0,
+        desc:'Complete rest. Light stretching, foam rolling, and extra sleep are welcome.' }),
+
+      recovery: (weekKm) => {
+        const s   = Math.max(4, Math.round(weekKm * 0.12));
+        const min = Math.round(s / 6.5 * 60); // ~6.5 min/km easy pace
+        return { type:'recovery', label:`Easy recovery run (${s} km)`, intensity:15, targetKm:s,
+          desc:`${s} km (~${min} min) at a truly easy Z1 pace (HR <65% max). Should feel effortless — hold a full conversation throughout. No watch pressure.` };
+      },
+
+      aerobic: (weekKm) => {
+        const s   = Math.max(6, Math.round(weekKm * 0.20));
+        const min = Math.round(s / 5.5 * 60); // ~5.5 min/km aerobic
+        return { type:'aerobic', label:`Aerobic Z2 run (${s} km)`, intensity:50, targetKm:s,
+          desc:`${s} km (~${min} min) at a comfortable Z2 pace (HR 65–75% max, nasal breathing). The cornerstone of aerobic development — keep it honest: slow down on hills.` };
+      },
+
+      long: (weekKm) => {
+        const s      = Math.max(10, Math.round(weekKm * 0.30));
+        const minNum = s / 5.5 * 60;
+        const min    = Math.round(minNum);
+        const gels   = Math.max(0, Math.round((minNum - 60) / 45)); // gel every 45 min after first hour
+        const gelNote = gels > 0 ? ` Fuel: 1 gel every 45 min after the first hour (~${gels} total).` : '';
+        return { type:'long', label:`Long run (${s} km)`, intensity:60, targetKm:s,
+          desc:`${s} km (~${min} min) at easy-to-moderate Z2 pace (30–60 s/km slower than marathon effort).${gelNote} Walk uphills if needed — time on feet matters more than pace.` };
+      },
+
+      tempo: (weekKm) => {
+        const s       = Math.max(6, Math.round(weekKm * 0.16));
+        const totMin  = Math.round(s / 5.0 * 60); // tempo avg ~5 min/km
+        const workMin = Math.max(15, totMin - 20); // subtract 10+10 min warm/cool
+        let label, desc;
+        if (workMin < 25) {
+          label = `Threshold run — 1×${workMin} min (${s} km)`;
+          desc  = `${s} km total: 2 km easy warm-up jog → ${workMin} min continuous at threshold pace (Z3, comfortably hard — can speak 2–3 words) → 2 km easy cool-down.`;
+        } else if (workMin < 45) {
+          const blk = Math.round(workMin / 2);
+          label = `Tempo run — 2×${blk} min (${s} km)`;
+          desc  = `${s} km total: 2 km warm-up → 2×${blk} min at threshold pace (Z3, ~10 km race effort), 3 min easy jog between → 2 km cool-down. Stay relaxed — tempo is controlled discomfort.`;
+        } else {
+          const blk = Math.round(workMin / 3);
+          label = `Tempo cruise — 3×${blk} min (${s} km)`;
+          desc  = `${s} km total: 2 km warm-up → 3×${blk} min at threshold/comfortably hard pace (Z3), 3 min jog recovery between → easy running to complete distance → 2 km cool-down.`;
+        }
+        return { type:'tempo', label, intensity:65, targetKm:s, desc };
+      },
+
+      interval: (weekKm) => {
+        const s       = Math.max(5, Math.round(weekKm * 0.14));
+        const totMin  = Math.round(s / 5.0 * 60);
+        const workMin = Math.max(20, totMin - 24); // ~12 min warm + 12 min cool
+        // Each 1 km rep takes ~4 min at Z4 + 2 min recovery = 6 min per rep
+        const reps    = Math.max(3, Math.min(10, Math.round(workMin / 6)));
+        const repDist = reps <= 4 ? '1200 m' : reps <= 7 ? '1 km' : '800 m';
+        const recNote = reps <= 4 ? '90 s' : '2 min';
+        return { type:'interval', label:`Intervals Z4 — ${reps}×${repDist} (${s} km)`, intensity:85, targetKm:s,
+          desc:`${s} km total: 2 km warm-up → ${reps}×${repDist} at 5 km race effort (Z4 / ~90–95% HRmax), ${recNote} jog recovery between → 2 km cool-down. Last rep should feel like you could do one more.` };
+      },
+
+      vo2: (weekKm) => {
+        const s       = Math.max(4, Math.round(weekKm * 0.11));
+        const totMin  = Math.round(s / 5.0 * 60);
+        const workMin = Math.max(16, totMin - 24);
+        // VO2max: 3–5 min reps with equal recovery. Classic Billat: 3×, 4×, 5×3 min or 4×4 min
+        let sets, repMin, recMin;
+        if (workMin < 28)      { sets = 4; repMin = 3; recMin = 3; }
+        else if (workMin < 40) { sets = 5; repMin = 3; recMin = 3; }
+        else if (workMin < 50) { sets = 4; repMin = 4; recMin = 4; }
+        else                   { sets = 5; repMin = 4; recMin = 4; }
+        return { type:'interval', label:`VO₂max — ${sets}×${repMin} min Z5 (${s} km)`, intensity:90, targetKm:s,
+          desc:`${s} km total: 2 km warm-up → ${sets}×${repMin} min at VO₂max effort (1500 m race pace / >95% HRmax, ${recMin} min easy jog recovery) → 2 km cool-down. Legs should feel heavy after rep 3 — that's the stimulus.` };
+      },
+
+      hills: (weekKm) => {
+        const s       = Math.max(5, Math.round(weekKm * 0.13));
+        const totMin  = Math.round(s / 5.5 * 60);
+        const workMin = Math.max(20, totMin - 24);
+        // Hill reps: 30–60 s sprints, walk/jog back ~90 s recovery
+        const repSec  = workMin < 30 ? 30 : workMin < 50 ? 45 : 60;
+        const cycleMin = (repSec + 90) / 60; // uphill sprint + jog back
+        const reps    = Math.max(6, Math.min(15, Math.round(workMin / cycleMin)));
+        return { type:'tempo', label:`Hill repeats — ${reps}×${repSec} s (${s} km)`, intensity:78, targetKm:s,
+          desc:`${s} km total: 2 km easy warm-up → ${reps} hill sprints of ${repSec} s at 5 km effort (Z3–Z4, drive knees, short stride) — jog back down for recovery → 2 km cool-down. Builds leg strength and running economy.` };
+      },
+
+      test: (weekKm) => {
+        const s = Math.max(5, Math.round(weekKm * 0.14));
+        return { type:'test', label:`Baseline run (${s} km)`, intensity:35, targetKm:s,
+          desc:`${s} km: 2 km easy warm-up → run a 3 km effort at a controlled hard pace (record avg HR + split times) → 2 km easy cool-down. Used to calibrate zones — consistent conditions required (same route, rested legs).` };
+      },
     },
   };
 
-  // Generic fallback
+  // Generic fallback (mixed / cross-training)
   return {
     sport:       'other',
     weekFloors:  { full_restart:30, base_rebuild:40, significant:50, moderate:60, slight:70, active:80, overreached:30, too_easy:90 },
     defaultWeek: 60,
     unit:        'km',
     templates: {
-      rest:      (km) => ({ type:'rest',     label:'Full rest',         intensity:0,  targetKm:0,              desc:'' }),
-      recovery:  (km) => ({ type:'recovery', label:'Recovery Z1',    intensity:15, targetKm:Math.round(km*0.20), desc:'Light load' }),
-      aerobic:   (km) => ({ type:'aerobic',  label:'Aerobic Z2',          intensity:50, targetKm:Math.round(km*0.40), desc:'60–70% max HR' }),
-      long:      (km) => ({ type:'long',     label:'Long Z2',           intensity:60, targetKm:Math.round(km*0.60), desc:'Continuous, moderate' }),
-      tempo:     (km) => ({ type:'tempo',    label:'Tempo Z3',          intensity:65, targetKm:Math.round(km*0.35), desc:'70–80% max HR' }),
-      interval:  (km) => ({ type:'interval', label:'Intervals Z4',         intensity:85, targetKm:Math.round(km*0.30), desc:'80–90% max HR' }),
-      vo2:       (km) => ({ type:'interval', label:'VO₂max Z5',            intensity:90, targetKm:Math.round(km*0.25), desc:'>90% max HR' }),
-      hills:     (km) => ({ type:'tempo',    label:'Strength Z3–Z4',        intensity:78, targetKm:Math.round(km*0.30), desc:'Strength work' }),
-      test:      (km) => ({ type:'test',     label:'Assessment ride',    intensity:35, targetKm:Math.round(km*0.25), desc:'Baseline' }),
+      rest:     () => ({ type:'rest',     label:'Full rest',              intensity:0,  targetKm:0,                  desc:'Complete rest. Stretching, mobility, or light walk only.' }),
+      recovery: (km) => { const s=Math.round(km*0.16); return { type:'recovery', label:`Easy Z1 session (${s} km)`, intensity:15, targetKm:s, desc:`${s} km at minimal effort (HR <65% max). Active recovery — the goal is circulation and loosening up, not fitness.` }; },
+      aerobic:  (km) => { const s=Math.round(km*0.22); return { type:'aerobic',  label:`Aerobic Z2 (${s} km)`,      intensity:50, targetKm:s, desc:`${s} km at comfortable Z2 (HR 65–75% max). Foundational aerobic work — maintain conversational effort throughout.` }; },
+      long:     (km) => { const s=Math.round(km*0.32); return { type:'long',     label:`Long Z2 (${s} km)`,         intensity:60, targetKm:s, desc:`${s} km at easy-moderate Z2. Builds aerobic base. Stay in Z2 — if HR drifts above 75% max, slow down.` }; },
+      tempo:    (km) => { const s=Math.round(km*0.22); return { type:'tempo',    label:`Tempo Z3 (${s} km)`,        intensity:65, targetKm:s, desc:`${s} km: 10–15 min Z2 warm-up → main block at Z3 (70–80% HR max, comfortably hard) → 10 min cool-down.` }; },
+      interval: (km) => { const s=Math.round(km*0.18); return { type:'interval', label:`Intervals Z4 (${s} km)`,   intensity:85, targetKm:s, desc:`${s} km: warm-up → repeated hard efforts at Z4 (80–90% HR max) with Z1 recovery between → cool-down.` }; },
+      vo2:      (km) => { const s=Math.round(km*0.14); return { type:'interval', label:`VO₂max Z5 (${s} km)`,      intensity:90, targetKm:s, desc:`${s} km: warm-up → short maximal efforts at Z5 (>90% HR max) with full recovery between → cool-down.` }; },
+      hills:    (km) => { const s=Math.round(km*0.18); return { type:'tempo',    label:`Strength Z3–Z4 (${s} km)`, intensity:78, targetKm:s, desc:`${s} km: warm-up → repeated strength-focused efforts (hills, resistance) at Z3–Z4 → easy cool-down.` }; },
+      test:     (km) => { const s=Math.round(km*0.16); return { type:'test',     label:`Baseline session (${s} km)`,intensity:35, targetKm:s, desc:`${s} km: easy warm-up → controlled effort at a consistent pace — record avg HR and speed/power to calibrate zones.` }; },
     },
   };
 }
@@ -253,28 +407,31 @@ export function isRecoveryWeek(weekIndex) {
 }
 
 export function computeWeekVolume(weekIndex, totalWeeks, peakKm) {
-  if (isRecoveryWeek(weekIndex)) return Math.round(peakKm * 0.40);
+  // peakKm = baseKm * 1.25, so 0.80 * peakKm = baseKm (current training volume)
+  if (isRecoveryWeek(weekIndex)) return Math.round(peakKm * 0.60);
   const phase = phaseForWeek(weekIndex, totalWeeks);
   if (phase === 'taper') {
     const taperStart = Math.floor(totalWeeks * 0.85);
     const taperPos   = weekIndex - taperStart;
-    const factors    = [0.75, 0.60, 0.40, 0.25];
-    return Math.round(peakKm * (factors[Math.min(taperPos, factors.length - 1)] ?? 0.25));
+    const factors    = [0.80, 0.65, 0.50, 0.35];
+    return Math.round(peakKm * (factors[Math.min(taperPos, factors.length - 1)] ?? 0.35));
   }
   const baseEnd  = Math.floor(totalWeeks * 0.40);
   const buildEnd = Math.floor(totalWeeks * 0.70);
   if (phase === 'base') {
+    // Start at 0.80 (= baseKm), build to 0.88
     const pos = weekIndex / Math.max(baseEnd, 1);
-    return Math.round(peakKm * (0.50 + pos * 0.25));
+    return Math.round(peakKm * (0.80 + pos * 0.08));
   }
   if (phase === 'build') {
+    // 0.88 → 0.96
     const pos = (weekIndex - baseEnd) / Math.max(buildEnd - baseEnd, 1);
-    return Math.round(peakKm * (0.75 + pos * 0.15));
+    return Math.round(peakKm * (0.88 + pos * 0.08));
   }
-  // peak
+  // peak: 0.96 → 1.00
   const peakEnd = Math.floor(totalWeeks * 0.85);
   const pos = (weekIndex - buildEnd) / Math.max(peakEnd - buildEnd, 1);
-  return Math.round(peakKm * (0.90 + pos * 0.10));
+  return Math.round(peakKm * (0.96 + pos * 0.04));
 }
 
 export const PHASE_COLORS = {
@@ -359,7 +516,15 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
   const cfg        = sportConfig(sportObj);
   const floor      = cfg.weekFloors['active'] ?? cfg.defaultWeek;
-  const baseKm     = refKm > 0 ? Math.max(refKm * detraining.factor, floor) : floor;
+
+  // When no recent history, derive base from profile.weeklyHours × sport speed estimate
+  const weeklyHours = Number(profile?.weeklyHours ?? 6);
+  const hoursKm = cfg.sport === 'cycling' ? weeklyHours * 22
+                : cfg.sport === 'running'  ? weeklyHours * 10
+                : weeklyHours * 15;
+  const effectiveRefKm = refKm > 0 ? refKm : hoursKm;
+
+  const baseKm     = Math.max(effectiveRefKm * detraining.factor, floor);
   const peakKm     = Math.round(baseKm * 1.25);
 
   // Start mesocycle from the given date, or snap to current Monday by default
@@ -384,7 +549,8 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
     const weekKm       = computeWeekVolume(w, totalWeeks, peakKm);
     const effectPhase  = isRecovery ? 'recovery' : phase;
     const days         = _generateWeekDays(sportObj, historyWorkouts, weekStartIso, weekKm, effectPhase);
-    weeks.push({ weekIndex: w, startDate: weekStartIso, endDate: weekEndIso, phase, isRecovery, targetKm: weekKm, days });
+    const targetKm     = days.reduce((s, d) => s + (d.targetKm ?? 0), 0);
+    weeks.push({ weekIndex: w, startDate: weekStartIso, endDate: weekEndIso, phase, isRecovery, targetKm, days });
   }
 
   const currentWeekIndex = Math.max(0, weeks.findIndex(wk => todayIso >= wk.startDate && todayIso <= wk.endDate));

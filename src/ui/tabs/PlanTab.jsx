@@ -116,6 +116,22 @@ export function PlanContextBanner({ meta, mesocycleMeta }) {
   );
 }
 
+// ── Session tags ──────────────────────────────────────────────────────────────
+
+function sessionTags(day) {
+  if (day.aiCues?.length > 0) return day.aiCues;
+  const t = day.type;
+  const hi = (day.intensity ?? 0) >= 88;
+  if (t === 'rest')     return ['rest day'];
+  if (t === 'recovery') return ['Z1', 'HR <65%', 'easy'];
+  if (t === 'aerobic')  return ['Z2', 'HR 65–75%', 'conversational'];
+  if (t === 'long')     return ['Z2', 'endurance', 'easy–moderate'];
+  if (t === 'tempo')    return ['Z3', 'threshold', 'comfortably hard'];
+  if (t === 'interval') return hi ? ['Z5', 'VO₂max', 'maximal'] : ['Z4', 'FTP', 'structured'];
+  if (t === 'test')     return ['assessment', 'calibration'];
+  return [];
+}
+
 // ── Day card ─────────────────────────────────────────────────────────────────
 
 function DayCard({ day, weather, index, revealed, compliance }) {
@@ -152,20 +168,21 @@ function DayCard({ day, weather, index, revealed, compliance }) {
                 <span style={{ fontSize: 9, color: compBadge.color, fontFamily: 'var(--font-mono)', background: `${compBadge.color}18`, border: `1px solid ${compBadge.color}40`, borderRadius: 4, padding: '2px 6px' }}>{compBadge.label}</span>
               )}
             </div>
-            {(day.aiWhy ?? day.desc) && (
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                {day.aiWhy ?? day.desc}
-              </div>
-            )}
-            {day.aiCues?.length > 0 && (
+            {(() => { const tags = sessionTags(day); return tags.length > 0 && (
               <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {day.aiCues.map((cue, i) => (
+                {tags.map((tag, i) => (
                   <span key={i} style={{
                     fontSize: 9, color: 'var(--text-secondary)', background: 'var(--bg-raised)',
                     border: '1px solid var(--border-subtle)', borderRadius: 3,
                     padding: '2px 6px', fontFamily: 'var(--font-mono)',
-                  }}>{cue}</span>
+                  }}>{tag}</span>
                 ))}
+              </div>
+            ); })()}
+            {(day.aiWhy || day.desc) && (
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                {day.aiWhy && <div>{day.aiWhy}</div>}
+                {day.desc && <div style={{ marginTop: day.aiWhy ? 3 : 0 }}>{day.desc}</div>}
               </div>
             )}
             {weather && (
