@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 export function CoachPanel({ open, onToggle, chat, contextLabel, actionButtons = [] }) {
-  const { messages, isStreaming, hasKey, send } = chat;
+  const { messages, isStreaming, hasKey, send, webSearch, toggleWebSearch } = chat;
   const [input, setInput] = useState('');
   const bottomRef = useRef(null);
 
@@ -65,6 +65,22 @@ export function CoachPanel({ open, onToggle, chat, contextLabel, actionButtons =
               ))}
               {isStreaming && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Coach is typing...</div>}
               <div ref={bottomRef} />
+            </div>
+            <div style={{ padding: '6px var(--sp-3) 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={toggleWebSearch}
+                title={webSearch ? 'Web search ON — click to disable' : 'Web search OFF — click to enable'}
+                style={{
+                  background: webSearch ? 'rgba(96,165,250,0.15)' : 'var(--bg-overlay)',
+                  border: `1px solid ${webSearch ? 'rgba(96,165,250,0.5)' : 'var(--border-subtle)'}`,
+                  borderRadius: 'var(--r-sm)', padding: '3px 8px',
+                  fontSize: 10, color: webSearch ? '#60a5fa' : 'var(--text-muted)',
+                  cursor: 'pointer', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
+                }}
+              >
+                🌐 {webSearch ? 'Web ON' : 'Web OFF'}
+              </button>
+              {webSearch && <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>uses gpt-4o + live search</span>}
             </div>
             <div style={{ padding: 'var(--sp-3)', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8 }}>
               <input

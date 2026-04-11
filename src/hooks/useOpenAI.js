@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { buildHistoryDigest, buildWorkoutSnapshot, buildPlanDigest } from '../core/coachDigest.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
+const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 const MODEL = import.meta.env.VITE_LLM_MODEL ?? 'gpt-4o-mini';
 const MAX_TOKENS = parseInt(import.meta.env.VITE_LLM_MAX_TOKENS ?? '900', 10);
 const API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
@@ -296,9 +297,38 @@ export async function requestAutoVerdict(workout, complianceResult) {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
+async function sendWithWebSearch(systemPrompt, historyMessages, userText) {
+  const input = [
+    { role: 'system', content: systemPrompt },
+    ...historyMessages.slice(-8).map(({ role, content }) => ({ role, content })),
+    { role: 'user', content: userText },
+  ];
+  const res = await fetch(OPENAI_RESPONSES_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+    body: JSON.stringify({
+      model: MODEL === 'gpt-4o-mini' ? 'gpt-4o' : MODEL, // web_search_preview requires gpt-4o+
+      tools: [{ type: 'web_search_preview' }],
+      max_output_tokens: MAX_TOKENS,
+      input,
+    }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error?.message ?? `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  // Extract text from output array
+  const msgItem = (data.output ?? []).find(o => o.type === 'message');
+  const text = (msgItem?.content ?? []).find(c => c.type === 'output_text')?.text ?? '';
+  return text || 'No response.';
+}
+
 export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMessage, athleteDigest, options = {}) {
   const [messages, setMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [webSearch, setWebSearch] = useState(false);
+  const toggleWebSearch = () => setWebSearch(v => !v);
 
   const hasKey = API_KEY.startsWith('sk-') && API_KEY.length > 20;
   const mode = options?.mode === 'workout' ? 'workout' : 'global';
@@ -400,24 +430,22 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
       }
       payloadMessages.push(...historyForApi);
 
-      const res = await fetch(OPENAI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-        body: JSON.stringify({
-          model: MODEL,
-          max_completion_tokens: MAX_TOKENS,
-          stream: false,
-          messages: payloadMessages,
-        }),
-      });
-
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e?.error?.message ?? `HTTP ${res.status}`);
+      let reply;
+      if (webSearch) {
+        reply = await sendWithWebSearch(finalSystemPrompt, historyForApi.slice(0, -1), trimmed);
+      } else {
+        const res = await fetch(OPENAI_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+          body: JSON.stringify({ model: MODEL, max_completion_tokens: MAX_TOKENS, stream: false, messages: payloadMessages }),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          throw new Error(e?.error?.message ?? `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        reply = data?.choices?.[0]?.message?.content ?? 'No response.';
       }
-
-      const data = await res.json();
-      const reply = data?.choices?.[0]?.message?.content ?? 'No response.';
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
       if (saveChatMessage) await saveChatMessage('assistant', reply, conversationWorkoutId);
     } catch (e) {
@@ -427,11 +455,11 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
     } finally {
       setIsStreaming(false);
     }
-  }, [hasKey, isStreaming, saveChatMessage, conversationWorkoutId, messages, contextWorkout, recentWorkoutsFn, athleteDigest, mode, attachedWorkout, weekDays]);
+  }, [hasKey, isStreaming, saveChatMessage, conversationWorkoutId, messages, contextWorkout, recentWorkoutsFn, athleteDigest, mode, attachedWorkout, weekDays, webSearch]);
 
   const clearHistory = useCallback(() => setMessages([]), []);
   const inject = useCallback((role, content) => {
     setMessages((prev) => [...prev, { role, content }]);
   }, []);
-  return { messages, isStreaming, hasKey, send, clearHistory, inject };
+  return { messages, isStreaming, hasKey, send, clearHistory, inject, webSearch, toggleWebSearch };
 }
