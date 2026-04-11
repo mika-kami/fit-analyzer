@@ -49,6 +49,14 @@ export function fmtCompact(n) {
   return String(Math.round(n));
 }
 
+/** Today's date in YYYY-MM-DD using the browser's local timezone. */
+export function localDateIso(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** Format ISO date (YYYY-MM-DD) as DD.MM */
 export function fmtDateDM(isoDate) {
   if (!isoDate || typeof isoDate !== 'string') return '—';

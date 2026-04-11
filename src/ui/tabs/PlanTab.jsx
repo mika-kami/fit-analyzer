@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateMesocycle, PHASE_COLORS, PHASE_LABELS } from '../../core/trainingEngine.js';
-import { fmtDateDM, fmtDateDMY } from '../../core/format.js';
+import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
@@ -239,11 +239,8 @@ function WeekCard({ week, isCurrent, isSelected, onClick }) {
 
 // ── Main PlanTab ──────────────────────────────────────────────────────────────
 
-function todayIsoStr() { return new Date().toISOString().slice(0, 10); }
-function tomorrowIsoStr() {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
+function todayIsoStr() { return localDateIso(); }
+function tomorrowIsoStr() { return localDateIso(new Date(Date.now() + 86400000)); }
 
 export function PlanTab({ workout: w, history, coach }) {
   const [viewMode, setViewMode] = useState('week');
@@ -315,7 +312,7 @@ export function PlanTab({ workout: w, history, coach }) {
   const displayedWeek  = mesocycle?.weeks?.[selectedWeekIndex] ?? null;
   const currentWeekIdx = mesocycle?.currentWeekIndex ?? 0;
   const isPreviewMode  = selectedWeekIndex !== currentWeekIdx;
-  const todayIso       = new Date().toISOString().slice(0, 10);
+  const todayIso       = localDateIso();
 
   const plan = useMemo(() => {
     if (!displayedWeek) return [];

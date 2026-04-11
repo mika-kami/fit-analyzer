@@ -52,7 +52,13 @@ export function generateCoachAlerts({ profile, weather, history, readiness, pres
 
 export function buildDailyBriefing({ readiness, weather, prescription, history, profile, weekPlan, trainingStatus, load }) {
   const recent = Array.isArray(history) ? history : [];
-  const sessions7d = recent.filter((w) => daysSince(w?.date) != null && daysSince(w.date) <= 7);
+  const sport = String(profile?.targetSport ?? 'mixed').toLowerCase();
+  const matchesSport = (w) => {
+    if (sport === 'mixed') return true;
+    const s = String(w?.sport ?? w?.sportLabel ?? '').toLowerCase();
+    return s.includes(sport) || (sport === 'cycling' && (s.includes('cycl') || s.includes('bike') || s.includes('ride'))) || (sport === 'running' && (s.includes('run') || s.includes('trail')));
+  };
+  const sessions7d = recent.filter((w) => daysSince(w?.date) != null && daysSince(w.date) <= 7 && matchesSport(w));
   const weekDistanceKm = sessions7d.reduce((sum, w) => sum + (Number(w?.distance ?? 0) / 1000), 0);
   const weekDone = sessions7d.length;
   const weekTargetSessions = Number(weekPlan?.targetSessions ?? 5);

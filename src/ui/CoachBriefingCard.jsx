@@ -46,7 +46,7 @@ export function CoachBriefingCard({ briefing, onAction, onOpenCoach, actionLoadi
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button onClick={() => onAction?.('analyze_ride')} style={btnStyle}>Deep Analysis</button>
-        <button onClick={() => onAction?.('plan_week')} style={btnStyle}>Plan My Week</button>
+        <button onClick={() => onAction?.('plan_week')} style={btnStyle}>Weekly Plan Details</button>
         <button onClick={() => onAction?.('wearing')} style={btnStyle}>What To Wear</button>
         <button onClick={onOpenCoach} style={btnStyle}>Ask Coach</button>
       </div>

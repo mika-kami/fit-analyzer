@@ -5,9 +5,10 @@ import { buildAthleteDigest } from '../core/coachDigest.js';
 import { generateMesocycle } from '../core/trainingEngine.js';
 import { describeWeekPlan, buildDescribeContext } from '../core/coachPlanMatcher.js';
 import { calcTrainingLoad } from '../core/trainingEngine.js';
+import { localDateIso } from '../core/format.js';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 function storageKey(userId) {
@@ -118,7 +119,7 @@ function mapMesocycleFromDb(row) {
   const meta = { ...(row.meta || {}) };
   if (!meta.totalWeeks) meta.totalWeeks = weeks.length || 0;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateIso();
   const idx = weeks.findIndex((wk) => today >= wk?.startDate && today <= wk?.endDate);
 
   return {

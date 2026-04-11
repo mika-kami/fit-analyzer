@@ -3,6 +3,7 @@
  * Screens: 'auth' | 'dashboard' | 'detail'
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { localDateIso } from './core/format.js';
 import { useAuth }      from './hooks/useAuth.js';
 import { useStrava }    from './hooks/useStrava.js';
 import { useWorkouts }  from './hooks/useWorkouts.js';
@@ -88,7 +89,7 @@ export default function App() {
     }
   );
 
-  const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
+  const todayIso = coach?.todayIso ?? localDateIso();
   const todayCheckin = coach?.getDailyCheckin?.(todayIso);
   const readiness = useMemo(() => computeReadinessScore(todayCheckin), [todayCheckin]);
   const load = useMemo(() => calcTrainingLoad(workouts.history ?? []), [workouts.history]);
@@ -117,16 +118,29 @@ export default function App() {
     dailyCheckins: coach?.getDailyCheckin ? undefined : {},
   });
 
+  const weekPlan = useMemo(() => {
+    const mc = coach?.mesocycle;
+    const week = mc?.weeks?.[mc.currentWeekIndex];
+    if (week) {
+      const activeDays = (week.days ?? []).filter(d => d.type !== 'rest');
+      return {
+        targetSessions: activeDays.length,
+        targetKm: week.targetKm ?? activeDays.reduce((s, d) => s + (d.targetKm ?? 0), 0),
+      };
+    }
+    return { targetSessions: 5, targetKm: Math.max(80, Number(coach?.profile?.weeklyHours ?? 6) * 20) };
+  }, [coach?.mesocycle, coach?.profile?.weeklyHours]);
+
   const briefing = useMemo(() => buildDailyBriefing({
     readiness,
     weather: dashboardWeather,
     prescription,
     history: workouts.history ?? [],
     profile: coach?.profile,
-    weekPlan: { targetSessions: 5, targetKm: Math.max(80, Number(coach?.profile?.weeklyHours ?? 6) * 20) },
+    weekPlan,
     trainingStatus,
     load,
-  }), [readiness, dashboardWeather, prescription, workouts.history, coach?.profile, trainingStatus, load]);
+  }), [readiness, dashboardWeather, prescription, workouts.history, coach?.profile, weekPlan, trainingStatus, load]);
 
   useEffect(() => {
     const key = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';

@@ -4,6 +4,7 @@ import { computeReadinessScore, computeTrainingStatus } from '../core/coachEngin
 import { supabase } from '../lib/supabase.js';
 import { GearPanel } from './GearPanel.jsx';
 import { flaggedMarkers, ENDURANCE_MARKERS, trendAnalysis, parseLabValuesFromAI } from '../core/labTracker.js';
+import { localDateIso } from '../core/format.js';
 
 const AI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const AI_URL     = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
@@ -100,7 +101,7 @@ export function ProfilePage({
   onBack,
   onSignOut,
 }) {
-  const todayIso = coach?.todayIso ?? new Date().toISOString().slice(0, 10);
+  const todayIso = coach?.todayIso ?? localDateIso();
   const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
   const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
 
@@ -357,7 +358,7 @@ function MedicalDocumentsCard({ userId, onDigestChanged }) {
         // Parse and store structured lab values if present
         const labValues = parseLabValuesFromAI(findings, doc.id);
         if (labValues.length > 0 && userId) {
-          const rows = labValues.map(v => ({ ...v, user_id: userId, test_date: doc.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10) }));
+          const rows = labValues.map(v => ({ ...v, user_id: userId, test_date: doc.created_at?.slice(0, 10) ?? localDateIso() }));
           await supabase.from('lab_values').upsert(rows, { onConflict: 'document_id,marker' });
         }
 

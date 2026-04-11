@@ -45,6 +45,7 @@ export const DAY_LABELS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 export function calcTrainingLoad(historyWorkouts) {
   const today = new Date();
   today.setHours(0,0,0,0);
+  const _localIso = (d) => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
 
   // Build a daily TE map for the past 42 days
   const teByDay = {};
@@ -60,7 +61,7 @@ export function calcTrainingLoad(historyWorkouts) {
   for (let d = 0; d < 42; d++) {
     const dt = new Date(today);
     dt.setDate(today.getDate() - d);
-    const iso = dt.toISOString().slice(0,10);
+    const iso = _localIso(dt);
     const te  = teByDay[iso] ?? 0;
     if (d < 7)  { atl += te; atlDays++; }
     ctl += te; ctlDays++;
@@ -337,7 +338,7 @@ function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, ph
  * Returns { weeks[], currentWeekIndex, meta }.
  */
 export function generateMesocycle(profile, historyWorkouts = [], startDate = null) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const _now = new Date(); const todayIso = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
 
   let goalDate   = profile?.goalDate ?? '';
   let totalWeeks;
