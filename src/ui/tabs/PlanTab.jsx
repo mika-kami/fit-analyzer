@@ -6,9 +6,12 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { generateMesocycle, PHASE_COLORS, PHASE_LABELS } from '../../core/trainingEngine.js';
+import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
+
+const OPENAI_KEY     = import.meta.env.VITE_OPENAI_API_KEY ?? '';
+const AI_PLAN_MODEL  = 'gpt-4o';
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
 
@@ -112,6 +115,43 @@ export function PlanContextBanner({ meta, mesocycleMeta }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Confirm modal ─────────────────────────────────────────────────────────────
+
+function ConfirmModal({ title, body, confirmLabel, confirmColor = '#f97316', onConfirm, onCancel }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 600,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onCancel}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--border-mid)',
+          borderRadius: 'var(--r-lg)', padding: 'var(--sp-5)',
+          width: 'min(380px, 90vw)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>{body}</div>
+        <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{
+            background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--r-sm)', padding: '6px 16px',
+            fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer',
+          }}>Cancel</button>
+          <button onClick={() => { onConfirm(); onCancel(); }} style={{
+            background: `${confirmColor}18`, border: `1px solid ${confirmColor}55`,
+            borderRadius: 'var(--r-sm)', padding: '6px 16px',
+            fontSize: 12, color: confirmColor, fontWeight: 600, cursor: 'pointer',
+          }}>{confirmLabel}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -297,7 +337,10 @@ export function PlanTab({ workout: w, history, coach }) {
     const savedSport = saved?.meta?.sport ?? coach?.profile?.targetSport ?? 'mixed';
     const isSportChanged = planSport !== savedSport;
 
-    // Use persisted plan only when controls still match the saved "auto + sport" context.
+    // AI-generated plans always take priority — never overwrite with template preview.
+    if (saved?.weeks?.length && saved?.meta?.aiGenerated) return saved;
+
+    // Use persisted template plan when controls match the saved "auto + sport" context.
     if (saved?.weeks?.length && startMode === 'auto' && !isSportChanged) return saved;
 
     // Preview mode (unsaved): local generation from current controls.
@@ -306,28 +349,32 @@ export function PlanTab({ workout: w, history, coach }) {
     return generateMesocycle(sportProfile, histWorkouts, effectiveStartDate);
   }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate, startMode]);
 
+  const [aiPlanState, setAiPlanState] = useState({ loading: false, error: '' });
+  // activeMesocycle = coach.mesocycle (persisted, either template or AI) or local preview
+  const activeMesocycle = mesocycle;
+
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(() => mesocycle?.currentWeekIndex ?? 0);
 
   // Keep selectedWeekIndex in sync when mesocycle changes
   useEffect(() => {
-    if (mesocycle?.currentWeekIndex != null) {
-      setSelectedWeekIndex(mesocycle.currentWeekIndex);
+    if (activeMesocycle?.currentWeekIndex != null) {
+      setSelectedWeekIndex(activeMesocycle.currentWeekIndex);
     }
-  }, [mesocycle?.currentWeekIndex]);
+  }, [activeMesocycle?.currentWeekIndex]);
 
   // Lazy-enrich future/past weeks when the user navigates to them
   useEffect(() => {
-    const week = mesocycle?.weeks?.[selectedWeekIndex];
+    const week = activeMesocycle?.weeks?.[selectedWeekIndex];
     if (!week) return;
     // Skip if already enriched (any day has an aiTitle)
     if (week.days?.some(d => d.aiTitle)) return;
     // Skip if it's the current week — regenerateMesocycle handles that
     if (selectedWeekIndex === currentWeekIdx) return;
-    coach?.enrichWeekDays?.(selectedWeekIndex, week.days, null, histWorkouts, planSport);
+    if (!activeMesocycle?.meta?.aiGenerated) coach?.enrichWeekDays?.(selectedWeekIndex, week.days, null, histWorkouts, planSport);
   }, [selectedWeekIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const displayedWeek  = mesocycle?.weeks?.[selectedWeekIndex] ?? null;
-  const currentWeekIdx = mesocycle?.currentWeekIndex ?? 0;
+  const displayedWeek  = activeMesocycle?.weeks?.[selectedWeekIndex] ?? null;
+  const currentWeekIdx = activeMesocycle?.currentWeekIndex ?? 0;
   const isPreviewMode  = selectedWeekIndex !== currentWeekIdx;
   const todayIso       = localDateIso();
 
@@ -364,10 +411,22 @@ export function PlanTab({ workout: w, history, coach }) {
   const coords = extractWorkoutCoords(w);
 
   // ── Weather ─────────────────────────────────────────────────────────────────
-  const [weatherSource, setWeatherSource] = useState('workout');
-  const [cityInput, setCityInput]         = useState(() => { try { return localStorage.getItem('plan_weather_city') || ''; } catch { return ''; } });
-  const [cityQuery, setCityQuery]         = useState(cityInput);
+  const savedCity = (() => { try { return localStorage.getItem('plan_weather_city') || ''; } catch { return ''; } })();
+  const [weatherSource, setWeatherSource] = useState(() => savedCity ? 'city' : 'workout');
+  const [cityInput, setCityInput]         = useState(savedCity);
+  const [cityQuery, setCityQuery]         = useState(savedCity);
   const [weather, setWeather]             = useState({ loading: false, error: '', days: [], location: '' });
+
+  // Debounce city input → cityQuery (saves on each commit, fetches after 800 ms idle)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = cityInput.trim();
+      if (!next) return;
+      try { localStorage.setItem('plan_weather_city', next); } catch {}
+      setCityQuery(next);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [cityInput]);
 
   useEffect(() => {
     if (!OPENWEATHER_API_KEY) return;
@@ -401,45 +460,230 @@ export function PlanTab({ workout: w, history, coach }) {
     return () => ctrl.abort();
   }, [coords?.lat, coords?.lon, weatherSource, cityQuery]);
 
-  const applyCity = () => {
-    const next = cityInput.trim();
-    if (!next) return;
-    setWeatherSource('city');
-    setCityQuery(next);
-    try { localStorage.setItem('plan_weather_city', next); } catch {}
-  };
-
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRevealed(true), 80); return () => clearTimeout(t); }, []);
 
-  // Regenerate mesocycle with current start date selection
-  const handleRegenerate = () => {
-    if (coach?.regenerateMesocycle) {
-      coach.regenerateMesocycle(
-        histWorkouts,
-        effectiveStartDate,
-        null,
-        { targetSport: planSport }
-      );
+  // ── AI plan generation ────────────────────────────────────────────────────────
+
+  const generateAIPlan = async () => {
+    if (!OPENAI_KEY) { setAiPlanState({ loading: false, error: 'No OpenAI API key configured.' }); return; }
+    setAiPlanState({ loading: true, error: '' });
+
+    const profile      = coach?.profile ?? {};
+    const load         = calcTrainingLoad(histWorkouts);
+    const dt           = assessDetraining(histWorkouts);
+    const recentSummary = [...histWorkouts]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 24)
+      .map(w => {
+        const durationSec = w.duration?.active ?? w.duration?.elapsed ?? w.duration_s ?? 0;
+        const durationMin = Math.round(durationSec / 60);
+        const distKm      = ((w.distance ?? 0) / 1000).toFixed(1);
+        const sport       = w.sport ?? w.sportLabel ?? 'workout';
+        const te          = (w.trainingEffect?.aerobic ?? 0).toFixed(1);
+        const hr          = w.heartRate?.avg ? `, HR ${w.heartRate.avg} bpm` : '';
+        return `${w.date}: ${sport}, ${distKm} km, ${durationMin} min${hr}, TE ${te}`;
+      })
+      .join('\n') || 'No recent workouts';
+
+    // Mirror the same next-Monday snap that generateMesocycle uses for 'auto' mode
+    const startIso = (() => {
+      if (effectiveStartDate) return effectiveStartDate;
+      const today = new Date();
+      const dow = today.getDay(); // 0=Sun, 1=Mon
+      const daysToNextMon = dow === 1 ? 7 : (8 - dow) % 7 || 7;
+      const mon = new Date(today);
+      mon.setDate(today.getDate() + daysToNextMon);
+      return localDateIso(mon);
+    })();
+    const startLabel = startMode === 'auto'     ? `${startIso} (current week Monday)`
+                     : startMode === 'today'    ? `${startIso} (today)`
+                     : startMode === 'tomorrow' ? `${startIso} (tomorrow)`
+                     : `${startIso} (custom date)`;
+    const sport    = profile.targetSport ?? planSport ?? 'cycling';
+    const avgSpeed = sport === 'cycling' ? 25 : sport === 'running' ? 10 : 15;
+
+    const systemPrompt = `You are an elite endurance coach. Generate a personalized 16-week training mesocycle as JSON.
+
+ATHLETE PROFILE:
+- Sport: ${sport}
+- Goal: ${profile.primaryGoal ?? profile.goal ?? 'general fitness improvement'}
+- Goal event date: ${profile.goalDate ?? 'none'}
+- Weekly training hours available: ${profile.weeklyHours ?? 6}h
+- FTP: ${profile.ftp ? profile.ftp + ' W' : 'unknown'}
+- LTHR: ${profile.lthr ? profile.lthr + ' bpm' : 'unknown'}
+- VO2max: ${profile.vo2max ?? 'unknown'}
+- Weight: ${profile.weightKg ? profile.weightKg + ' kg' : 'unknown'}
+- Height: ${profile.heightCm ? profile.heightCm + ' cm' : 'unknown'}
+- Age: ${profile.age ?? (profile.birthday ? (() => { const d=new Date(profile.birthday),t=new Date(); let a=t.getFullYear()-d.getFullYear(); if(t.getMonth()-d.getMonth()<0||(t.getMonth()===d.getMonth()&&t.getDate()<d.getDate()))a--; return a; })() : 'unknown')}
+- Experience level: ${profile.experienceLevel ?? 'intermediate'}
+
+CURRENT FITNESS STATE:
+- CTL (42-day chronic fitness): ${load.ctl.toFixed(1)}
+- ATL (7-day acute load): ${load.atl.toFixed(1)}
+- TSB (freshness = CTL - ATL): ${load.tsb.toFixed(1)}
+- Detraining status: ${dt.label} (${dt.daysSince < 999 ? dt.daysSince + ' days since last workout' : 'no history'})
+
+RECENT TRAINING LOG (last 24 sessions):
+${recentSummary}
+
+OUTPUT RULES:
+- Return ONLY valid JSON, no prose outside it
+- 16 weeks total, 7 days each (Mo through Su)
+- "type" must be one of: rest, recovery, aerobic, tempo, interval, long, test
+- "intensity": rest=0, recovery=15, aerobic=50, long=60, tempo=65, interval=85, vo2max=90
+- "targetKm": realistic distance based on ${profile.weeklyHours ?? 6}h/week at ~${avgSpeed} km/h avg
+- "desc": 1–2 sentences with specific protocol (zones, durations, rep counts, HR targets)
+- Apply polarized 80/20 principle: 80% Z1–Z2, 20% Z4–Z5
+- Weeks 4, 8, 12: recovery weeks at 60% of surrounding volume
+- Structure: weeks 1–6 base, 7–11 build, 12–14 peak, 15–16 taper
+- Start volume conservatively based on detraining status, peak at week 11–12
+- Each week's "targetKm" = sum of all days' targetKm
+- "focus": one concise phrase describing the week's training emphasis
+
+JSON SCHEMA:
+{
+  "weeks": [
+    {
+      "weekNumber": 1,
+      "phase": "base",
+      "isRecovery": false,
+      "targetKm": 180,
+      "focus": "Aerobic base, adapting to load",
+      "days": [
+        { "dayOfWeek": "Mo", "type": "rest",     "label": "Full rest",              "desc": "...", "intensity": 0,  "targetKm": 0  },
+        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance (50 km)",   "desc": "...", "intensity": 50, "targetKm": 50 },
+        { "dayOfWeek": "We", "type": "recovery", "label": "Recovery ride (30 km)",  "desc": "...", "intensity": 15, "targetKm": 30 },
+        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot (45 km)",     "desc": "...", "intensity": 65, "targetKm": 45 },
+        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",              "desc": "...", "intensity": 0,  "targetKm": 0  },
+        { "dayOfWeek": "Sa", "type": "long",     "label": "Long ride (80 km)",      "desc": "...", "intensity": 60, "targetKm": 80 },
+        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery ride (25 km)",  "desc": "...", "intensity": 15, "targetKm": 25 }
+      ]
+    }
+  ]
+}`;
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({
+          model:           AI_PLAN_MODEL,
+          response_format: { type: 'json_object' },
+          max_tokens:      16000,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: `Generate the 16-week ${sport} training plan. Start date: ${startLabel}. Weekly hours budget: ${profile.weeklyHours ?? 6}h/week.${profile.goalDate ? ` Peak for goal event on ${profile.goalDate}.` : ''} Week 1 day 1 must be ${startIso}.` },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
+      const data   = await res.json();
+      const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
+
+      const startD = new Date(startIso + 'T00:00:00Z');
+      const weeks  = (parsed.weeks ?? []).map((week, wi) => {
+        const weekMs = startD.getTime() + wi * 7 * 86400000;
+        const days   = (week.days ?? []).map((d, di) => {
+          const dayD   = new Date(weekMs + di * 86400000);
+          const dateIso = dayD.toISOString().slice(0, 10);
+          const isoDow  = (dayD.getUTCDay() + 6) % 7;
+          return {
+            ...d,
+            day:    DAY_LABELS[isoDow] ?? d.dayOfWeek,
+            date:   dateIso.slice(5).replace('-', '/'),
+            dateIso,
+            dow:    isoDow,
+            color:  TYPE_COLOR[d.type]    ?? '#6b7280',
+            intent: SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
+          };
+        });
+        const targetKm = days.reduce((s, d) => s + (d.targetKm ?? 0), 0);
+        return {
+          weekIndex:  wi,
+          phase:      week.phase      ?? 'base',
+          isRecovery: week.isRecovery ?? false,
+          targetKm:   week.targetKm   ?? targetKm,
+          focus:      week.focus      ?? '',
+          startDate:  new Date(weekMs).toISOString().slice(0, 10),
+          endDate:    new Date(weekMs + 6 * 86400000).toISOString().slice(0, 10),
+          days,
+        };
+      });
+
+      const todayStr = localDateIso();
+      const currentWeekIndex = Math.max(0, weeks.findIndex(w => w.startDate <= todayStr && w.endDate >= todayStr));
+      const aiMc = { weeks, currentWeekIndex, meta: { totalWeeks: weeks.length, sport, goalDate: profile.goalDate, aiGenerated: true } };
+      await coach.saveAIMesocycle(aiMc, histWorkouts);
+      setSelectedWeekIndex(currentWeekIndex);
+      setAiPlanState({ loading: false, error: '' });
+    } catch (e) {
+      setAiPlanState({ loading: false, error: e.message || 'AI plan generation failed' });
     }
   };
 
-  const handleUpdateFuture = () => {
-    if (coach?.updateFutureMesocycle) {
-      coach.updateFutureMesocycle(
-        histWorkouts,
-        null,
-        { targetSport: planSport }
-      );
-    }
-  };
+  const [confirm, setConfirm] = useState(null); // { title, body, confirmLabel, confirmColor, onConfirm }
+
+  // Regenerate mesocycle with current start date selection
+  const handleRegenerate = () => setConfirm({
+    title:        'Regenerate full plan?',
+    body:         'This will replace your entire mesocycle with a freshly generated plan. Any manual changes or AI plan will be lost.',
+    confirmLabel: 'Regenerate',
+    confirmColor: '#f97316',
+    onConfirm:    () => coach?.regenerateMesocycle?.(histWorkouts, effectiveStartDate, null, { targetSport: planSport }),
+  });
+
+  const handleUpdateFuture = () => setConfirm({
+    title:        'Update future weeks?',
+    body:         `Weeks from today onwards will be recalculated based on your current fitness. Past weeks stay unchanged.${activeMesocycle?.meta?.aiGenerated ? ' The plan will remain marked as AI-generated.' : ''}`,
+    confirmLabel: 'Update Future',
+    confirmColor: '#60a5fa',
+    onConfirm:    () => coach?.updateFutureMesocycle?.(histWorkouts, null, { targetSport: planSport }),
+  });
+
+  const isPaused = activeMesocycle?.status === 'paused';
+
+  const handlePause = () => setConfirm({
+    title:        'Pause training plan?',
+    body:         'The plan will be paused. Your progress and history are preserved. Resume any time to continue.',
+    confirmLabel: 'Pause',
+    confirmColor: '#6b7280',
+    onConfirm:    () => coach?.pauseMesocycle?.(),
+  });
+
+  const handleResume = () => setConfirm({
+    title:        'Continue training plan?',
+    body:         'The app will check if future weeks need to be adjusted based on the time elapsed. If so, it will recalculate from today — past weeks stay unchanged.',
+    confirmLabel: 'Continue',
+    confirmColor: '#4ade80',
+    onConfirm:    () => coach?.resumeMesocycle?.(histWorkouts),
+  });
+
+  const handleGenerateAIPlan = () => setConfirm({
+    title:        'Generate AI plan?',
+    body:         'This will call gpt-4o to create a personalised 16-week plan based on your profile, fitness state, and recent training. It may take 20–40 seconds.',
+    confirmLabel: '✦ Generate',
+    confirmColor: '#a855f7',
+    onConfirm:    generateAIPlan,
+  });
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  const phaseColor = displayedWeek ? PHASE_COLORS[displayedWeek.isRecovery ? 'recovery' : displayedWeek.phase] ?? '#60a5fa' : '#60a5fa';
+  const phaseColor = displayedWeek ? (PHASE_COLORS[displayedWeek.isRecovery ? 'recovery' : displayedWeek.phase] ?? '#60a5fa') : (activeMesocycle?.meta?.aiGenerated ? '#a855f7' : '#60a5fa');
   const phaseLabel = displayedWeek ? (displayedWeek.isRecovery ? 'Recovery Week' : (PHASE_LABELS[displayedWeek.phase] ?? displayedWeek.phase)) : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+
+      {confirm && (
+        <ConfirmModal
+          title={confirm.title}
+          body={confirm.body}
+          confirmLabel={confirm.confirmLabel}
+          confirmColor={confirm.confirmColor}
+          onConfirm={confirm.onConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
 
       {/* Mesocycle header */}
       <div style={{
@@ -449,14 +693,14 @@ export function PlanTab({ workout: w, history, coach }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
-              MESOCYCLE · {mesocycle?.meta?.totalWeeks ?? '?'} WEEKS
+              MESOCYCLE · {activeMesocycle?.meta?.totalWeeks ?? '?'} WEEKS{activeMesocycle?.meta?.aiGenerated ? ' · AI' : ''}
             </div>
             <div style={{ fontSize: 13, color: phaseColor, fontWeight: 600 }}>
-              Week {selectedWeekIndex + 1} of {mesocycle?.meta?.totalWeeks ?? '?'} · {phaseLabel}
+              Week {selectedWeekIndex + 1} of {activeMesocycle?.meta?.totalWeeks ?? '?'} · {phaseLabel}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
               {fmtDateDMY(displayedWeek?.startDate)} → {fmtDateDMY(displayedWeek?.endDate)}
-              {mesocycle?.meta?.goalDate && ` · Goal: ${fmtDateDMY(mesocycle.meta.goalDate)}`}
+              {activeMesocycle?.meta?.goalDate && ` · Goal: ${fmtDateDMY(activeMesocycle.meta.goalDate)}`}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -547,20 +791,68 @@ export function PlanTab({ workout: w, history, coach }) {
           />
         )}
         <button
+          onClick={isPaused ? handleResume : handlePause}
+          style={{
+            marginLeft: 'auto',
+            background: isPaused ? 'rgba(74,222,128,0.12)' : 'var(--bg-overlay)',
+            border: `1px solid ${isPaused ? 'rgba(74,222,128,0.4)' : 'var(--border-subtle)'}`,
+            borderRadius: 'var(--r-sm)', padding: '4px 10px',
+            color: isPaused ? '#4ade80' : 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+          }}
+        >{isPaused ? '▶ Continue plan' : '⏸ Pause plan'}</button>
+        <button
           onClick={handleUpdateFuture}
-          style={{ marginLeft: 'auto', background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
+          disabled={isPaused}
+          style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: isPaused ? 'var(--text-dim)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: isPaused ? 'default' : 'pointer' }}
         >Update Future</button>
         <button
           onClick={handleRegenerate}
           style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
         >Regenerate</button>
+        <button
+          onClick={handleGenerateAIPlan}
+          disabled={aiPlanState.loading}
+          style={{ background: aiPlanState.loading ? 'rgba(168,85,247,0.06)' : 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.4)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: aiPlanState.loading ? 'rgba(168,85,247,0.5)' : '#a855f7', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: aiPlanState.loading ? 'default' : 'pointer' }}
+        >{aiPlanState.loading ? 'AI generating…' : '✦ AI Plan'}</button>
       </div>
+
+      {/* Paused banner */}
+      {isPaused && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.3)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            ⏸ Plan paused{activeMesocycle?.pausedAt ? ` · since ${activeMesocycle.pausedAt.slice(0, 10)}` : ''}
+          </span>
+          <button onClick={handleResume}
+            style={{ background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.35)', borderRadius: 'var(--r-sm)', padding: '3px 10px', fontSize: 11, color: '#4ade80', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+            ▶ Continue plan
+          </button>
+        </div>
+      )}
+
+      {/* AI plan active banner */}
+      {activeMesocycle?.meta?.aiGenerated && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
+          <span style={{ fontSize: 11, color: '#a855f7', fontFamily: 'var(--font-mono)' }}>✦ AI-generated 16-week plan active</span>
+          <button onClick={handleRegenerate}
+            style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.35)', borderRadius: 'var(--r-sm)', padding: '3px 10px', fontSize: 11, color: '#a855f7', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+            Revert to template
+          </button>
+        </div>
+      )}
+
+      {/* AI plan error */}
+      {aiPlanState.error && (
+        <div style={{ fontSize: 11, color: '#ef4444', fontFamily: 'var(--font-mono)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
+          {aiPlanState.error}
+        </div>
+      )}
 
       {/* ── Full plan view ─────────────────────────────────────────────────── */}
       {viewMode === 'full' && (
         <div style={{ overflowX: 'auto', paddingBottom: 'var(--sp-2)' }}>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', minWidth: 'max-content' }}>
-            {(mesocycle?.weeks ?? []).map((week, i) => (
+            {(activeMesocycle?.weeks ?? []).map((week, i) => (
               <WeekCard
                 key={week.weekIndex}
                 week={week}
@@ -581,10 +873,10 @@ export function PlanTab({ workout: w, history, coach }) {
             <button onClick={() => setSelectedWeekIndex(i => Math.max(0, i - 1))} disabled={selectedWeekIndex === 0}
               style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 12px', color: selectedWeekIndex === 0 ? 'var(--text-dim)' : 'var(--text-secondary)', cursor: selectedWeekIndex === 0 ? 'default' : 'pointer', fontSize: 16 }}>‹</button>
             <div style={{ flex: 1, textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Week {selectedWeekIndex + 1} / {mesocycle?.weeks?.length ?? '?'}
+              Week {selectedWeekIndex + 1} / {activeMesocycle?.weeks?.length ?? '?'}
             </div>
-            <button onClick={() => setSelectedWeekIndex(i => Math.min((mesocycle?.weeks?.length ?? 1) - 1, i + 1))} disabled={selectedWeekIndex >= (mesocycle?.weeks?.length ?? 1) - 1}
-              style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 12px', color: selectedWeekIndex >= (mesocycle?.weeks?.length ?? 1) - 1 ? 'var(--text-dim)' : 'var(--text-secondary)', cursor: selectedWeekIndex >= (mesocycle?.weeks?.length ?? 1) - 1 ? 'default' : 'pointer', fontSize: 16 }}>›</button>
+            <button onClick={() => setSelectedWeekIndex(i => Math.min((activeMesocycle?.weeks?.length ?? 1) - 1, i + 1))} disabled={selectedWeekIndex >= (activeMesocycle?.weeks?.length ?? 1) - 1}
+              style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 12px', color: selectedWeekIndex >= (activeMesocycle?.weeks?.length ?? 1) - 1 ? 'var(--text-dim)' : 'var(--text-secondary)', cursor: selectedWeekIndex >= (activeMesocycle?.weeks?.length ?? 1) - 1 ? 'default' : 'pointer', fontSize: 16 }}>›</button>
           </div>
 
           {/* Day cards */}
@@ -658,10 +950,13 @@ export function PlanTab({ workout: w, history, coach }) {
           ))}
         </div>
         {weatherSource === 'city' && (
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)' }}>
-            <input value={cityInput} onChange={e => setCityInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applyCity()} placeholder="City name…"
-              style={{ flex: 1, background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '5px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }} />
-            <button onClick={applyCity} style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.35)', borderRadius: 'var(--r-sm)', padding: '5px 12px', color: '#60a5fa', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}>Go</button>
+          <div style={{ marginBottom: 'var(--sp-3)' }}>
+            <input
+              value={cityInput}
+              onChange={e => { setWeatherSource('city'); setCityInput(e.target.value); }}
+              placeholder="City name…"
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '5px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            />
           </div>
         )}
         {weather.loading && <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Loading weather…</div>}

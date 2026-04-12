@@ -56,16 +56,31 @@ function readLocal(key) {
   }
 }
 
+function ageFromBirthday(birthday) {
+  if (!birthday) return null;
+  const today = new Date();
+  const dob   = new Date(birthday);
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
 function mapProfileFromDb(row) {
   if (!row) return null;
+  const birthday = row.birthday ?? null;
   return {
     targetSport: row.target_sport,
     primaryGoal: row.primary_goal,
-    goalDate: row.goal_date,
+    goalDate:    row.goal_date,
     weeklyHours: Number(row.weekly_hours ?? 6),
     constraints: row.constraints,
     injuryNotes: row.injury_notes,
-    medical: row.medical_profile ?? {},
+    medical:     row.medical_profile ?? {},
+    birthday,
+    age:         ageFromBirthday(birthday),
+    weightKg:    row.weight_kg != null ? Number(row.weight_kg) : null,
+    heightCm:    row.height_cm != null ? Number(row.height_cm) : null,
   };
 }
 
@@ -116,19 +131,22 @@ function writeMesocycle(key, mc) {
 function mapMesocycleFromDb(row) {
   if (!row) return null;
   const weeks = Array.isArray(row.weeks) ? row.weeks : [];
-  const meta = { ...(row.meta || {}) };
+  const generatedBy = row.generated_by ?? 'template';
+  const meta = { ...(row.meta || {}), aiGenerated: generatedBy === 'ai' };
   if (!meta.totalWeeks) meta.totalWeeks = weeks.length || 0;
 
   const today = localDateIso();
   const idx = weeks.findIndex((wk) => today >= wk?.startDate && today <= wk?.endDate);
 
   return {
-    id: row.id ?? null,
+    id:               row.id ?? null,
     weeks,
     meta,
-    revisionNo: row.revision_no ?? null,
-    status: row.status ?? null,
-    effectiveFrom: row.effective_from ?? null,
+    generatedBy,
+    revisionNo:       row.revision_no ?? null,
+    status:           row.status ?? null,
+    pausedAt:         row.paused_at ?? null,
+    effectiveFrom:    row.effective_from ?? null,
     lockedBeforeDate: row.locked_before_date ?? null,
     currentWeekIndex: Math.max(0, idx),
   };
@@ -243,7 +261,7 @@ export function useCoachState(userId) {
         supabase.from('workout_reflections').select('*').eq('user_id', userId),
         supabase
           .from('mesocycles')
-          .select('id,weeks,meta,revision_no,status,effective_from,locked_before_date')
+          .select('id,weeks,meta,revision_no,status,effective_from,locked_before_date,generated_by,paused_at')
           .eq('user_id', userId)
           .eq('is_active', true)
           .order('updated_at', { ascending: false })
@@ -313,14 +331,17 @@ export function useCoachState(userId) {
       return;
     }
     const payload = {
-      user_id: userId,
-      target_sport: next.profile.targetSport ?? 'mixed',
-      primary_goal: next.profile.primaryGoal ?? '',
-      goal_date: next.profile.goalDate || null,
-      weekly_hours: next.profile.weeklyHours ?? 6,
-      constraints: next.profile.constraints ?? '',
-      injury_notes: next.profile.injuryNotes ?? '',
+      user_id:         userId,
+      target_sport:    next.profile.targetSport ?? 'mixed',
+      primary_goal:    next.profile.primaryGoal ?? '',
+      goal_date:       next.profile.goalDate || null,
+      weekly_hours:    next.profile.weeklyHours ?? 6,
+      constraints:     next.profile.constraints ?? '',
+      injury_notes:    next.profile.injuryNotes ?? '',
       medical_profile: next.profile.medical ?? {},
+      birthday:        next.profile.birthday || null,
+      weight_kg:       next.profile.weightKg != null ? Number(next.profile.weightKg) : null,
+      height_cm:       next.profile.heightCm != null ? Number(next.profile.heightCm) : null,
     };
     await supabase.from('athlete_profiles').upsert(payload, { onConflict: 'user_id' });
     await rebuildAthleteDigest(next.profile);
@@ -405,6 +426,7 @@ export function useCoachState(userId) {
     if (!userId || !mc?.weeks?.length) return null;
     const kind = opts.kind ?? 'initial';
     const reason = opts.reason ?? 'manual_regenerate';
+    const generatedBy = opts.generatedBy ?? 'template';
     const historyWorkouts = opts.historyWorkouts ?? [];
     try {
       const { data: activeRows, error: activeError } = await supabase
@@ -461,6 +483,7 @@ export function useCoachState(userId) {
         locked_before_date: pivotDate,
         change_reason: reason,
         plan_kind: kind,
+        generated_by: generatedBy,
       };
 
       const { data: inserted, error: insertError } = await supabase
@@ -567,6 +590,7 @@ export function useCoachState(userId) {
     const committed = await _commitMesocycleRevision(finalCandidate, {
       kind: 'future_adjustment',
       reason: 'manual_update_future',
+      generatedBy: existing?.generatedBy ?? (existing?.meta?.aiGenerated ? 'ai' : 'template'),
       historyWorkouts,
     });
     return committed || finalCandidate;
@@ -628,6 +652,63 @@ export function useCoachState(userId) {
     return defaultWorkoutReflection(workout);
   }, [state.workoutNotes]);
 
+  const pauseMesocycle = useCallback(async () => {
+    if (!mesocycle) return;
+    const pausedAt = new Date().toISOString();
+    const updated = { ...mesocycle, status: 'paused', pausedAt };
+    setMesocycle(updated);
+    writeMesocycle(mcKey, updated);
+    if (userId && mesocycle.id) {
+      await supabase.from('mesocycles')
+        .update({ status: 'paused', paused_at: pausedAt })
+        .eq('id', mesocycle.id);
+    }
+  }, [mesocycle, mcKey, userId]);
+
+  const resumeMesocycle = useCallback(async (historyWorkouts = []) => {
+    if (!mesocycle) return;
+
+    // Evaluate whether future weeks need recalculation.
+    // Criteria: paused ≥ 3 days, OR current date has moved past the plan's current-week end.
+    const pausedAt   = mesocycle.pausedAt ?? mesocycle.effectiveFrom ?? null;
+    const daysPaused = pausedAt
+      ? Math.floor((Date.now() - new Date(pausedAt).getTime()) / 86400000)
+      : 0;
+    const currentWeek = mesocycle.weeks?.[mesocycle.currentWeekIndex ?? 0];
+    const pastCurrentWeek = currentWeek?.endDate ? localDateIso() > currentWeek.endDate : false;
+    const needsUpdate = daysPaused >= 3 || pastCurrentWeek;
+
+    if (needsUpdate) {
+      // Delegate to updateFutureMesocycle — it preserves past weeks and keeps generated_by
+      return updateFutureMesocycle(historyWorkouts);
+    }
+
+    // No structural change needed — just flip status back to active
+    const updated = { ...mesocycle, status: 'active', pausedAt: null };
+    setMesocycle(updated);
+    writeMesocycle(mcKey, updated);
+    if (userId && mesocycle.id) {
+      await supabase.from('mesocycles')
+        .update({ status: 'active', paused_at: null })
+        .eq('id', mesocycle.id);
+    }
+    return updated;
+  }, [mesocycle, mcKey, userId, updateFutureMesocycle]);
+
+  const saveAIMesocycle = useCallback(async (aiMc, historyWorkouts = []) => {
+    if (!aiMc?.weeks?.length) return null;
+    // Show immediately in local state, then persist
+    setMesocycle(aiMc);
+    writeMesocycle(mcKey, aiMc);
+    const committed = await _commitMesocycleRevision(aiMc, {
+      kind: 'initial',
+      reason: 'ai_generated',
+      generatedBy: 'ai',
+      historyWorkouts,
+    });
+    return committed || aiMc;
+  }, [mcKey, _commitMesocycleRevision]);
+
   return {
     profile: state.profile,
     athleteDigest,
@@ -641,7 +722,10 @@ export function useCoachState(userId) {
     mesocycle,
     regenerateMesocycle,
     updateFutureMesocycle,
+    pauseMesocycle,
+    resumeMesocycle,
     enrichWeekDays,
+    saveAIMesocycle,
     labValues,
     todayIso: todayIso(),
   };

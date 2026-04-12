@@ -6,6 +6,16 @@ import { GearPanel } from './GearPanel.jsx';
 import { flaggedMarkers, ENDURANCE_MARKERS, trendAnalysis, parseLabValuesFromAI } from '../core/labTracker.js';
 import { localDateIso } from '../core/format.js';
 
+function ageFromBirthday(birthday) {
+  if (!birthday) return null;
+  const today = new Date();
+  const dob   = new Date(birthday);
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
 const AI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const AI_URL     = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
 const AI_MODEL   = import.meta.env.VITE_LLM_MODEL ?? 'gpt-4o-mini';
@@ -195,6 +205,18 @@ function AthleteProfileCard({ profile, onChange, onSave }) {
         <Field label="Weekly Hours"><input type="number" min="1" max="30" value={profile.weeklyHours ?? 6} onChange={e => onChange(p => ({ ...p, weeklyHours: Number(e.target.value || 0) }))} style={inputStyle} /></Field>
         <Field label="Primary Goal"><input value={profile.primaryGoal ?? ''} onChange={e => onChange(p => ({ ...p, primaryGoal: e.target.value }))} style={inputStyle} placeholder="Half marathon, 100km ride..." /></Field>
         <Field label="Goal Date"><input type="date" value={profile.goalDate ?? ''} onChange={e => onChange(p => ({ ...p, goalDate: e.target.value }))} style={inputStyle} /></Field>
+        <Field label={`Birthday${profile.birthday ? ` · Age ${ageFromBirthday(profile.birthday)}` : ''}`}>
+          <input type="date" value={profile.birthday ?? ''} onChange={e => onChange(p => ({ ...p, birthday: e.target.value || null }))} style={inputStyle} />
+        </Field>
+        <Field label="Weight (kg)"><input type="number" min="20" max="300" step="0.1" value={profile.weightKg ?? ''} onChange={e => onChange(p => ({ ...p, weightKg: e.target.value ? Number(e.target.value) : null }))} style={inputStyle} placeholder="e.g. 72.5" /></Field>
+        <Field label="Height (cm)"><input type="number" min="50" max="280" value={profile.heightCm ?? ''} onChange={e => onChange(p => ({ ...p, heightCm: e.target.value ? Number(e.target.value) : null }))} style={inputStyle} placeholder="e.g. 178" /></Field>
+        {profile.weightKg && profile.heightCm && (
+          <Field label="BMI">
+            <div style={{ ...inputStyle, background: 'transparent', border: 'none', color: 'var(--text-primary)', paddingLeft: 0 }}>
+              {(profile.weightKg / Math.pow(profile.heightCm / 100, 2)).toFixed(1)}
+            </div>
+          </Field>
+        )}
       </div>
       <div style={{ marginTop: 'var(--sp-2)', display: 'grid', gap: 'var(--sp-2)' }}>
         <Field label="Constraints"><input value={profile.constraints ?? ''} onChange={e => onChange(p => ({ ...p, constraints: e.target.value }))} style={inputStyle} placeholder="Travel, limited weekdays, etc." /></Field>

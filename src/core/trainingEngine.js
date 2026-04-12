@@ -491,7 +491,7 @@ function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, ph
  * @param {object} profile
  * @param {object[]} historyWorkouts
  * @param {string|null} startDate — ISO date (YYYY-MM-DD) for week 1 day 1.
- *   Defaults to the current Monday when null.
+ *   Defaults to the next Monday when null.
  * Returns { weeks[], currentWeekIndex, meta }.
  */
 export function generateMesocycle(profile, historyWorkouts = [], startDate = null) {
@@ -527,16 +527,16 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   const baseKm     = Math.max(effectiveRefKm * detraining.factor, floor);
   const peakKm     = Math.round(baseKm * 1.25);
 
-  // Start mesocycle from the given date, or snap to current Monday by default
+  // Start mesocycle from the given date, or snap to NEXT Monday by default
   let msStartIso;
   if (startDate) {
     msStartIso = startDate;
   } else {
     const todayJs  = new Date(todayIso + 'T00:00:00Z');
     const todayDow = todayJs.getUTCDay(); // 0=Sun...6=Sat
-    const daysToMon = todayDow === 0 ? -6 : 1 - todayDow;
+    const daysToNextMon = todayDow === 1 ? 7 : (8 - todayDow) % 7 || 7;
     const msStart  = new Date(todayJs);
-    msStart.setUTCDate(todayJs.getUTCDate() + daysToMon);
+    msStart.setUTCDate(todayJs.getUTCDate() + daysToNextMon);
     msStartIso = msStart.toISOString().slice(0, 10);
   }
 

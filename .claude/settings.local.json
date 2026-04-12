@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(grep -n \"revision_no\\\\|status\\\\|effective_from\\\\|plan_kind\\\\|generated_by\\\\|alter table.*mesocycles\\\\|add column\" /Users/nick/Documents/fit-v1/supabase/migrations/*.sql)"
     ]
   }
 }
