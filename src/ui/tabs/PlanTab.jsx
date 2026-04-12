@@ -796,7 +796,17 @@ JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
       generateAIPlan(form, startIso);
     } else {
       setPlanSport(form.sport);
-      coach?.regenerateMesocycle?.(histWorkouts, startIso, null, { targetSport: form.sport });
+      coach?.regenerateMesocycle?.(histWorkouts, startIso, null, {
+        targetSport:    form.sport,
+        primaryGoal:    form.primaryGoal,
+        goalDate:       form.useGoalDate ? form.goalDate : null,
+        planWeeks:      form.planWeeks,
+        trainingDays:   form.trainingDays,
+        hoursWeekday:   form.hoursWeekday,
+        hoursWeekend:   form.hoursWeekend,
+        longSessionDay: form.longSessionDay,
+        hardSessionDay: form.hardSessionDay,
+      });
     }
   };
 

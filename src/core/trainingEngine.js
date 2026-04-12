@@ -450,38 +450,87 @@ export const PHASE_LABELS = {
   recovery: 'Recovery',
 };
 
-function _templateKeyForPhase(phase, load, zones) {
-  if (phase === 'base')     return 'base_rebuild';
-  if (phase === 'build')    return (load?.tsb < -20 || zones?.balance === 'overreached') ? 'overreached' : 'active';
-  if (phase === 'peak')     return load?.tsb < -20 ? 'overreached' : 'too_easy';
-  if (phase === 'taper')    return 'significant';
-  return 'base_rebuild';
+const WEEKEND_DAYS = new Set(['Sa', 'Su']);
+
+// Speed estimates (km/h) used to convert hours → session km caps
+function _sportSpeed(sport) {
+  if (sport === 'cycling') return 28;
+  if (sport === 'running') return 11;
+  return 15;
 }
 
-function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, phase) {
-  const cfg         = sportConfig(workout);
-  const T           = cfg.templates;
-  const load        = calcTrainingLoad(historyWorkouts);
-  const zones       = analyzeRecentZones(historyWorkouts);
-  const templateKey = _templateKeyForPhase(phase, load, zones);
-  const planFn      = PHASE_PLANS[templateKey] ?? PHASE_PLANS.base_rebuild;
-  const rawDays     = planFn(T, weekVolKm);
+/**
+ * Build 7 day-objects for one week, respecting the user's schedule preferences.
+ *
+ * @param {object}   sportObj          - { sport } used by sportConfig
+ * @param {object[]} historyWorkouts
+ * @param {string}   weekStartIso      - ISO date of Monday
+ * @param {number}   weekVolKm         - target volume this week (for session-size fractions)
+ * @param {string}   phase             - 'base' | 'build' | 'peak' | 'taper' | 'recovery'
+ * @param {object}   prefs             - user schedule preferences from athlete_profiles
+ */
+function _generateWeekDays(sportObj, weekStartIso, weekVolKm, phase, prefs = {}) {
+  const cfg      = sportConfig(sportObj);
+  const T        = cfg.templates;
+  const speed    = _sportSpeed(cfg.sport);
+
+  const trainingDays = Array.isArray(prefs.trainingDays) && prefs.trainingDays.length
+    ? prefs.trainingDays : DAY_LABELS;
+  const hoursWd  = Number(prefs.hoursWeekday  ?? 1.5);
+  const hoursWe  = Number(prefs.hoursWeekend  ?? 3.0);
+  const longDay  = prefs.longSessionDay  ?? 'Sa';
+  const hardDay  = prefs.hardSessionDay  ?? 'Tu';
+
+  const isRecoveryWeekPhase = phase === 'recovery';
+  const isTaper  = phase === 'taper';
+  const isHard   = phase === 'build' || phase === 'peak';
 
   const weekStart = new Date(weekStartIso + 'T00:00:00Z');
-  return rawDays.map((d, i) => {
+
+  return DAY_LABELS.map((dow3, i) => {
     const dayDate = new Date(weekStart);
     dayDate.setUTCDate(weekStart.getUTCDate() + i);
     const dateIso = dayDate.toISOString().slice(0, 10);
-    // Label by actual day-of-week (Mon=0..Sun=6)
-    const isoDow = (dayDate.getUTCDay() + 6) % 7;
+    const isoDow  = (dayDate.getUTCDay() + 6) % 7;
+
+    // Non-training day → rest
+    if (!trainingDays.includes(dow3)) {
+      const r = T.rest();
+      return { ...r, day: dow3, date: dateIso.slice(5).replace('-', '/'), dateIso, dow: isoDow, color: TYPE_COLOR.rest, intent: SESSION_INTENTS.rest };
+    }
+
+    // Per-session km cap from available hours
+    const capKm = Math.round((WEEKEND_DAYS.has(dow3) ? hoursWe : hoursWd) * speed);
+
+    // Session type assignment — extracted so we can call twice if capping is needed
+    const prevDow3    = DAY_LABELS[(i + 6) % 7];
+    const isAfterHard = trainingDays.includes(prevDow3) && (prevDow3 === longDay || prevDow3 === hardDay);
+
+    const buildSession = (wkKm) => {
+      if (isRecoveryWeekPhase) return (dow3 === longDay) ? T.aerobic(wkKm) : T.recovery(wkKm);
+      if (dow3 === longDay)             return T.long(wkKm);
+      if (dow3 === hardDay && !isTaper) return isHard ? T.interval(wkKm) : T.tempo(wkKm);
+      if (isAfterHard)                  return T.recovery(wkKm);
+      return isTaper ? T.recovery(wkKm) : T.aerobic(wkKm);
+    };
+
+    let raw = buildSession(weekVolKm);
+
+    // If the session exceeds the hour cap, scale weekVolKm down proportionally and
+    // re-generate so that label, desc, intervals and gel counts are all consistent.
+    if (raw.targetKm > capKm && raw.targetKm > 0) {
+      const scaledWeekKm = Math.max(1, Math.floor(weekVolKm * capKm / raw.targetKm));
+      raw = buildSession(scaledWeekKm);
+    }
+
     return {
-      ...d,
-      day:     DAY_LABELS[isoDow],
-      date:    dateIso.slice(5).replace('-', '/'),
+      ...raw,
+      day:    dow3,
+      date:   dateIso.slice(5).replace('-', '/'),
       dateIso,
-      dow:     isoDow,
-      color:   TYPE_COLOR[d.type] ?? '#6b7280',
-      intent:  SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
+      dow:    isoDow,
+      color:  TYPE_COLOR[raw.type] ?? '#6b7280',
+      intent: SESSION_INTENTS[raw.type] ?? SESSION_INTENTS.aerobic,
     };
   });
 }
@@ -497,17 +546,26 @@ function _generateWeekDays(workout, historyWorkouts, weekStartIso, weekVolKm, ph
 export function generateMesocycle(profile, historyWorkouts = [], startDate = null) {
   const _now = new Date(); const todayIso = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
 
+  // Schedule preferences from athlete profile
+  const trainingDays   = Array.isArray(profile?.trainingDays) && profile.trainingDays.length
+    ? profile.trainingDays : DAY_LABELS;
+  const hoursWeekday   = Number(profile?.hoursWeekday  ?? 1.5);
+  const hoursWeekend   = Number(profile?.hoursWeekend  ?? 3.0);
+  const longSessionDay = profile?.longSessionDay  ?? 'Sa';
+  const hardSessionDay = profile?.hardSessionDay  ?? 'Tu';
+  const planWeeks      = Math.min(52, Math.max(4, Number(profile?.planWeeks ?? 16)));
+
+  const prefs = { trainingDays, hoursWeekday, hoursWeekend, longSessionDay, hardSessionDay };
+
   let goalDate   = profile?.goalDate ?? '';
   let totalWeeks;
 
   if (goalDate) {
-    const msUntilGoal = new Date(goalDate) - new Date(todayIso);
-    const daysUntilGoal = Math.ceil(msUntilGoal / 86400000);
-    totalWeeks = Math.ceil(daysUntilGoal / 7);
-    totalWeeks = Math.min(16, Math.max(4, totalWeeks));
+    const daysUntilGoal = Math.ceil((new Date(goalDate) - new Date(todayIso)) / 86400000);
+    totalWeeks = Math.min(52, Math.max(4, Math.ceil(daysUntilGoal / 7)));
   } else {
-    totalWeeks = 4;
-    goalDate   = _addDaysToIso(todayIso, 28);
+    totalWeeks = planWeeks;
+    goalDate   = _addDaysToIso(todayIso, totalWeeks * 7);
   }
 
   // Determine peak km from history + detraining
@@ -515,17 +573,17 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   const detraining = assessDetraining(historyWorkouts);
   const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
   const cfg        = sportConfig(sportObj);
+  const speed      = _sportSpeed(cfg.sport);
   const floor      = cfg.weekFloors['active'] ?? cfg.defaultWeek;
 
-  // When no recent history, derive base from profile.weeklyHours × sport speed estimate
-  const weeklyHours = Number(profile?.weeklyHours ?? 6);
-  const hoursKm = cfg.sport === 'cycling' ? weeklyHours * 22
-                : cfg.sport === 'running'  ? weeklyHours * 10
-                : weeklyHours * 15;
-  const effectiveRefKm = refKm > 0 ? refKm : hoursKm;
+  // Derive base volume from training schedule when no history exists
+  const scheduleKm = trainingDays.reduce((sum, d) => {
+    return sum + (WEEKEND_DAYS.has(d) ? hoursWeekend : hoursWeekday) * speed;
+  }, 0);
+  const effectiveRefKm = refKm > 0 ? refKm : scheduleKm;
 
-  const baseKm     = Math.max(effectiveRefKm * detraining.factor, floor);
-  const peakKm     = Math.round(baseKm * 1.25);
+  const baseKm = Math.max(effectiveRefKm * detraining.factor, floor);
+  const peakKm = Math.round(baseKm * 1.25);
 
   // Start mesocycle from the given date, or snap to NEXT Monday by default
   let msStartIso;
@@ -548,7 +606,7 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
     const isRecovery   = isRecoveryWeek(w);
     const weekKm       = computeWeekVolume(w, totalWeeks, peakKm);
     const effectPhase  = isRecovery ? 'recovery' : phase;
-    const days         = _generateWeekDays(sportObj, historyWorkouts, weekStartIso, weekKm, effectPhase);
+    const days         = _generateWeekDays(sportObj, weekStartIso, weekKm, effectPhase, prefs);
     const targetKm     = days.reduce((s, d) => s + (d.targetKm ?? 0), 0);
     weeks.push({ weekIndex: w, startDate: weekStartIso, endDate: weekEndIso, phase, isRecovery, targetKm, days });
   }
