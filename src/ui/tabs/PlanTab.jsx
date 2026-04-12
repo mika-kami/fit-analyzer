@@ -731,14 +731,16 @@ JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
           const dateIso = dayD.toISOString().slice(0, 10);
           const isoDow  = (dayD.getUTCDay() + 6) % 7;
           const dow3    = DAY_LABELS[isoDow] ?? d.dayOfWeek; // e.g. "Mo"
-          // Enforce: non-training days must be rest regardless of AI output
+          // Enforce schedule: non-training days → rest; training days never rest
           const isTraining = form.trainingDays.includes(dow3);
-          const type    = isTraining ? (d.type ?? 'aerobic') : 'rest';
+          const aiType  = d.type ?? 'aerobic';
+          const type    = !isTraining ? 'rest' : (aiType === 'rest' ? 'recovery' : aiType);
+          const targetKm = !isTraining ? 0 : (aiType === 'rest' ? Math.round((['Sa','Su'].includes(dow3) ? form.hoursWeekend : form.hoursWeekday) * 12) : (d.targetKm ?? 0));
           return {
             ...d,
             type,
-            targetKm: isTraining ? (d.targetKm ?? 0) : 0,
-            label:    isTraining ? (d.label ?? type) : 'Full rest',
+            targetKm,
+            label:    !isTraining ? 'Full rest' : (aiType === 'rest' ? 'Easy recovery' : (d.label ?? type)),
             day:    dow3,
             date:   dateIso.slice(5).replace('-', '/'),
             dateIso,
@@ -980,7 +982,7 @@ JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
       {/* AI plan active banner */}
       {activeMesocycle?.meta?.aiGenerated && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
-          <span style={{ fontSize: 11, color: '#a855f7', fontFamily: 'var(--font-mono)' }}>✦ AI-generated 16-week plan active</span>
+          <span style={{ fontSize: 11, color: '#a855f7', fontFamily: 'var(--font-mono)' }}>✦ AI-generated {activeMesocycle?.total_weeks ?? activeMesocycle?.weeks?.length ?? 16}-week plan active</span>
           <button onClick={handleRegenerate}
             style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.35)', borderRadius: 'var(--r-sm)', padding: '3px 10px', fontSize: 11, color: '#a855f7', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
             Revert to template
