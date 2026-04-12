@@ -105,18 +105,17 @@ export function ProfilePage({
 }) {
   const todayIso = coach?.todayIso ?? localDateIso();
   const [profileDraft, setProfileDraft] = useState(() => coach?.profile ?? {});
-  const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
 
   useEffect(() => { setProfileDraft(coach?.profile ?? {}); }, [coach?.profile]);
-  useEffect(() => { if (coach?.getDailyCheckin) setCheckinDraft(coach.getDailyCheckin(todayIso)); }, [coach, todayIso]);
+  const todayCheckin = coach?.getDailyCheckin?.(todayIso) ?? {};
 
-  const readiness = useMemo(() => computeReadinessScore(checkinDraft), [checkinDraft]);
+  const readiness = useMemo(() => computeReadinessScore(todayCheckin), [todayCheckin]);
   const trainingStatus = useMemo(() => computeTrainingStatus({ lastTSB: null, readiness }), [readiness]);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
       <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-4) var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-4) var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-3)' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>PROFILE</div>
             <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>Athlete Profile</div>
@@ -150,7 +149,6 @@ export function ProfilePage({
         <AthleteProfileCard profile={profileDraft} onChange={setProfileDraft} onSave={() => coach?.saveProfile?.(profileDraft)} />
         <MedicalProfileCard medical={profileDraft.medical ?? {}} onChange={med => setProfileDraft(p => ({ ...p, medical: { ...(p.medical ?? {}), ...med } }))} onSave={() => coach?.saveProfile?.(profileDraft)} />
         <MedicalDocumentsCard userId={user?.id} onDigestChanged={() => coach?.rebuildAthleteDigest?.(profileDraft)} />
-        <ReadinessCheckinCard checkin={checkinDraft} onChange={setCheckinDraft} onSave={() => coach?.saveDailyCheckin?.(todayIso, checkinDraft)} />
 
         <LabMarkersCard labValues={coach?.labValues ?? []} />
 
@@ -497,27 +495,6 @@ function MedicalDocumentsCard({ userId, onDigestChanged }) {
 }
 
 // ── Readiness Checkin Card ───────────────────────────────────────────────────
-
-function ReadinessCheckinCard({ checkin, onChange, onSave }) {
-  const set = (k, v) => onChange(prev => ({ ...prev, [k]: v }));
-  return (
-    <Card>
-      <CardLabel>Daily Readiness Check-in</CardLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)' }}>
-        <Field label="Sleep Score (0-100)"><input type="number" min="0" max="100" value={checkin.sleepScore ?? 70} onChange={e => set('sleepScore', Number(e.target.value || 0))} style={inputStyle} /></Field>
-        <Field label="Health Score (0-100)"><input type="number" min="0" max="100" value={checkin.healthScore ?? 75} onChange={e => set('healthScore', Number(e.target.value || 0))} style={inputStyle} /></Field>
-        <Field label="Weather Score (0-100)"><input type="number" min="0" max="100" value={checkin.weatherScore ?? 70} onChange={e => set('weatherScore', Number(e.target.value || 0))} style={inputStyle} /></Field>
-        <Field label="Energy (1-10)"><input type="number" min="1" max="10" value={checkin.energy ?? 6} onChange={e => set('energy', Number(e.target.value || 1))} style={inputStyle} /></Field>
-        <Field label="Motivation (1-10)"><input type="number" min="1" max="10" value={checkin.motivation ?? 7} onChange={e => set('motivation', Number(e.target.value || 1))} style={inputStyle} /></Field>
-        <Field label="Sleep Hours"><input type="number" min="0" max="14" step="0.1" value={checkin.sleepHours ?? 7.5} onChange={e => set('sleepHours', Number(e.target.value || 0))} style={inputStyle} /></Field>
-        <Field label="Soreness (1-10)"><input type="number" min="1" max="10" value={checkin.soreness ?? 3} onChange={e => set('soreness', Number(e.target.value || 1))} style={inputStyle} /></Field>
-        <Field label="Stress (1-10)"><input type="number" min="1" max="10" value={checkin.stress ?? 4} onChange={e => set('stress', Number(e.target.value || 1))} style={inputStyle} /></Field>
-        <Field label="Resting HR Delta (bpm)"><input type="number" min="-20" max="30" value={checkin.restingHrDelta ?? 0} onChange={e => set('restingHrDelta', Number(e.target.value || 0))} style={inputStyle} /></Field>
-      </div>
-      <SaveRow onSave={onSave} />
-    </Card>
-  );
-}
 
 // ── Lab Markers Card ──────────────────────────────────────────────────────────
 

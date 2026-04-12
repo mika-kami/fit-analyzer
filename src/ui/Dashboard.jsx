@@ -2,11 +2,11 @@
  * Dashboard.jsx — Home screen showing workout history.
  * Uses AppHeader from Shell.jsx for a consistent header across all screens.
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { BulkUploadModal } from './BulkUploadModal.jsx';
 import { CoachBriefingCard } from './CoachBriefingCard.jsx';
 import { AppHeader } from './Shell.jsx';
-import { fmtDateDMY } from '../core/format.js';
+import { fmtDateDMY, localDateIso } from '../core/format.js';
 
 const LOAD_COLOR = {
   high: '#ef4444', medium: '#f97316', low: '#4ade80', unknown: '#374151'
@@ -200,6 +200,61 @@ function DropZone({ onFile, onBulk, isLoading, compact }) {
   );
 }
 
+function HeaderReadinessCheckin({ checkin, onChange, onSave }) {
+  const set = (k, v) => onChange((prev) => ({ ...prev, [k]: v }));
+  const inputStyle = {
+    width: '100%',
+    background: 'var(--bg-raised)',
+    border: '1px solid var(--border-subtle)',
+    color: 'var(--text-primary)',
+    borderRadius: 'var(--r-sm)',
+    padding: '5px 7px',
+    fontSize: 11,
+    fontFamily: 'var(--font-body)',
+  };
+  return (
+    <div style={{
+      marginTop: 'var(--sp-2)',
+      background: 'var(--bg-overlay)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--r-md)',
+      padding: 'var(--sp-3)',
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        Daily Readiness Check-in
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(110px, 1fr))', gap: 'var(--sp-2)' }}>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Sleep</span><input type="number" min="0" max="100" value={checkin.sleepScore ?? 70} onChange={e => set('sleepScore', Number(e.target.value || 0))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Health</span><input type="number" min="0" max="100" value={checkin.healthScore ?? 75} onChange={e => set('healthScore', Number(e.target.value || 0))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Weather</span><input type="number" min="0" max="100" value={checkin.weatherScore ?? 70} onChange={e => set('weatherScore', Number(e.target.value || 0))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Energy</span><input type="number" min="1" max="10" value={checkin.energy ?? 6} onChange={e => set('energy', Number(e.target.value || 1))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Motivation</span><input type="number" min="1" max="10" value={checkin.motivation ?? 7} onChange={e => set('motivation', Number(e.target.value || 1))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Sleep h</span><input type="number" min="0" max="14" step="0.1" value={checkin.sleepHours ?? 7.5} onChange={e => set('sleepHours', Number(e.target.value || 0))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Soreness</span><input type="number" min="1" max="10" value={checkin.soreness ?? 3} onChange={e => set('soreness', Number(e.target.value || 1))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Stress</span><input type="number" min="1" max="10" value={checkin.stress ?? 4} onChange={e => set('stress', Number(e.target.value || 1))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>RHR delta</span><input type="number" min="-20" max="30" value={checkin.restingHrDelta ?? 0} onChange={e => set('restingHrDelta', Number(e.target.value || 0))} style={inputStyle} /></label>
+      </div>
+      <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={onSave}
+          style={{
+            background: 'rgba(232,168,50,0.12)',
+            border: '1px solid rgba(232,168,50,0.4)',
+            borderRadius: 'var(--r-sm)',
+            color: 'var(--accent)',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            padding: '5px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const ALERT_BORDER = { high: '#ef4444', medium: '#f97316', low: '#60a5fa' };
 const ALERT_BG     = { high: 'rgba(239,68,68,0.06)', medium: 'rgba(249,115,22,0.06)', low: 'rgba(96,165,250,0.06)' };
@@ -240,6 +295,7 @@ function AlertBanner({ alerts, onDismiss, onCoachAction }) {
 export function Dashboard({
   history,
   user,
+  coach,
   coachBriefing,
   coachActionLoading,
   coachActionResult,
@@ -261,23 +317,67 @@ export function Dashboard({
 }) {
   const [period, setPeriod] = useState(30);
   const [bulkFiles, setBulkFiles] = useState(null);
+  const [showCheckin, setShowCheckin] = useState(false);
 
   const workouts = history.history ?? [];
   const now      = new Date();
   const cutoff   = new Date(now); cutoff.setDate(now.getDate() - period);
   const recent   = workouts.filter(w => new Date(w.date) >= cutoff);
   const isEmpty  = workouts.length === 0;
+  const todayIso = coach?.todayIso ?? localDateIso();
+  const [checkinDraft, setCheckinDraft] = useState(() => coach?.getDailyCheckin?.(todayIso) ?? {});
+
+  useEffect(() => {
+    if (coach?.getDailyCheckin) setCheckinDraft(coach.getDailyCheckin(todayIso));
+  }, [coach, todayIso]);
+
+  const hasTodayCheckin = !!coach?.hasDailyCheckin?.(todayIso);
+  const checkinColor = hasTodayCheckin ? '#4ade80' : '#ef4444';
+  const checkinLabel = hasTodayCheckin ? 'saved' : 'missing';
+  const saveTodayCheckin = useCallback(async () => {
+    await coach?.saveDailyCheckin?.(todayIso, checkinDraft);
+    setShowCheckin(false);
+  }, [coach, todayIso, checkinDraft]);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
       <AppHeader
         title="Training history"
+        beforeProfile={(
+          <button
+            onClick={() => setShowCheckin((v) => !v)}
+            title="Daily readiness check-in"
+            style={{
+              background: `${checkinColor}18`,
+              border: `1px solid ${checkinColor}55`,
+              borderRadius: 'var(--r-md)',
+              padding: 'var(--sp-2) var(--sp-3)',
+              color: checkinColor,
+              cursor: 'pointer',
+              fontSize: 11,
+              fontFamily: 'var(--font-body)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Readiness · {checkinLabel}
+          </button>
+        )}
         onProfile={onProfile}
         onGarmin={onGarmin}
         onStrava={onStrava}
         stravaStatus={stravaStatus}
         onSignOut={onSignOut}
-      />
+      >
+        {showCheckin && (
+          <div style={{ padding: '0 var(--sp-6) var(--sp-4)' }}>
+            <HeaderReadinessCheckin
+              checkin={checkinDraft}
+              onChange={setCheckinDraft}
+              onSave={saveTodayCheckin}
+            />
+          </div>
+        )}
+      </AppHeader>
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)' }}>
         <AlertBanner alerts={alerts} onDismiss={onDismissAlert} onCoachAction={onCoachAction} />

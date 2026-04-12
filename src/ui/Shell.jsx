@@ -64,6 +64,7 @@ function Btn({ onClick, title, active, accent, children, style: extraStyle }) {
  *   title        string          — main heading (e.g. "Training history" or sport name)
  *   subtitle     string | null   — secondary line below title (e.g. date + distance)
  *   eyebrow      string | null   — small label above title (defaults to "◈ FIT ANALYZER")
+ *   beforeProfile ReactNode       — optional action rendered before profile button
  *   onProfile    fn | null
  *   onGarmin     fn | null
  *   garminStatus string | null   — 'connected' | other
@@ -81,6 +82,7 @@ export function AppHeader({
   title,
   subtitle,
   eyebrow,
+  beforeProfile,
   onProfile,
   onGarmin,
   garminStatus,
@@ -136,6 +138,8 @@ export function AppHeader({
 
         {/* Right: action buttons */}
         <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {beforeProfile}
+
           {onProfile && (
             <Btn onClick={onProfile} title="Open profile">Profile</Btn>
           )}
@@ -284,4 +288,3 @@ export function Shell({
     </AppHeader>
   );
 }
-

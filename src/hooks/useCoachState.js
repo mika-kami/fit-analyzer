@@ -657,6 +657,10 @@ export function useCoachState(userId) {
     return state.dailyCheckins?.[dateIso] || defaultDailyCheckin(dateIso);
   }, [state.dailyCheckins]);
 
+  const hasDailyCheckin = useCallback((dateIso = todayIso()) => {
+    return Object.prototype.hasOwnProperty.call(state.dailyCheckins ?? {}, dateIso);
+  }, [state.dailyCheckins]);
+
   const getWorkoutNote = useCallback((workout) => {
     const keyById = workout?.id ? String(workout.id) : null;
     const keyByDate = workout?.date ? `date:${workout.date}` : null;
@@ -728,6 +732,7 @@ export function useCoachState(userId) {
     rebuildAthleteDigest,
     saveProfile,
     getDailyCheckin,
+    hasDailyCheckin,
     saveDailyCheckin,
     getWorkoutNote,
     saveWorkoutNote,

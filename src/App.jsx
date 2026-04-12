@@ -310,6 +310,7 @@ export default function App() {
         <Dashboard
           history={workouts}
           user={auth.user}
+          coach={coach}
           coachBriefing={briefing}
           coachActionLoading={coachActions.loadingAction}
           coachActionResult={coachActions.results?.[lastCoachAction] || ''}
