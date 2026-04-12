@@ -35,22 +35,65 @@ function isCyclingSport(sportLabel = '') {
   );
 }
 
+function isHikingSport(sportLabel = '') {
+  const s = String(sportLabel || '').toLowerCase();
+  return (
+    s.includes('hik') ||
+    s.includes('walk') ||
+    s.includes('trek') ||
+    s.includes('mountaineer')
+  );
+}
+
 function isRunningSport(sportLabel = '') {
   const s = String(sportLabel || '').toLowerCase();
   return (
     s.includes('run') ||
-    s.includes('hik') ||
-    s.includes('walk') ||
-    s.includes('trail') ||
     s.includes('jog') ||
     s.includes('tread')
   );
 }
 
-function matchesSport(item, sportLabel) {
-  if (item.sport === 'cycling') return isCyclingSport(sportLabel);
-  if (item.sport === 'running') return isRunningSport(sportLabel);
+function classifyWorkoutKind(sportLabel = '') {
+  if (isCyclingSport(sportLabel)) return 'cycling';
+  if (isHikingSport(sportLabel)) return 'hiking';
+  if (isRunningSport(sportLabel)) return 'running';
+  return 'other';
+}
+
+function typeSupportsWorkout(type, workoutKind) {
+  const cyclingOnlyTypes = new Set([
+    'bike',
+    'tires',
+    'chain',
+    'cassette',
+    'crankset',
+    'brakes',
+    'chain_cleaning',
+    'chain_waxing',
+    'brakes_service',
+    'shifting_service',
+    'helmet',
+  ]);
+  if (cyclingOnlyTypes.has(type)) return workoutKind === 'cycling';
+  if (type === 'shoes' || type === 'insoles') return workoutKind === 'running' || workoutKind === 'hiking';
   return true;
+}
+
+function itemSportMatches(itemSport, workoutKind, sportLabel) {
+  const sport = String(itemSport || '').trim().toLowerCase();
+  if (!sport) return true;
+  if (sport === 'cycling') return workoutKind === 'cycling';
+  if (sport === 'running') return workoutKind === 'running' || workoutKind === 'hiking';
+  if (sport === 'hiking') return workoutKind === 'hiking';
+  if (sport === 'swimming') return String(sportLabel || '').toLowerCase().includes('swim');
+  return String(sportLabel || '').toLowerCase().includes(sport);
+}
+
+function matchesSport(item, sportLabel) {
+  const workoutKind = classifyWorkoutKind(sportLabel);
+  if (!typeSupportsWorkout(item?.type, workoutKind)) return false;
+  return itemSportMatches(item?.sport, workoutKind, sportLabel);
 }
 
 function bikeMatches(item, workout) {
