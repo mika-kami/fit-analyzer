@@ -62,6 +62,7 @@ export const DEFAULT_ATHLETE_PROFILE = {
   longSessionDay:  'Sa',
   hardSessionDay:  'Tu',
   planWeeks:       16,
+  hasWattmeter:    false,
 };
 
 export function defaultDailyCheckin(dateIso) {

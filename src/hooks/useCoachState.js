@@ -69,6 +69,9 @@ function ageFromBirthday(birthday) {
 function mapProfileFromDb(row) {
   if (!row) return null;
   const birthday = row.birthday ?? null;
+  const hasWattmeter = row.has_wattmeter != null
+    ? !!row.has_wattmeter
+    : !!row.medical_profile?.hasWattmeter;
   return {
     targetSport:     row.target_sport,
     primaryGoal:     row.primary_goal,
@@ -76,7 +79,6 @@ function mapProfileFromDb(row) {
     weeklyHours:     Number(row.weekly_hours ?? 6),
     constraints:     row.constraints,
     injuryNotes:     row.injury_notes,
-    medical:         row.medical_profile ?? {},
     birthday,
     age:             ageFromBirthday(birthday),
     weightKg:        row.weight_kg != null ? Number(row.weight_kg) : null,
@@ -87,6 +89,11 @@ function mapProfileFromDb(row) {
     longSessionDay:  row.long_session_day  ?? null,
     hardSessionDay:  row.hard_session_day ?? null,
     planWeeks:       row.plan_weeks != null ? Number(row.plan_weeks) : 16,
+    hasWattmeter,
+    medical: {
+      ...(row.medical_profile ?? {}),
+      hasWattmeter,
+    },
   };
 }
 
@@ -362,6 +369,7 @@ export function useCoachState(userId) {
       long_session_day: next.profile.longSessionDay ?? null,
       hard_session_day: next.profile.hardSessionDay ?? null,
       plan_weeks:       next.profile.planWeeks       ?? 16,
+      has_wattmeter:    !!(next.profile.hasWattmeter ?? next.profile.medical?.hasWattmeter),
     };
     await supabase.from('athlete_profiles').upsert(payload, { onConflict: 'user_id' });
     await rebuildAthleteDigest(next.profile);

@@ -563,7 +563,7 @@ function PlanSetupModal({ mode, profile, defaultSport, onConfirm, onCancel }) {
     hoursWeekend:   profile?.hoursWeekend ?? 3.0,
     longSessionDay: profile?.longSessionDay ?? 'Sa',
     hardSessionDay: profile?.hardSessionDay ?? 'Tu',
-    hasWattmeter:   !!profile?.medical?.hasWattmeter,
+    hasWattmeter:   !!(profile?.hasWattmeter ?? profile?.medical?.hasWattmeter),
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleDay = (d) => setForm(f => ({
@@ -1033,6 +1033,7 @@ export function PlanTab({ workout: w, history, coach }) {
       hardSessionDay: form.hardSessionDay,
       weeklyHours:    computeWeeklyHours(form),
       targetSport:    form.sport,
+      hasWattmeter:   !!form.hasWattmeter,
       medical: {
         ...(coach?.profile?.medical ?? {}),
         hasWattmeter: !!form.hasWattmeter,
@@ -1053,6 +1054,7 @@ export function PlanTab({ workout: w, history, coach }) {
         hoursWeekend:   form.hoursWeekend,
         longSessionDay: form.longSessionDay,
         hardSessionDay: form.hardSessionDay,
+        hasWattmeter:   !!form.hasWattmeter,
         medical: {
           ...(coach?.profile?.medical ?? {}),
           hasWattmeter: !!form.hasWattmeter,
