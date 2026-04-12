@@ -464,7 +464,7 @@ function _sportSpeed(sport) {
  *
  * @param {object}   sportObj          - { sport } used by sportConfig
  * @param {object[]} historyWorkouts
- * @param {string}   weekStartIso      - ISO date of Monday
+ * @param {string}   weekStartIso      - ISO date of week start (can be any weekday)
  * @param {number}   weekVolKm         - target volume this week (for session-size fractions)
  * @param {string}   phase             - 'base' | 'build' | 'peak' | 'taper' | 'recovery'
  * @param {object}   prefs             - user schedule preferences from athlete_profiles
@@ -486,8 +486,10 @@ function _generateWeekDays(sportObj, weekStartIso, weekVolKm, phase, prefs = {})
   const isHard   = phase === 'build' || phase === 'peak';
 
   const weekStart = new Date(weekStartIso + 'T00:00:00Z');
+  const weekStartDow = (weekStart.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+  const orderedDays = Array.from({ length: 7 }, (_, i) => DAY_LABELS[(weekStartDow + i) % 7]);
 
-  return DAY_LABELS.map((dow3, i) => {
+  return orderedDays.map((dow3, i) => {
     const dayDate = new Date(weekStart);
     dayDate.setUTCDate(weekStart.getUTCDate() + i);
     const dateIso = dayDate.toISOString().slice(0, 10);
@@ -503,7 +505,7 @@ function _generateWeekDays(sportObj, weekStartIso, weekVolKm, phase, prefs = {})
     const capKm = Math.round((WEEKEND_DAYS.has(dow3) ? hoursWe : hoursWd) * speed);
 
     // Session type assignment — extracted so we can call twice if capping is needed
-    const prevDow3    = DAY_LABELS[(i + 6) % 7];
+    const prevDow3    = orderedDays[(i + 6) % 7];
     const isAfterHard = trainingDays.includes(prevDow3) && (prevDow3 === longDay || prevDow3 === hardDay);
 
     const buildSession = (wkKm) => {

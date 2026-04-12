@@ -225,8 +225,8 @@ function HeaderReadinessCheckin({ checkin, onChange, onSave }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(110px, 1fr))', gap: 'var(--sp-2)' }}>
         <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Sleep</span><input type="number" min="0" max="100" value={checkin.sleepScore ?? 70} onChange={e => set('sleepScore', Number(e.target.value || 0))} style={inputStyle} /></label>
-        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Health</span><input type="number" min="0" max="100" value={checkin.healthScore ?? 75} onChange={e => set('healthScore', Number(e.target.value || 0))} style={inputStyle} /></label>
-        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Weather</span><input type="number" min="0" max="100" value={checkin.weatherScore ?? 70} onChange={e => set('weatherScore', Number(e.target.value || 0))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Health (0-10)</span><input type="number" min="0" max="10" step="1" value={checkin.healthScore ?? 7} onChange={e => set('healthScore', Math.max(0, Math.min(10, Math.round(Number(e.target.value || 0)))))} style={inputStyle} /></label>
+        <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Weather (0-10)</span><input type="number" min="0" max="10" step="1" value={checkin.weatherScore ?? 7} onChange={e => set('weatherScore', Math.max(0, Math.min(10, Math.round(Number(e.target.value || 0)))))} style={inputStyle} /></label>
         <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Energy</span><input type="number" min="1" max="10" value={checkin.energy ?? 6} onChange={e => set('energy', Number(e.target.value || 1))} style={inputStyle} /></label>
         <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Motivation</span><input type="number" min="1" max="10" value={checkin.motivation ?? 7} onChange={e => set('motivation', Number(e.target.value || 1))} style={inputStyle} /></label>
         <label style={{ display: 'grid', gap: 3 }}><span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Sleep h</span><input type="number" min="0" max="14" step="0.1" value={checkin.sleepHours ?? 7.5} onChange={e => set('sleepHours', Number(e.target.value || 0))} style={inputStyle} /></label>
@@ -259,7 +259,7 @@ function HeaderReadinessCheckin({ checkin, onChange, onSave }) {
 const ALERT_BORDER = { high: '#ef4444', medium: '#f97316', low: '#60a5fa' };
 const ALERT_BG     = { high: 'rgba(239,68,68,0.06)', medium: 'rgba(249,115,22,0.06)', low: 'rgba(96,165,250,0.06)' };
 
-function AlertBanner({ alerts, onDismiss, onCoachAction }) {
+function AlertBanner({ alerts, onDismiss, onCoachAction, onUpdateFuturePlan }) {
   if (!alerts?.length) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
@@ -279,7 +279,12 @@ function AlertBanner({ alerts, onDismiss, onCoachAction }) {
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{alert.body}</div>
           </div>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexShrink: 0 }}>
-            {alert.action && onCoachAction && (
+            {alert.action === 'update_future' && onUpdateFuturePlan && (
+              <button onClick={onUpdateFuturePlan} style={{ background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '3px 8px', fontSize: 10, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
+                Update Future
+              </button>
+            )}
+            {alert.action && alert.action !== 'update_future' && onCoachAction && (
               <button onClick={() => onCoachAction(alert.action)} style={{ background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '3px 8px', fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
                 Ask Coach
               </button>
@@ -314,6 +319,7 @@ export function Dashboard({
   loadError,
   alerts,
   onDismissAlert,
+  onUpdateFuturePlan,
 }) {
   const [period, setPeriod] = useState(30);
   const [bulkFiles, setBulkFiles] = useState(null);
@@ -380,7 +386,12 @@ export function Dashboard({
       </AppHeader>
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)' }}>
-        <AlertBanner alerts={alerts} onDismiss={onDismissAlert} onCoachAction={onCoachAction} />
+        <AlertBanner
+          alerts={alerts}
+          onDismiss={onDismissAlert}
+          onCoachAction={onCoachAction}
+          onUpdateFuturePlan={onUpdateFuturePlan}
+        />
 
         {onPlans && (
           <button onClick={onPlans} style={{

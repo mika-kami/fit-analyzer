@@ -67,8 +67,8 @@ export function defaultDailyCheckin(dateIso) {
   return {
     date: dateIso,
     sleepScore: 70,           // 0..100
-    healthScore: 75,          // 0..100
-    weatherScore: 70,         // 0..100 (how favorable conditions are today)
+    healthScore: 7,           // 0..10 (int)
+    weatherScore: 7,          // 0..10 (int, how favorable conditions are today)
     energy: 6,                // 1..10
     motivation: 7,            // 1..10
     soreness: 3,              // 1..10 (higher=worse)
@@ -96,25 +96,39 @@ export function computeReadinessScore(checkin) {
   if (!checkin) return { score: 50, label: 'Unknown', color: '#6b7280', reason: 'No check-in yet' };
 
   const sleep = clamp(checkin.sleepScore ?? 0, 0, 100);
-  const health = clamp(checkin.healthScore ?? 0, 0, 100);
-  const weather = clamp(checkin.weatherScore ?? 0, 0, 100);
+  // Health and weather are now 0..10 integers in UI/storage.
+  // Backward compatibility: if old values are 0..100, normalize to 0..10.
+  const health10Raw = Number(checkin.healthScore ?? 0);
+  const weather10Raw = Number(checkin.weatherScore ?? 0);
+  const health10 = clamp(Math.round(health10Raw > 10 ? health10Raw / 10 : health10Raw), 0, 10);
+  const weather10 = clamp(Math.round(weather10Raw > 10 ? weather10Raw / 10 : weather10Raw), 0, 10);
+  const health = health10 * 10;
+  const weather = weather10 * 10;
   const energy = clamp((checkin.energy ?? 1) * 10, 0, 100);
   const motivation = clamp((checkin.motivation ?? 1) * 10, 0, 100);
   const sorenessInv = clamp(100 - ((checkin.soreness ?? 1) - 1) * (100 / 9), 0, 100);
   const stressInv = clamp(100 - ((checkin.stress ?? 1) - 1) * (100 / 9), 0, 100);
-  const rhrPenalty = clamp((checkin.restingHrDelta ?? 0) * 3, 0, 30); // +10 bpm => -30
-  const sleepHoursBonus = clamp(((checkin.sleepHours ?? 7) - 6) * 6, -12, 12);
+  const rhrPenalty = clamp((checkin.restingHrDelta ?? 0) * 4, 0, 40); // +10 bpm => -40
+  const sleepHoursBonus = clamp(((checkin.sleepHours ?? 7) - 7) * 4, -10, 10);
 
-  const raw =
-      sleep * 0.22
-    + health * 0.24
-    + weather * 0.06
-    + energy * 0.16
-    + motivation * 0.10
-    + sorenessInv * 0.10
-    + stressInv * 0.12
+  // Health-first readiness model:
+  // - health dominates the score
+  // - mood/weather support but cannot override poor health markers
+  let raw =
+      health * 0.40
+    + sleep * 0.18
+    + energy * 0.12
+    + stressInv * 0.10
+    + sorenessInv * 0.09
+    + motivation * 0.07
+    + weather * 0.04
     - rhrPenalty
     + sleepHoursBonus;
+
+  // Safety caps: very low health should never produce medium/high readiness.
+  if (health <= 20) raw = Math.min(raw, 30);
+  else if (health <= 30) raw = Math.min(raw, 40);
+  else if (health <= 40) raw = Math.min(raw, 52);
 
   const score = clamp(Math.round(raw), 0, 100);
   if (score >= 80) return { score, label: 'Prime', color: '#4ade80', reason: 'High readiness for quality training' };
@@ -294,11 +308,11 @@ export function analyzePerformanceLimiters({ workouts = [], profile, readiness, 
   return { limiters, opportunities };
 }
 
-export function prescribeNextWorkout({ profile, readiness, trainingStatus, insights, weatherScore = 70 }) {
+export function prescribeNextWorkout({ profile, readiness, trainingStatus, insights, weatherScore = 7 }) {
   const sport = profile?.targetSport === 'mixed' ? 'cycling' : (profile?.targetSport || 'cycling');
   const r = readiness?.score ?? 50;
   const isRecovery = trainingStatus?.label === 'Recovery Priority' || r < 45;
-  const weatherBad = weatherScore < 45;
+  const weatherBad = weatherScore < 5;
   const limiterKeys = new Set((insights?.limiters || []).map(x => x.key));
 
   if (isRecovery) {
@@ -495,5 +509,3 @@ export function alignPrescriptionToWeekPlan({ weekDays = [], prescription, readi
     chosenReadiness: chosen.readiness,
   };
 }
-
-

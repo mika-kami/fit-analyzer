@@ -105,7 +105,7 @@ export default function App() {
     readiness,
     trainingStatus,
     insights,
-    weatherScore: todayCheckin?.weatherScore ?? 70,
+    weatherScore: todayCheckin?.weatherScore ?? 7,
   }), [coach?.profile, readiness, trainingStatus, insights, todayCheckin?.weatherScore]);
 
   const { alerts, dismiss: dismissAlert } = useAlerts({
@@ -240,6 +240,16 @@ export default function App() {
     setActiveTab('plan');
   }, []);
 
+  const handleUpdateFuturePlan = useCallback(async () => {
+    await coach?.updateFutureMesocycle?.(
+      workouts.history ?? [],
+      null,
+      { targetSport: coach?.mesocycle?.meta?.sport ?? coach?.profile?.targetSport }
+    );
+    setScreen('detail');
+    setActiveTab('plan');
+  }, [coach, workouts.history]);
+
   const handleDownloadPdf = useCallback(() => {
     if (!workout.workout) return;
     downloadWorkoutPDF(workout.workout);
@@ -329,6 +339,7 @@ export default function App() {
           loadError={workout.status === 'error' ? workout.error : null}
           alerts={alerts}
           onDismissAlert={dismissAlert}
+          onUpdateFuturePlan={handleUpdateFuturePlan}
         />
       ) : screen === 'profile' ? (
         <ProfilePage

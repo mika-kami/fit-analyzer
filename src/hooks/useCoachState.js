@@ -91,11 +91,18 @@ function mapProfileFromDb(row) {
 }
 
 function mapCheckinFromDb(row) {
+  // health/weather use 0..10 integer scale; convert legacy 0..100 rows.
+  const normalize10 = (v, fallback) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    const scaled = n > 10 ? n / 10 : n;
+    return Math.max(0, Math.min(10, Math.round(scaled)));
+  };
   return {
     date: row.checkin_date,
     sleepScore: row.sleep_score,
-    healthScore: row.health_score,
-    weatherScore: row.weather_score,
+    healthScore: normalize10(row.health_score, 7),
+    weatherScore: normalize10(row.weather_score, 7),
     energy: row.energy,
     motivation: row.motivation,
     soreness: row.soreness,
@@ -370,12 +377,18 @@ export function useCoachState(userId) {
     persistLocal(next);
 
     if (!userId) return;
+    const normalize10 = (v, fallback) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return fallback;
+      const scaled = n > 10 ? n / 10 : n; // tolerate legacy 0..100 payloads
+      return Math.max(0, Math.min(10, Math.round(scaled)));
+    };
     const row = {
       user_id: userId,
       checkin_date: dateIso,
       sleep_score: nextCheckin.sleepScore ?? 70,
-      health_score: nextCheckin.healthScore ?? 75,
-      weather_score: nextCheckin.weatherScore ?? 70,
+      health_score: normalize10(nextCheckin.healthScore, 7),
+      weather_score: normalize10(nextCheckin.weatherScore, 7),
       energy: nextCheckin.energy ?? 6,
       motivation: nextCheckin.motivation ?? 7,
       soreness: nextCheckin.soreness ?? 3,

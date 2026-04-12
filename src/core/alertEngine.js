@@ -17,9 +17,57 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function readinessScore(ctx) {
+  const raw = ctx?.readiness;
+  if (typeof raw === 'number') return raw;
+  if (raw && typeof raw.score === 'number') return raw.score;
+  return 50;
+}
+
 // ── Alert rules ───────────────────────────────────────────────────────────────
 
 export const ALERT_RULES = [
+  {
+    id: 'adaptive_plan_update',
+    check: (ctx) => {
+      const mesocycle = ctx.mesocycle;
+      const history = ctx.historyWorkouts ?? [];
+      if (!mesocycle?.weeks?.length) return null;
+
+      const today = todayIso();
+      const week = mesocycle.weeks[mesocycle.currentWeekIndex];
+      if (!week?.days?.length) return null;
+
+      const plannedToday = week.days.find((d) => d.dateIso === today && d.type !== 'rest');
+      if (!plannedToday) return null;
+
+      const r = readinessScore(ctx);
+      if (r > 45) return null;
+
+      const plannedPast = week.days.filter((d) => d.type !== 'rest' && d.dateIso < today);
+      if (!plannedPast.length) return null;
+
+      const workoutByDate = new Map(history.map((w) => [w.date, w]));
+      const completedPast = plannedPast.filter((d) => workoutByDate.has(d.dateIso));
+      const missed = plannedPast.length - completedPast.length;
+
+      const offTarget = completedPast.filter((d) => {
+        const c = workoutByDate.get(d.dateIso)?.complianceResult;
+        return c && (c.verdict === 'off_target' || (c.score ?? 100) < 60);
+      }).length;
+
+      if (completedPast.length < 2) return null;
+      if (missed < 1 && offTarget < 1) return null;
+
+      return {
+        severity: 'high',
+        title: 'Low readiness vs current plan load',
+        body: `Today readiness is ${Math.round(r)} with ${missed} missed and ${offTarget} off-target sessions this week. Update future weeks now to reduce overtraining risk.`,
+        action: 'update_future',
+      };
+    },
+  },
+
   {
     id: 'overreach_risk',
     check: (ctx) => {
@@ -186,7 +234,7 @@ export const ALERT_RULES = [
       const yIso = yesterday.toISOString().slice(0, 10);
       const history = ctx.historyWorkouts ?? [];
       const yesterdayWorkout = history.find(w => w.date === yIso);
-      const readiness = ctx.readiness ?? 100;
+      const readiness = readinessScore(ctx);
       if (yesterdayWorkout?.load?.level === 'high' && readiness < 40) {
         return {
           severity: 'high',
@@ -263,4 +311,3 @@ export function evaluateAlerts(context) {
     .filter(Boolean)
     .sort((a, b) => severityOrder(b.severity) - severityOrder(a.severity));
 }
-

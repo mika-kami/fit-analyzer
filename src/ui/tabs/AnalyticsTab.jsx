@@ -114,7 +114,7 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
       readiness,
       trainingStatus,
       insights,
-      weatherScore: checkin?.weatherScore ?? 70,
+      weatherScore: checkin?.weatherScore ?? 7,
     }),
     [profile, readiness, trainingStatus, insights, checkin?.weatherScore]
   );
