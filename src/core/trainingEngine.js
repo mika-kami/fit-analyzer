@@ -351,12 +351,12 @@ export function sportConfig(workout) {
 // ── Plan templates per phase (sport-agnostic, use cfg.templates) ──────────────
 export const PHASE_PLANS = {
   full_restart: (T, km) => [
-    T.rest(km), T.test(km), T.rest(km),
+    T.recovery(km), T.test(km), T.rest(km),
     T.recovery(km), T.rest(km), T.aerobic(km), T.rest(km),
   ],
   base_rebuild: (T, km) => [
-    T.rest(km), T.recovery(km), T.aerobic(km),
-    T.rest(km), T.recovery(km), T.long(km), T.rest(km),
+    T.recovery(km), T.aerobic(km), T.rest(km),
+    T.recovery(km), T.aerobic(km), T.long(km), T.rest(km),
   ],
   significant: (T, km) => [
     T.recovery(km), T.aerobic(km), T.rest(km),
@@ -367,7 +367,7 @@ export const PHASE_PLANS = {
     T.rest(km), T.aerobic(km), T.long(km), T.recovery(km),
   ],
   slight: (T, km) => [
-    T.rest(km), T.aerobic(km), T.tempo(km),
+    T.recovery(km), T.aerobic(km), T.tempo(km),
     T.rest(km), T.interval(km), T.long(km), T.recovery(km),
   ],
   overreached: (T, km) => [
@@ -375,7 +375,7 @@ export const PHASE_PLANS = {
     T.rest(km), T.aerobic(km), T.aerobic(km), T.rest(km),
   ],
   active: (T, km) => [
-    T.rest(km), T.aerobic(km), T.tempo(km),
+    T.recovery(km), T.aerobic(km), T.tempo(km),
     T.rest(km), T.interval(km), T.long(km), T.recovery(km),
   ],
   too_easy: (T, km) => [

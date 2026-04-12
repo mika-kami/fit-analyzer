@@ -10,9 +10,9 @@ import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assess
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 
-const OPENAI_KEY     = import.meta.env.VITE_OPENAI_API_KEY ?? '';
+const OPENAI_KEY      = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const PLAN_LLM_MODEL  = import.meta.env.VITE_PLAN_LLM_MODEL ?? 'gpt-4o';
-const PLAN_MAX_TOKENS = parseInt(import.meta.env.VITE_PLAN_MAX_TOKENS ?? '16000', 10) || 16000;
+const PLAN_MAX_TOKENS = 16000;
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
 
@@ -300,62 +300,203 @@ function WeekCard({ week, isCurrent, isSelected, onClick }) {
   );
 }
 
+// ── Plan Setup Modal ─────────────────────────────────────────────────────────
+
+const ALL_DAYS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+const WEEKDAYS = ['Mo','Tu','We','Th','Fr'];
+const WEEKEND  = ['Sa','Su'];
+
+function computeStartIso(startMode, customDate) {
+  if (startMode === 'today')    return localDateIso();
+  if (startMode === 'tomorrow') return localDateIso(new Date(Date.now() + 86400000));
+  if (startMode === 'custom')   return customDate || localDateIso();
+  // auto → next Monday
+  const today = new Date(); const dow = today.getDay();
+  const daysToMon = dow === 1 ? 7 : (8 - dow) % 7 || 7;
+  const mon = new Date(today); mon.setDate(today.getDate() + daysToMon);
+  return localDateIso(mon);
+}
+
+function computeWeeklyHours(form) {
+  const wdCount  = WEEKDAYS.filter(d => form.trainingDays.includes(d)).length;
+  const weCount  = WEEKEND.filter(d => form.trainingDays.includes(d)).length;
+  return parseFloat((wdCount * form.hoursWeekday + weCount * form.hoursWeekend).toFixed(1));
+}
+
+function PlanSetupModal({ mode, profile, defaultSport, onConfirm, onCancel }) {
+  const [form, setForm] = useState({
+    sport:          defaultSport ?? profile?.targetSport ?? 'cycling',
+    primaryGoal:    profile?.primaryGoal ?? '',
+    useGoalDate:    !!profile?.goalDate,
+    goalDate:       profile?.goalDate ?? '',
+    planWeeks:      profile?.planWeeks ?? 16,
+    startMode:      'auto',
+    customDate:     localDateIso(),
+    trainingDays:   profile?.trainingDays?.length ? profile.trainingDays : ALL_DAYS,
+    hoursWeekday:   profile?.hoursWeekday ?? 1.5,
+    hoursWeekend:   profile?.hoursWeekend ?? 3.0,
+    longSessionDay: profile?.longSessionDay ?? 'Sa',
+    hardSessionDay: profile?.hardSessionDay ?? 'Tu',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleDay = (d) => setForm(f => ({
+    ...f,
+    trainingDays: f.trainingDays.includes(d)
+      ? f.trainingDays.filter(x => x !== d)
+      : [...f.trainingDays, d],
+  }));
+
+  const isAI = mode === 'ai';
+  const label = isAI ? '✦ Generate AI Plan' : 'Regenerate Plan';
+
+  const inp = { background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '5px 8px', width: '100%', boxSizing: 'border-box' };
+  const row = { display: 'flex', flexDirection: 'column', gap: 4 };
+  const lbl = { fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={onCancel}>
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-lg)', padding: 24, maxWidth: 460, width: '100%', display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '90vh', overflowY: 'auto' }}
+        onClick={e => e.stopPropagation()}>
+
+        <div>
+          <div style={{ fontSize: 10, color: isAI ? '#a855f7' : 'var(--accent)', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', marginBottom: 4 }}>PLAN SETUP</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{isAI ? 'AI Plan Generation' : 'Regenerate Plan'}</div>
+        </div>
+
+        {/* Sport */}
+        <div style={row}>
+          <div style={lbl}>Sport</div>
+          <select value={form.sport} onChange={e => set('sport', e.target.value)} style={inp}>
+            <option value="cycling">Cycling</option>
+            <option value="running">Running</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </div>
+
+        {/* Primary goal */}
+        <div style={row}>
+          <div style={lbl}>Primary goal</div>
+          <input value={form.primaryGoal} onChange={e => set('primaryGoal', e.target.value)}
+            placeholder="Half marathon, 100 km ride, Ironman 70.3…" style={inp} />
+        </div>
+
+        {/* Event date OR plan weeks */}
+        <div style={row}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+            <button onClick={() => set('useGoalDate', true)} style={{ flex: 1, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', borderRadius: 'var(--r-sm)', cursor: 'pointer', background: form.useGoalDate ? 'rgba(232,168,50,0.12)' : 'var(--bg-raised)', border: `1px solid ${form.useGoalDate ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`, color: form.useGoalDate ? 'var(--accent)' : 'var(--text-muted)' }}>Event date</button>
+            <button onClick={() => set('useGoalDate', false)} style={{ flex: 1, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', borderRadius: 'var(--r-sm)', cursor: 'pointer', background: !form.useGoalDate ? 'rgba(232,168,50,0.12)' : 'var(--bg-raised)', border: `1px solid ${!form.useGoalDate ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`, color: !form.useGoalDate ? 'var(--accent)' : 'var(--text-muted)' }}>Plan weeks</button>
+          </div>
+          {form.useGoalDate
+            ? <input type="date" value={form.goalDate} onChange={e => set('goalDate', e.target.value)} style={inp} />
+            : <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" min={4} max={52} value={form.planWeeks} onChange={e => set('planWeeks', Number(e.target.value))} style={{ ...inp, width: 70 }} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>weeks</span>
+              </div>
+          }
+        </div>
+
+        {/* Plan start */}
+        <div style={row}>
+          <div style={lbl}>Plan starts</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[['auto','Mon (auto)'],['today','Today'],['tomorrow','Tomorrow'],['custom','Pick date']].map(([id, label]) => (
+              <button key={id} onClick={() => set('startMode', id)} style={{ padding: '4px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', borderRadius: 'var(--r-sm)', cursor: 'pointer', background: form.startMode === id ? 'rgba(232,168,50,0.12)' : 'var(--bg-raised)', border: `1px solid ${form.startMode === id ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`, color: form.startMode === id ? 'var(--accent)' : 'var(--text-muted)' }}>{label}</button>
+            ))}
+          </div>
+          {form.startMode === 'custom' && (
+            <input type="date" value={form.customDate} onChange={e => set('customDate', e.target.value)} style={{ ...inp, marginTop: 4 }} />
+          )}
+        </div>
+
+        {/* Training days */}
+        <div style={row}>
+          <div style={lbl}>Training days available</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {ALL_DAYS.map(d => {
+              const on = form.trainingDays.includes(d);
+              return (
+                <button key={d} onClick={() => toggleDay(d)} style={{ flex: 1, padding: '5px 2px', fontSize: 11, fontFamily: 'var(--font-mono)', borderRadius: 'var(--r-sm)', cursor: 'pointer', background: on ? 'rgba(96,165,250,0.15)' : 'var(--bg-raised)', border: `1px solid ${on ? 'rgba(96,165,250,0.45)' : 'var(--border-subtle)'}`, color: on ? '#60a5fa' : 'var(--text-muted)', fontWeight: on ? 600 : 400 }}>{d}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Hours */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={row}>
+            <div style={lbl}>Weekday max (h)</div>
+            <input type="number" min={0.5} max={6} step={0.5} value={form.hoursWeekday} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) set('hoursWeekday', v); }} style={inp} />
+          </div>
+          <div style={row}>
+            <div style={lbl}>Weekend max (h)</div>
+            <input type="number" min={0.5} max={12} step={0.5} value={form.hoursWeekend} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) set('hoursWeekend', v); }} style={inp} />
+          </div>
+        </div>
+
+        {/* Long / hard session day */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={row}>
+            <div style={lbl}>Best long session day</div>
+            <select value={form.longSessionDay} onChange={e => set('longSessionDay', e.target.value)} style={inp}>
+              {ALL_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div style={row}>
+            <div style={lbl}>Best hard session day</div>
+            <select value={form.hardSessionDay} onChange={e => set('hardSessionDay', e.target.value)} style={inp}>
+              {ALL_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Weekly hours summary */}
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-raised)', borderRadius: 'var(--r-sm)', padding: '6px 10px' }}>
+          {form.trainingDays.length} training days · ~{computeWeeklyHours(form)} h/week
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4 }}>
+          <button onClick={onCancel} style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-md)', padding: '8px 16px', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-body)' }}>Cancel</button>
+          <button onClick={() => onConfirm(form)} style={{ background: isAI ? 'rgba(168,85,247,0.15)' : 'rgba(232,168,50,0.12)', border: `1px solid ${isAI ? 'rgba(168,85,247,0.45)' : 'rgba(232,168,50,0.45)'}`, borderRadius: 'var(--r-md)', padding: '8px 18px', color: isAI ? '#a855f7' : 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)' }}>{label}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main PlanTab ──────────────────────────────────────────────────────────────
 
-function todayIsoStr() { return localDateIso(); }
-function tomorrowIsoStr() { return localDateIso(new Date(Date.now() + 86400000)); }
 
 export function PlanTab({ workout: w, history, coach }) {
   const [viewMode, setViewMode] = useState('week');
-  const [hasManualPlanControls, setHasManualPlanControls] = useState(false);
   const [planSport, setPlanSport] = useState(() => {
     const t = coach?.mesocycle?.meta?.sport ?? coach?.profile?.targetSport;
     return (t === 'running' || t === 'cycling' || t === 'mixed') ? t : 'mixed';
   });
-  // 'auto' = current Monday (legacy default), 'today', 'tomorrow', 'custom'
-  const [startMode, setStartMode] = useState('auto');
-  const [customDate, setCustomDate] = useState(() => todayIsoStr());
-
-  const effectiveStartDate = useMemo(() => {
-    if (startMode === 'today')    return todayIsoStr();
-    if (startMode === 'tomorrow') return tomorrowIsoStr();
-    if (startMode === 'custom')   return customDate;
-    return null; // auto → Monday snap inside generateMesocycle
-  }, [startMode, customDate]);
 
   const histWorkouts = history?.history ?? [];
 
-  // When DB mesocycle arrives, keep sport selector in sync with the stored plan
-  // until the user manually changes plan controls.
+  // Keep sport selector in sync with the stored plan
   useEffect(() => {
-    if (hasManualPlanControls) return;
     const savedSport = coach?.mesocycle?.meta?.sport;
     if (savedSport === 'running' || savedSport === 'cycling' || savedSport === 'mixed') {
       setPlanSport(savedSport);
     }
-  }, [coach?.mesocycle?.meta?.sport, hasManualPlanControls]);
+  }, [coach?.mesocycle?.meta?.sport]);
 
-  // Get or generate mesocycle for display.
-  // DB is only updated via explicit Regenerate click.
-  // Until then, control changes can preview a local (unsaved) plan.
+  // Mesocycle for display — always uses the persisted plan or a profile-default auto plan
   const mesocycle = useMemo(() => {
     const saved = coach?.mesocycle;
-    const savedSport = saved?.meta?.sport ?? coach?.profile?.targetSport ?? 'mixed';
-    const isSportChanged = planSport !== savedSport;
-
-    // AI-generated plans always take priority — never overwrite with template preview.
-    if (saved?.weeks?.length && saved?.meta?.aiGenerated) return saved;
-
-    // Use persisted template plan when controls match the saved "auto + sport" context.
-    if (saved?.weeks?.length && startMode === 'auto' && !isSportChanged) return saved;
-
-    // Preview mode (unsaved): local generation from current controls.
+    if (saved?.weeks?.length) return saved;
+    // No saved plan yet: generate a local preview from profile
     const profile = coach?.profile ?? {};
     const sportProfile = { ...profile, targetSport: planSport !== 'mixed' ? planSport : (profile.targetSport ?? 'running') };
-    return generateMesocycle(sportProfile, histWorkouts, effectiveStartDate);
-  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport, effectiveStartDate, startMode]);
+    return generateMesocycle(sportProfile, histWorkouts, null);
+  }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport]);
 
-  const [aiPlanState, setAiPlanState] = useState({ loading: false, error: '' });
+  const [aiPlanState, setAiPlanState]     = useState({ loading: false, error: '' });
+  const [planSetupMode, setPlanSetupMode] = useState(null); // null | 'regenerate' | 'ai'
   // activeMesocycle = coach.mesocycle (persisted, either template or AI) or local preview
   const activeMesocycle = mesocycle;
 
@@ -469,9 +610,9 @@ export function PlanTab({ workout: w, history, coach }) {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRevealed(true), 80); return () => clearTimeout(t); }, []);
 
-  // ── AI plan generation ────────────────────────────────────────────────────────
+  // ── AI plan generation (called after Plan Setup modal confirms) ─────────────
 
-  const generateAIPlan = async () => {
+  const generateAIPlan = async (form, startIso) => {
     if (!OPENAI_KEY) { setAiPlanState({ loading: false, error: 'No OpenAI API key configured.' }); return; }
     setAiPlanState({ loading: true, error: '' });
 
@@ -485,44 +626,39 @@ export function PlanTab({ workout: w, history, coach }) {
         const durationSec = w.duration?.active ?? w.duration?.elapsed ?? w.duration_s ?? 0;
         const durationMin = Math.round(durationSec / 60);
         const distKm      = ((w.distance ?? 0) / 1000).toFixed(1);
-        const sport       = w.sport ?? w.sportLabel ?? 'workout';
+        const sp          = w.sport ?? w.sportLabel ?? 'workout';
         const te          = (w.trainingEffect?.aerobic ?? 0).toFixed(1);
         const hr          = w.heartRate?.avg ? `, HR ${w.heartRate.avg} bpm` : '';
-        return `${w.date}: ${sport}, ${distKm} km, ${durationMin} min${hr}, TE ${te}`;
+        return `${w.date}: ${sp}, ${distKm} km, ${durationMin} min${hr}, TE ${te}`;
       })
       .join('\n') || 'No recent workouts';
 
-    // Mirror the same next-Monday snap that generateMesocycle uses for 'auto' mode
-    const startIso = (() => {
-      if (effectiveStartDate) return effectiveStartDate;
-      const today = new Date();
-      const dow = today.getDay(); // 0=Sun, 1=Mon
-      const daysToNextMon = dow === 1 ? 7 : (8 - dow) % 7 || 7;
-      const mon = new Date(today);
-      mon.setDate(today.getDate() + daysToNextMon);
-      return localDateIso(mon);
-    })();
-    const startLabel = startMode === 'auto'     ? `${startIso} (current week Monday)`
-                     : startMode === 'today'    ? `${startIso} (today)`
-                     : startMode === 'tomorrow' ? `${startIso} (tomorrow)`
-                     : `${startIso} (custom date)`;
-    const sport    = profile.targetSport ?? planSport ?? 'cycling';
-    const avgSpeed = sport === 'cycling' ? 25 : sport === 'running' ? 10 : 15;
+    const sport       = form.sport ?? planSport ?? 'cycling';
+    const weeklyHours = computeWeeklyHours(form);
+    const avgSpeed    = sport === 'cycling' ? 25 : sport === 'running' ? 12 : 25;
+    const weeklyKm    = Math.round(weeklyHours * avgSpeed);
+    const weekdayKm   = Math.round(form.hoursWeekday * avgSpeed);
+    const weekendKm   = Math.round(form.hoursWeekend * avgSpeed);
+    const planWeeks   = form.useGoalDate && form.goalDate
+      ? Math.max(8, Math.round((new Date(form.goalDate) - new Date(startIso)) / (7 * 86400000)))
+      : (form.planWeeks ?? 16);
 
-    const systemPrompt = `You are an elite endurance coach. Generate a personalized 16-week training mesocycle as JSON.
+    const systemPrompt = `You are an elite endurance coach. Generate a personalized ${planWeeks}-week training mesocycle as JSON.
 
 ATHLETE PROFILE:
 - Sport: ${sport}
-- Goal: ${profile.primaryGoal ?? profile.goal ?? 'general fitness improvement'}
-- Goal event date: ${profile.goalDate ?? 'none'}
-- Weekly training hours available: ${profile.weeklyHours ?? 6}h
+- Goal: ${form.primaryGoal || profile.primaryGoal || 'general fitness improvement'}
+- Goal event date: ${form.useGoalDate ? (form.goalDate || 'none') : 'none'}
+- Weekly training hours: ${weeklyHours}h → weekly distance target ~${weeklyKm} km
+- Weekday session cap: ${form.hoursWeekday}h → max ~${weekdayKm} km per weekday session
+- Weekend session cap: ${form.hoursWeekend}h → max ~${weekendKm} km per weekend session
+- Training days: ${form.trainingDays.join(', ')} — place REST on all other days
+- Long session day: ${form.longSessionDay} — always schedule the "long" session on this day
+- Hard/interval session day: ${form.hardSessionDay} — always schedule the primary quality session on this day
 - FTP: ${profile.ftp ? profile.ftp + ' W' : 'unknown'}
 - LTHR: ${profile.lthr ? profile.lthr + ' bpm' : 'unknown'}
-- VO2max: ${profile.vo2max ?? 'unknown'}
 - Weight: ${profile.weightKg ? profile.weightKg + ' kg' : 'unknown'}
-- Height: ${profile.heightCm ? profile.heightCm + ' cm' : 'unknown'}
 - Age: ${profile.age ?? (profile.birthday ? (() => { const d=new Date(profile.birthday),t=new Date(); let a=t.getFullYear()-d.getFullYear(); if(t.getMonth()-d.getMonth()<0||(t.getMonth()===d.getMonth()&&t.getDate()<d.getDate()))a--; return a; })() : 'unknown')}
-- Experience level: ${profile.experienceLevel ?? 'intermediate'}
 
 CURRENT FITNESS STATE:
 - CTL (42-day chronic fitness): ${load.ctl.toFixed(1)}
@@ -535,35 +671,35 @@ ${recentSummary}
 
 OUTPUT RULES:
 - Return ONLY valid JSON, no prose outside it
-- 16 weeks total, 7 days each (Mo through Su)
+- ${planWeeks} weeks total, 7 days each (Mo through Su)
 - "type" must be one of: rest, recovery, aerobic, tempo, interval, long, test
-- "intensity": rest=0, recovery=15, aerobic=50, long=60, tempo=65, interval=85, vo2max=90
-- "targetKm": realistic distance based on ${profile.weeklyHours ?? 6}h/week at ~${avgSpeed} km/h avg
+- Non-training days (not in [${form.trainingDays.join(',')}]) must always be type "rest"
+- "intensity": rest=0, recovery=15, aerobic=50, long=60, tempo=65, interval=85
+- "targetKm" per week: ~${weeklyKm} km in base weeks, ~${Math.round(weeklyKm * 1.15)} km peak, ~${Math.round(weeklyKm * 0.6)} km recovery; 0 for rest days
+- "targetKm" per day: weekday sessions ~${weekdayKm} km max, weekend sessions ~${weekendKm} km max; the long session day should approach the weekend cap
 - "desc": 1–2 sentences with specific protocol (zones, durations, rep counts, HR targets)
 - Apply polarized 80/20 principle: 80% Z1–Z2, 20% Z4–Z5
-- Weeks 4, 8, 12: recovery weeks at 60% of surrounding volume
-- Structure: weeks 1–6 base, 7–11 build, 12–14 peak, 15–16 taper
-- Start volume conservatively based on detraining status, peak at week 11–12
-- Each week's "targetKm" = sum of all days' targetKm
+- Every 4th week: recovery week at 60% of surrounding volume
+- Structure: first 40% base, next 30% build, next 15% peak, last 15% taper
 - "focus": one concise phrase describing the week's training emphasis
 
-JSON SCHEMA:
+JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
 {
   "weeks": [
     {
       "weekNumber": 1,
       "phase": "base",
       "isRecovery": false,
-      "targetKm": 180,
+      "targetKm": ${weeklyKm},
       "focus": "Aerobic base, adapting to load",
       "days": [
-        { "dayOfWeek": "Mo", "type": "rest",     "label": "Full rest",              "desc": "...", "intensity": 0,  "targetKm": 0  },
-        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance (50 km)",   "desc": "...", "intensity": 50, "targetKm": 50 },
-        { "dayOfWeek": "We", "type": "recovery", "label": "Recovery ride (30 km)",  "desc": "...", "intensity": 15, "targetKm": 30 },
-        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot (45 km)",     "desc": "...", "intensity": 65, "targetKm": 45 },
-        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",              "desc": "...", "intensity": 0,  "targetKm": 0  },
-        { "dayOfWeek": "Sa", "type": "long",     "label": "Long ride (80 km)",      "desc": "...", "intensity": 60, "targetKm": 80 },
-        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery ride (25 km)",  "desc": "...", "intensity": 15, "targetKm": 25 }
+        { "dayOfWeek": "Mo", "type": "recovery", "label": "Easy recovery", "desc": "...", "intensity": 15, "targetKm": ${Math.round(weekdayKm * 0.6)} },
+        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance",  "desc": "...", "intensity": 50, "targetKm": ${weekdayKm} },
+        { "dayOfWeek": "We", "type": "rest",     "label": "Full rest",      "desc": "...", "intensity": 0,  "targetKm": 0  },
+        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot",     "desc": "...", "intensity": 65, "targetKm": ${weekdayKm} },
+        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",      "desc": "...", "intensity": 0,  "targetKm": 0  },
+        { "dayOfWeek": "Sa", "type": "long",     "label": "Long session",   "desc": "...", "intensity": 60, "targetKm": ${weekendKm} },
+        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery",       "desc": "...", "intensity": 15, "targetKm": ${Math.round(weekendKm * 0.4)} }
       ]
     }
   ]
@@ -576,10 +712,10 @@ JSON SCHEMA:
         body: JSON.stringify({
           model:           PLAN_LLM_MODEL,
           response_format: { type: 'json_object' },
-          ...tokenParam(PLAN_LLM_MODEL, MAX_TOKENS),
+          ...tokenParam(PLAN_LLM_MODEL, PLAN_MAX_TOKENS),
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user',   content: `Generate the 16-week ${sport} training plan. Start date: ${startLabel}. Weekly hours budget: ${profile.weeklyHours ?? 6}h/week.${profile.goalDate ? ` Peak for goal event on ${profile.goalDate}.` : ''} Week 1 day 1 must be ${startIso}.` },
+            { role: 'user',   content: `Generate the ${planWeeks}-week ${sport} training plan. Start date: ${startIso}. Week 1 day 1 must be ${startIso}. Long sessions on ${form.longSessionDay}, hard sessions on ${form.hardSessionDay}.` },
           ],
         }),
       });
@@ -591,17 +727,24 @@ JSON SCHEMA:
       const weeks  = (parsed.weeks ?? []).map((week, wi) => {
         const weekMs = startD.getTime() + wi * 7 * 86400000;
         const days   = (week.days ?? []).map((d, di) => {
-          const dayD   = new Date(weekMs + di * 86400000);
+          const dayD    = new Date(weekMs + di * 86400000);
           const dateIso = dayD.toISOString().slice(0, 10);
           const isoDow  = (dayD.getUTCDay() + 6) % 7;
+          const dow3    = DAY_LABELS[isoDow] ?? d.dayOfWeek; // e.g. "Mo"
+          // Enforce: non-training days must be rest regardless of AI output
+          const isTraining = form.trainingDays.includes(dow3);
+          const type    = isTraining ? (d.type ?? 'aerobic') : 'rest';
           return {
             ...d,
-            day:    DAY_LABELS[isoDow] ?? d.dayOfWeek,
+            type,
+            targetKm: isTraining ? (d.targetKm ?? 0) : 0,
+            label:    isTraining ? (d.label ?? type) : 'Full rest',
+            day:    dow3,
             date:   dateIso.slice(5).replace('-', '/'),
             dateIso,
             dow:    isoDow,
-            color:  TYPE_COLOR[d.type]    ?? '#6b7280',
-            intent: SESSION_INTENTS[d.type] ?? SESSION_INTENTS.aerobic,
+            color:  TYPE_COLOR[type] ?? '#6b7280',
+            intent: SESSION_INTENTS[type] ?? SESSION_INTENTS.aerobic,
           };
         });
         const targetKm = days.reduce((s, d) => s + (d.targetKm ?? 0), 0);
@@ -609,7 +752,7 @@ JSON SCHEMA:
           weekIndex:  wi,
           phase:      week.phase      ?? 'base',
           isRecovery: week.isRecovery ?? false,
-          targetKm:   week.targetKm   ?? targetKm,
+          targetKm,
           focus:      week.focus      ?? '',
           startDate:  new Date(weekMs).toISOString().slice(0, 10),
           endDate:    new Date(weekMs + 6 * 86400000).toISOString().slice(0, 10),
@@ -618,8 +761,8 @@ JSON SCHEMA:
       });
 
       const todayStr = localDateIso();
-      const currentWeekIndex = Math.max(0, weeks.findIndex(w => w.startDate <= todayStr && w.endDate >= todayStr));
-      const aiMc = { weeks, currentWeekIndex, meta: { totalWeeks: weeks.length, sport, goalDate: profile.goalDate, aiGenerated: true } };
+      const currentWeekIndex = Math.max(0, weeks.findIndex(wk => wk.startDate <= todayStr && wk.endDate >= todayStr));
+      const aiMc = { weeks, currentWeekIndex, meta: { totalWeeks: weeks.length, sport, goalDate: form.useGoalDate ? form.goalDate : null, aiGenerated: true } };
       await coach.saveAIMesocycle(aiMc, histWorkouts);
       setSelectedWeekIndex(currentWeekIndex);
       setAiPlanState({ loading: false, error: '' });
@@ -628,16 +771,39 @@ JSON SCHEMA:
     }
   };
 
-  const [confirm, setConfirm] = useState(null); // { title, body, confirmLabel, confirmColor, onConfirm }
+  // ── Plan setup modal confirm ──────────────────────────────────────────────────
 
-  // Regenerate mesocycle with current start date selection
-  const handleRegenerate = () => setConfirm({
-    title:        'Regenerate full plan?',
-    body:         'This will replace your entire mesocycle with a freshly generated plan. Any manual changes or AI plan will be lost.',
-    confirmLabel: 'Regenerate',
-    confirmColor: '#f97316',
-    onConfirm:    () => coach?.regenerateMesocycle?.(histWorkouts, effectiveStartDate, null, { targetSport: planSport }),
-  });
+  const handlePlanSetupConfirm = async (form) => {
+    const mode    = planSetupMode;
+    const startIso = computeStartIso(form.startMode, form.customDate);
+    setPlanSetupMode(null);
+
+    // Persist scheduling preferences to profile
+    await coach?.saveProfile?.({
+      primaryGoal:    form.primaryGoal,
+      goalDate:       form.useGoalDate ? form.goalDate : null,
+      planWeeks:      form.planWeeks,
+      trainingDays:   form.trainingDays,
+      hoursWeekday:   form.hoursWeekday,
+      hoursWeekend:   form.hoursWeekend,
+      longSessionDay: form.longSessionDay,
+      hardSessionDay: form.hardSessionDay,
+      weeklyHours:    computeWeeklyHours(form),
+      targetSport:    form.sport,
+    });
+
+    if (mode === 'ai') {
+      generateAIPlan(form, startIso);
+    } else {
+      setPlanSport(form.sport);
+      coach?.regenerateMesocycle?.(histWorkouts, startIso, null, { targetSport: form.sport });
+    }
+  };
+
+  const [confirm, setConfirm] = useState(null);
+
+  const handleRegenerate    = () => setPlanSetupMode('regenerate');
+  const handleGenerateAIPlan = () => setPlanSetupMode('ai');
 
   const handleUpdateFuture = () => setConfirm({
     title:        'Update future weeks?',
@@ -665,14 +831,6 @@ JSON SCHEMA:
     onConfirm:    () => coach?.resumeMesocycle?.(histWorkouts),
   });
 
-  const handleGenerateAIPlan = () => setConfirm({
-    title:        'Generate AI plan?',
-    body:         'This will call gpt-4o to create a personalised 16-week plan based on your profile, fitness state, and recent training. It may take 20–40 seconds.',
-    confirmLabel: '✦ Generate',
-    confirmColor: '#a855f7',
-    onConfirm:    generateAIPlan,
-  });
-
   // ── Render ───────────────────────────────────────────────────────────────────
   const phaseColor = displayedWeek ? (PHASE_COLORS[displayedWeek.isRecovery ? 'recovery' : displayedWeek.phase] ?? '#60a5fa') : (activeMesocycle?.meta?.aiGenerated ? '#a855f7' : '#60a5fa');
   const phaseLabel = displayedWeek ? (displayedWeek.isRecovery ? 'Recovery Week' : (PHASE_LABELS[displayedWeek.phase] ?? displayedWeek.phase)) : '';
@@ -688,6 +846,16 @@ JSON SCHEMA:
           confirmColor={confirm.confirmColor}
           onConfirm={confirm.onConfirm}
           onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {planSetupMode && (
+        <PlanSetupModal
+          mode={planSetupMode}
+          profile={coach?.profile ?? {}}
+          defaultSport={planSport}
+          onConfirm={handlePlanSetupConfirm}
+          onCancel={() => setPlanSetupMode(null)}
         />
       )}
 
@@ -749,10 +917,7 @@ JSON SCHEMA:
         </div>
         <select
           value={planSport}
-          onChange={e => {
-            setHasManualPlanControls(true);
-            setPlanSport(e.target.value);
-          }}
+          onChange={e => setPlanSport(e.target.value)}
           style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
         >
           <option value="mixed">Mixed</option>
@@ -761,45 +926,11 @@ JSON SCHEMA:
         </select>
       </div>
 
-      {/* Start date + regenerate */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>START</div>
-        {[
-          { id: 'auto',     label: 'Mon (auto)' },
-          { id: 'today',    label: 'Today' },
-          { id: 'tomorrow', label: 'Tomorrow' },
-          { id: 'custom',   label: 'Pick date' },
-        ].map(opt => (
-          <button
-            key={opt.id}
-            onClick={() => {
-              setHasManualPlanControls(true);
-              setStartMode(opt.id);
-            }}
-            style={{
-              background: startMode === opt.id ? 'rgba(232,168,50,0.12)' : 'var(--bg-overlay)',
-              border: `1px solid ${startMode === opt.id ? 'rgba(232,168,50,0.45)' : 'var(--border-subtle)'}`,
-              borderRadius: 'var(--r-sm)', padding: '4px 10px',
-              color: startMode === opt.id ? 'var(--accent)' : 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-            }}
-          >{opt.label}</button>
-        ))}
-        {startMode === 'custom' && (
-          <input
-            type="date"
-            value={customDate}
-            onChange={e => {
-              setHasManualPlanControls(true);
-              setCustomDate(e.target.value);
-            }}
-            style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-          />
-        )}
+      {/* Plan actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button
           onClick={isPaused ? handleResume : handlePause}
           style={{
-            marginLeft: 'auto',
             background: isPaused ? 'rgba(74,222,128,0.12)' : 'var(--bg-overlay)',
             border: `1px solid ${isPaused ? 'rgba(74,222,128,0.4)' : 'var(--border-subtle)'}`,
             borderRadius: 'var(--r-sm)', padding: '4px 10px',

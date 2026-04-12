@@ -202,9 +202,6 @@ function AthleteProfileCard({ profile, onChange, onSave }) {
             <option value="mixed">Mixed</option><option value="running">Running</option><option value="cycling">Cycling</option>
           </select>
         </Field>
-        <Field label="Weekly Hours"><input type="number" min="1" max="30" value={profile.weeklyHours ?? 6} onChange={e => onChange(p => ({ ...p, weeklyHours: Number(e.target.value || 0) }))} style={inputStyle} /></Field>
-        <Field label="Primary Goal"><input value={profile.primaryGoal ?? ''} onChange={e => onChange(p => ({ ...p, primaryGoal: e.target.value }))} style={inputStyle} placeholder="Half marathon, 100km ride..." /></Field>
-        <Field label="Goal Date"><input type="date" value={profile.goalDate ?? ''} onChange={e => onChange(p => ({ ...p, goalDate: e.target.value }))} style={inputStyle} /></Field>
         <Field label={`Birthday${profile.birthday ? ` · Age ${ageFromBirthday(profile.birthday)}` : ''}`}>
           <input type="date" value={profile.birthday ?? ''} onChange={e => onChange(p => ({ ...p, birthday: e.target.value || null }))} style={inputStyle} />
         </Field>

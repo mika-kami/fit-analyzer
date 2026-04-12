@@ -48,13 +48,19 @@ export const DEFAULT_MEDICAL_PROFILE = {
 };
 
 export const DEFAULT_ATHLETE_PROFILE = {
-  targetSport: 'mixed',       // running | cycling | mixed
-  primaryGoal: '',
-  goalDate: '',
-  weeklyHours: 6,
-  constraints: '',
-  injuryNotes: '',
-  medical: { ...DEFAULT_MEDICAL_PROFILE },
+  targetSport:     'mixed',       // running | cycling | mixed
+  primaryGoal:     '',
+  goalDate:        '',
+  weeklyHours:     6,
+  constraints:     '',
+  injuryNotes:     '',
+  medical:         { ...DEFAULT_MEDICAL_PROFILE },
+  trainingDays:    ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+  hoursWeekday:    1.5,
+  hoursWeekend:    3.0,
+  longSessionDay:  'Sa',
+  hardSessionDay:  'Tu',
+  planWeeks:       16,
 };
 
 export function defaultDailyCheckin(dateIso) {

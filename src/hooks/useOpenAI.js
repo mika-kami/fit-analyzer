@@ -178,7 +178,7 @@ function detectRelevantContext(userMessage) {
   const text = String(userMessage || '').toLowerCase();
   const weather = /(weather|forecast|temp|temperature|rain|wind|humidity|heat|cold|jacket|layer|clothing|gear)/i.test(text);
   const medical = /(medical|injury|pain|doctor|supplement|medication|asthma|iron|ferritin|bloodwork|ecg|illness)/i.test(text);
-  const history = /(plan|next week|weekly|week|trend|progress|plateau|regress|volume|consisten|ctl|atl|tsb|periodiz)/i.test(text);
+  const history = /(plan|next week|weekly|week|trend|progress|plateau|regress|volume|consisten|ctl|atl|tsb|periodiz|last session|previous|last ride|last run|recent session|past session|history|last \d+ |yesterday|last month|compare)/i.test(text);
   const workout = /(workout|session|ride|run|cycling|training|heart rate|hr|zone|te|training effect|recovery day|analy[sz]e)/i.test(text);
 
   const workoutDetails = {
@@ -444,13 +444,14 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
     try {
       const contextFlags = detectRelevantContext(trimmed);
       const includeWorkout = contextFlags.workout || (!contextFlags.any && !!contextWorkout);
-      const includeHistory = contextFlags.history;
       const includeWeather = contextFlags.weather;
       const includeWorkoutDetails = includeWorkout && contextFlags.anyWorkoutDetail;
       const includeMedicalFocus = contextFlags.medical;
 
       const weatherData = includeWeather ? await getWeather(contextWorkout) : null;
-      const recent = recentWorkoutsFn ? recentWorkoutsFn(10) : [];
+      const recent = recentWorkoutsFn ? recentWorkoutsFn(15) : [];
+      // Always include history so the coach can reference any past session by date
+      const includeHistory = recent.length > 0;
       const historyDigest = includeHistory ? buildHistoryDigest(recent) : '';
 
       const planDigest = weekDays?.length ? buildPlanDigest(weekDays) : '';

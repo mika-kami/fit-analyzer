@@ -70,17 +70,23 @@ function mapProfileFromDb(row) {
   if (!row) return null;
   const birthday = row.birthday ?? null;
   return {
-    targetSport: row.target_sport,
-    primaryGoal: row.primary_goal,
-    goalDate:    row.goal_date,
-    weeklyHours: Number(row.weekly_hours ?? 6),
-    constraints: row.constraints,
-    injuryNotes: row.injury_notes,
-    medical:     row.medical_profile ?? {},
+    targetSport:     row.target_sport,
+    primaryGoal:     row.primary_goal,
+    goalDate:        row.goal_date,
+    weeklyHours:     Number(row.weekly_hours ?? 6),
+    constraints:     row.constraints,
+    injuryNotes:     row.injury_notes,
+    medical:         row.medical_profile ?? {},
     birthday,
-    age:         ageFromBirthday(birthday),
-    weightKg:    row.weight_kg != null ? Number(row.weight_kg) : null,
-    heightCm:    row.height_cm != null ? Number(row.height_cm) : null,
+    age:             ageFromBirthday(birthday),
+    weightKg:        row.weight_kg != null ? Number(row.weight_kg) : null,
+    heightCm:        row.height_cm != null ? Number(row.height_cm) : null,
+    trainingDays:    row.training_days   ?? [],
+    hoursWeekday:    row.hours_weekday   != null ? Number(row.hours_weekday)  : 1.5,
+    hoursWeekend:    row.hours_weekend   != null ? Number(row.hours_weekend)  : 3.0,
+    longSessionDay:  row.long_session_day  ?? null,
+    hardSessionDay:  row.hard_session_day ?? null,
+    planWeeks:       row.plan_weeks != null ? Number(row.plan_weeks) : 16,
   };
 }
 
@@ -181,14 +187,15 @@ function mergeWeeksByPivot(oldWeeks = [], newWeeks = [], pivotDate) {
       if (d?.dateIso) oldByDate.set(d.dateIso, d);
     }
   }
-  return (newWeeks || []).map((wk) => ({
-    ...wk,
-    days: (wk.days || []).map((d) => {
+  return (newWeeks || []).map((wk) => {
+    const days = (wk.days || []).map((d) => {
       if (!d?.dateIso) return d;
       if (d.dateIso < pivotDate && oldByDate.has(d.dateIso)) return oldByDate.get(d.dateIso);
       return d;
-    }),
-  }));
+    });
+    const targetKm = days.reduce((s, d) => s + (d?.targetKm ?? 0), 0);
+    return { ...wk, days, targetKm };
+  });
 }
 
 export function useCoachState(userId) {
@@ -331,17 +338,23 @@ export function useCoachState(userId) {
       return;
     }
     const payload = {
-      user_id:         userId,
-      target_sport:    next.profile.targetSport ?? 'mixed',
-      primary_goal:    next.profile.primaryGoal ?? '',
-      goal_date:       next.profile.goalDate || null,
-      weekly_hours:    next.profile.weeklyHours ?? 6,
-      constraints:     next.profile.constraints ?? '',
-      injury_notes:    next.profile.injuryNotes ?? '',
-      medical_profile: next.profile.medical ?? {},
-      birthday:        next.profile.birthday || null,
-      weight_kg:       next.profile.weightKg != null ? Number(next.profile.weightKg) : null,
-      height_cm:       next.profile.heightCm != null ? Number(next.profile.heightCm) : null,
+      user_id:          userId,
+      target_sport:     next.profile.targetSport ?? 'mixed',
+      primary_goal:     next.profile.primaryGoal ?? '',
+      goal_date:        next.profile.goalDate || null,
+      weekly_hours:     next.profile.weeklyHours ?? 6,
+      constraints:      next.profile.constraints ?? '',
+      injury_notes:     next.profile.injuryNotes ?? '',
+      medical_profile:  next.profile.medical ?? {},
+      birthday:         next.profile.birthday || null,
+      weight_kg:        next.profile.weightKg != null ? Number(next.profile.weightKg) : null,
+      height_cm:        next.profile.heightCm != null ? Number(next.profile.heightCm) : null,
+      training_days:    next.profile.trainingDays   ?? [],
+      hours_weekday:    next.profile.hoursWeekday   ?? 1.5,
+      hours_weekend:    next.profile.hoursWeekend   ?? 3.0,
+      long_session_day: next.profile.longSessionDay ?? null,
+      hard_session_day: next.profile.hardSessionDay ?? null,
+      plan_weeks:       next.profile.planWeeks       ?? 16,
     };
     await supabase.from('athlete_profiles').upsert(payload, { onConflict: 'user_id' });
     await rebuildAthleteDigest(next.profile);

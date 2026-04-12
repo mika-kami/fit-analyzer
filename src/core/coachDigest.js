@@ -116,7 +116,7 @@ export function buildWorkoutSnapshot(workout) {
 }
 
 export function buildHistoryDigest(recentWorkouts = []) {
-  const list = Array.isArray(recentWorkouts) ? recentWorkouts.filter(Boolean).slice(0, 10) : [];
+  const list = Array.isArray(recentWorkouts) ? recentWorkouts.filter(Boolean).slice(0, 15) : [];
   if (!list.length) return 'Recent training: no sessions in history.';
 
   const sportCounts = new Map();
@@ -148,7 +148,29 @@ export function buildHistoryDigest(recentWorkouts = []) {
   const spanDays = Math.max(seenDates.size, 7);
   const weeklyVolume = spanDays > 0 ? (volumeKm * (7 / spanDays)) : volumeKm;
 
-  return `Last ${list.length} sessions: ${distribution}. Avg TE ${avgTe}/5. Hard sessions ${hardSessions}. CTL ${load.ctl.toFixed(1)}, ATL ${load.atl.toFixed(1)}, TSB ${load.tsb.toFixed(1)}. Weekly volume ~${weeklyVolume.toFixed(1)} km.`;
+  const summary = `Aggregate (last ${list.length} sessions): ${distribution}. Avg TE ${avgTe}/5. Hard sessions ${hardSessions}. CTL ${load.ctl.toFixed(1)}, ATL ${load.atl.toFixed(1)}, TSB ${load.tsb.toFixed(1)}. Weekly volume ~${weeklyVolume.toFixed(1)} km.`;
+
+  // Per-session list — most recent first, up to 15 entries
+  const sessionLines = list.map((w) => {
+    const date   = clean(w?.date) || '?';
+    const sport  = normalizeSportName(w);
+    const dist   = fmtDistanceKm(w?.distance);
+    const dur    = fmtDuration(w?.duration?.active ?? w?.duration?.elapsed);
+    const hr     = Number.isFinite(w?.heartRate?.avg) ? `HR ${Math.round(w.heartRate.avg)}` : null;
+    const te     = Number.isFinite(w?.trainingEffect?.aerobic) ? `TE ${w.trainingEffect.aerobic.toFixed(1)}` : null;
+    const load   = w?.load?.label ? `load ${w.load.label.toLowerCase()}` : null;
+    const compliance = w?.complianceResult?.score != null
+      ? `plan ${w.complianceResult.score}%` : null;
+    // Saved AI verdict for this session (stored in coachAnalysis by OverviewTab)
+    const verdict = w?.coachAnalysis?.verdict?.line1
+      ? `· "${w.coachAnalysis.verdict.line1}"` : '';
+
+    const fields = [date, sport, dist ? `${dist} km` : null, dur ? `${dur} active` : null, hr, te, load, compliance]
+      .filter(Boolean).join(' | ');
+    return `  ${fields} ${verdict}`.trimEnd();
+  });
+
+  return `${summary}\n\nPAST SESSIONS (newest first):\n${sessionLines.join('\n')}`;
 }
 
 /**
