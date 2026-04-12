@@ -574,16 +574,22 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
   const cfg        = sportConfig(sportObj);
   const speed      = _sportSpeed(cfg.sport);
-  const floor      = cfg.weekFloors['active'] ?? cfg.defaultWeek;
+  // Use the detraining-phase-appropriate floor, not always 'active'
+  const floor      = cfg.weekFloors[detraining.phase] ?? cfg.weekFloors['active'] ?? cfg.defaultWeek;
 
-  // Derive base volume from training schedule when no history exists
+  // Max capacity from training schedule
   const scheduleKm = trainingDays.reduce((sum, d) => {
     return sum + (WEEKEND_DAYS.has(d) ? hoursWeekend : hoursWeekday) * speed;
   }, 0);
-  const effectiveRefKm = refKm > 0 ? refKm : scheduleKm;
 
+  // When no recent history, start at detraining-adjusted fraction of schedule capacity,
+  // NOT the full capacity (athlete isn't fit enough to do all available hours yet).
+  const effectiveRefKm = refKm > 0 ? refKm : scheduleKm * 0.5;
+
+  // baseKm = current fitness level; peakKm = goal for the final build weeks,
+  // capped so plan never exceeds the athlete's actual schedule capacity.
   const baseKm = Math.max(effectiveRefKm * detraining.factor, floor);
-  const peakKm = Math.round(baseKm * 1.25);
+  const peakKm = Math.min(Math.round(baseKm * 1.25), scheduleKm);
 
   // Start mesocycle from the given date, or snap to NEXT Monday by default
   let msStartIso;

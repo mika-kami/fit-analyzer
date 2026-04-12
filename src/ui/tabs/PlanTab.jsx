@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
+import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, refWeeklyKm, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 
@@ -229,6 +229,19 @@ function DayCard({ day, weather, index, revealed, compliance }) {
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
                 {day.aiWhy && <div>{day.aiWhy}</div>}
                 {day.desc && <div style={{ marginTop: day.aiWhy ? 3 : 0 }}>{day.desc}</div>}
+              </div>
+            )}
+            {day.aiFueling?.length > 0 && (
+              <div style={{ marginTop: 5 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Fueling</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {day.aiFueling.map((item, i) => (
+                    <div key={i} style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ color: 'var(--text-dim)', flexShrink: 0 }}>·</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {weather && (
@@ -636,12 +649,28 @@ export function PlanTab({ workout: w, history, coach }) {
     const sport       = form.sport ?? planSport ?? 'cycling';
     const weeklyHours = computeWeeklyHours(form);
     const avgSpeed    = sport === 'cycling' ? 25 : sport === 'running' ? 12 : 25;
-    const weeklyKm    = Math.round(weeklyHours * avgSpeed);
+    const scheduleKm  = Math.round(weeklyHours * avgSpeed);   // max capacity
     const weekdayKm   = Math.round(form.hoursWeekday * avgSpeed);
     const weekendKm   = Math.round(form.hoursWeekend * avgSpeed);
+    // Start volume: history-based with detraining factor, capped at schedule capacity
+    const histRefKm   = refWeeklyKm(histWorkouts);
+    const startKm     = histRefKm > 0
+      ? Math.min(Math.round(histRefKm * dt.factor), scheduleKm)
+      : Math.round(scheduleKm * dt.factor);
+    const weeklyKm    = Math.max(startKm, Math.round(scheduleKm * 0.20)); // floor at 20% of capacity
     const planWeeks   = form.useGoalDate && form.goalDate
       ? Math.max(8, Math.round((new Date(form.goalDate) - new Date(startIso)) / (7 * 86400000)))
       : (form.planWeeks ?? 16);
+
+    // Per-session km targets for week 1 (base week). AI should scale proportionally for later weeks.
+    const sesKm = {
+      wd_recovery: Math.round(weekdayKm * 0.50),
+      wd_aerobic:  Math.round(weekdayKm * 0.90),
+      wd_tempo:    Math.round(weekdayKm * 0.80),
+      wd_interval: Math.round(weekdayKm * 0.70),
+      we_recovery: Math.round(weekendKm  * 0.45),
+      we_long:     weekendKm,
+    };
 
     const systemPrompt = `You are an elite endurance coach. Generate a personalized ${planWeeks}-week training mesocycle as JSON.
 
@@ -649,12 +678,11 @@ ATHLETE PROFILE:
 - Sport: ${sport}
 - Goal: ${form.primaryGoal || profile.primaryGoal || 'general fitness improvement'}
 - Goal event date: ${form.useGoalDate ? (form.goalDate || 'none') : 'none'}
-- Weekly training hours: ${weeklyHours}h → weekly distance target ~${weeklyKm} km
-- Weekday session cap: ${form.hoursWeekday}h → max ~${weekdayKm} km per weekday session
-- Weekend session cap: ${form.hoursWeekend}h → max ~${weekendKm} km per weekend session
-- Training days: ${form.trainingDays.join(', ')} — place REST on all other days
-- Long session day: ${form.longSessionDay} — always schedule the "long" session on this day
-- Hard/interval session day: ${form.hardSessionDay} — always schedule the primary quality session on this day
+- Available training hours: ${weeklyHours}h/week (hard cap: weekday ${form.hoursWeekday}h, weekend ${form.hoursWeekend}h per session)
+- CURRENT fitness level: ~${weeklyKm} km/week (detraining-adjusted; ramp 5–10%/week toward ${scheduleKm} km/week capacity)
+- Training days: ${form.trainingDays.join(', ')} — all other days must be type "rest" with targetKm 0
+- Long session day: ${form.longSessionDay}
+- Hard/interval day: ${form.hardSessionDay}
 - FTP: ${profile.ftp ? profile.ftp + ' W' : 'unknown'}
 - LTHR: ${profile.lthr ? profile.lthr + ' bpm' : 'unknown'}
 - Weight: ${profile.weightKg ? profile.weightKg + ' kg' : 'unknown'}
@@ -669,21 +697,28 @@ CURRENT FITNESS STATE:
 RECENT TRAINING LOG (last 24 sessions):
 ${recentSummary}
 
+SESSION KM TARGETS — week 1 base values (scale up each week; recovery weeks = 60%):
+- Weekday recovery:  ${sesKm.wd_recovery} km
+- Weekday aerobic:   ${sesKm.wd_aerobic} km
+- Weekday tempo:     ${sesKm.wd_tempo} km
+- Weekday interval:  ${sesKm.wd_interval} km
+- Weekend recovery:  ${sesKm.we_recovery} km
+- Long ride/run:     ${sesKm.we_long} km  ← HARD CAP, never exceed
+
 OUTPUT RULES:
 - Return ONLY valid JSON, no prose outside it
 - ${planWeeks} weeks total, 7 days each (Mo through Su)
-- "type" must be one of: rest, recovery, aerobic, tempo, interval, long, test
-- Non-training days (not in [${form.trainingDays.join(',')}]) must always be type "rest"
+- "type": rest | recovery | aerobic | tempo | interval | long | test
 - "intensity": rest=0, recovery=15, aerobic=50, long=60, tempo=65, interval=85
-- "targetKm" per week: ~${weeklyKm} km in base weeks, ~${Math.round(weeklyKm * 1.15)} km peak, ~${Math.round(weeklyKm * 0.6)} km recovery; 0 for rest days
-- "targetKm" per day: weekday sessions ~${weekdayKm} km max, weekend sessions ~${weekendKm} km max; the long session day should approach the weekend cap
-- "desc": 1–2 sentences with specific protocol (zones, durations, rep counts, HR targets)
-- Apply polarized 80/20 principle: 80% Z1–Z2, 20% Z4–Z5
-- Every 4th week: recovery week at 60% of surrounding volume
+- "targetKm": MUST equal the km stated in "desc". Never exceed session caps above. Rest days = 0.
+- "label": short name WITHOUT km (e.g. "Z2 Endurance", "Sweet spot", "Long ride") — km shown separately
+- "desc": 1–2 sentences: state the exact km, then protocol (zones, HR targets, rep counts)
+- "targetKm" per week = sum of all day targetKm values
+- Every 4th week: recovery week at 60% volume
 - Structure: first 40% base, next 30% build, next 15% peak, last 15% taper
-- "focus": one concise phrase describing the week's training emphasis
+- Polarized 80/20: 80% Z1–Z2, 20% Z4–Z5
 
-JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
+JSON SCHEMA:
 {
   "weeks": [
     {
@@ -693,13 +728,13 @@ JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
       "targetKm": ${weeklyKm},
       "focus": "Aerobic base, adapting to load",
       "days": [
-        { "dayOfWeek": "Mo", "type": "recovery", "label": "Easy recovery", "desc": "...", "intensity": 15, "targetKm": ${Math.round(weekdayKm * 0.6)} },
-        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance",  "desc": "...", "intensity": 50, "targetKm": ${weekdayKm} },
-        { "dayOfWeek": "We", "type": "rest",     "label": "Full rest",      "desc": "...", "intensity": 0,  "targetKm": 0  },
-        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot",     "desc": "...", "intensity": 65, "targetKm": ${weekdayKm} },
-        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",      "desc": "...", "intensity": 0,  "targetKm": 0  },
-        { "dayOfWeek": "Sa", "type": "long",     "label": "Long session",   "desc": "...", "intensity": 60, "targetKm": ${weekendKm} },
-        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery",       "desc": "...", "intensity": 15, "targetKm": ${Math.round(weekendKm * 0.4)} }
+        { "dayOfWeek": "Mo", "type": "recovery", "label": "Easy recovery", "desc": "${sesKm.wd_recovery} km easy Z1 spin, HR <65% max.", "intensity": 15, "targetKm": ${sesKm.wd_recovery} },
+        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance",  "desc": "${sesKm.wd_aerobic} km at Z2, conversational pace.", "intensity": 50, "targetKm": ${sesKm.wd_aerobic} },
+        { "dayOfWeek": "We", "type": "rest",     "label": "Full rest",      "desc": "Rest.", "intensity": 0, "targetKm": 0 },
+        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot",     "desc": "${sesKm.wd_tempo} km: warm-up → SST block → cool-down.", "intensity": 65, "targetKm": ${sesKm.wd_tempo} },
+        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",      "desc": "Rest.", "intensity": 0, "targetKm": 0 },
+        { "dayOfWeek": "Sa", "type": "long",     "label": "Long ride",      "desc": "${sesKm.we_long} km steady Z2, fuel every 45 min.", "intensity": 60, "targetKm": ${sesKm.we_long} },
+        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery spin",  "desc": "${sesKm.we_recovery} km Z1 active recovery.", "intensity": 15, "targetKm": ${sesKm.we_recovery} }
       ]
     }
   ]
@@ -732,15 +767,23 @@ JSON SCHEMA (use YOUR athlete's computed distances, not these example values):
           const isoDow  = (dayD.getUTCDay() + 6) % 7;
           const dow3    = DAY_LABELS[isoDow] ?? d.dayOfWeek; // e.g. "Mo"
           // Enforce schedule: non-training days → rest; training days never rest
-          const isTraining = form.trainingDays.includes(dow3);
+          const isTraining   = form.trainingDays.includes(dow3);
+          const isWeekend    = ['Sa', 'Su'].includes(dow3);
+          const sessionCapKm = isWeekend ? weekendKm : weekdayKm;
           const aiType  = d.type ?? 'aerobic';
           const type    = !isTraining ? 'rest' : (aiType === 'rest' ? 'recovery' : aiType);
-          const targetKm = !isTraining ? 0 : (aiType === 'rest' ? Math.round((['Sa','Su'].includes(dow3) ? form.hoursWeekend : form.hoursWeekday) * 12) : (d.targetKm ?? 0));
+          const rawKm   = !isTraining ? 0
+            : aiType === 'rest'
+              ? Math.round(sessionCapKm * 0.5)
+              : Math.min(d.targetKm ?? 0, sessionCapKm);
+          const targetKm = rawKm;
+          // Strip any "(X km)" the AI may have embedded in the label — the UI shows targetKm separately
+          const cleanLabel = (d.label ?? type).replace(/\s*\(\d+(?:\.\d+)?\s*km\)/gi, '').trim();
           return {
             ...d,
             type,
             targetKm,
-            label:    !isTraining ? 'Full rest' : (aiType === 'rest' ? 'Easy recovery' : (d.label ?? type)),
+            label:    !isTraining ? 'Full rest' : (aiType === 'rest' ? 'Easy recovery' : cleanLabel),
             day:    dow3,
             date:   dateIso.slice(5).replace('-', '/'),
             dateIso,
