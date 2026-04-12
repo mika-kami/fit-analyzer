@@ -11,7 +11,7 @@ import { fmtKm, fmtDuration, fmtDurationShort, fmtNum } from '../../core/format.
 import { downloadGPX } from '../../core/gpxExport.js';
 import { computeAerobicEfficiency, computeVAM, detectClimbs } from '../../core/workoutAnalyzer.js';
 import { buildCoachTake, buildAutoVerdict } from '../../core/coachVerdicts.js';
-import { requestAutoVerdict } from '../../hooks/useOpenAI.js';
+import { requestAutoVerdict, requestDeepAnalysis } from '../../hooks/useOpenAI.js';
 import { findRouteMatches, compareRoutePerformance } from '../../core/routeMatcher.js';
 import { ActivityGearCard } from '../ActivityGearCard.jsx';
 
@@ -83,26 +83,60 @@ export function RecCard({ rec }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB: Overview
 // ═══════════════════════════════════════════════════════════════════════════════
-export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, deepAnalysisLoading, history, gear = [], onSaveGearAssignment }) {
+export function OverviewTab({ workout: w, history, gear = [], onSaveGearAssignment, onSaveCoachAnalysis }) {
   const [zonesReady, setZonesReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setZonesReady(true), 200); return () => clearTimeout(t); }, []);
   const coachTake = buildCoachTake(w);
 
-  // Auto-verdict: deterministic first, then AI if warranted
+  // Auto-verdict: use cached DB value first, then fetch if warranted
   const complianceResult = w?.complianceResult ?? null;
   const deterministicVerdict = buildAutoVerdict(w, complianceResult);
-  const [aiVerdict, setAiVerdict] = useState(w?.autoVerdict ?? null);
+  const [aiVerdict, setAiVerdict] = useState(w?.coachAnalysis?.verdict ?? w?.autoVerdict ?? null);
   useEffect(() => {
+    const saved = w?.coachAnalysis?.verdict;
+    if (saved) { setAiVerdict(saved); return; }
     if (!w) return;
-    // Use cached if available
     if (w.autoVerdict) { setAiVerdict(w.autoVerdict); return; }
     const te = w.trainingEffect?.aerobic ?? 0;
     const loadLevel = w.load?.level;
-    const shouldDeepAnalyze = te >= 4.0 || complianceResult?.verdict === 'off_target' || loadLevel === 'high';
-    if (!shouldDeepAnalyze) return;
-    requestAutoVerdict(w, complianceResult).then(v => { if (v) setAiVerdict(v); }).catch(() => {});
-  }, [w?.date]);
+    if (!(te >= 4.0 || complianceResult?.verdict === 'off_target' || loadLevel === 'high')) return;
+    requestAutoVerdict(w, complianceResult).then(v => {
+      if (!v) return;
+      setAiVerdict(v);
+      onSaveCoachAnalysis?.(w.id, { verdict: v, verdict_at: new Date().toISOString() });
+    }).catch(() => {});
+  }, [w?.date]); // eslint-disable-line react-hooks/exhaustive-deps
   const verdict = aiVerdict ?? deterministicVerdict;
+
+  // Deep analysis — load from DB on workout change, fetch only on button click
+  const savedDeep = w?.coachAnalysis?.analysis
+    ? { analysis: w.coachAnalysis.analysis, conclusions: w.coachAnalysis.conclusions ?? [] }
+    : null;
+  const [deepAnalysis, setDeepAnalysis] = useState(savedDeep);
+  const [deepLoading, setDeepLoading] = useState(false);
+  useEffect(() => {
+    setDeepAnalysis(
+      w?.coachAnalysis?.analysis
+        ? { analysis: w.coachAnalysis.analysis, conclusions: w.coachAnalysis.conclusions ?? [] }
+        : null
+    );
+  }, [w?.date]); // eslint-disable-line react-hooks/exhaustive-deps
+  function handleDeepAnalysis() {
+    if (deepLoading) return;
+    setDeepLoading(true);
+    requestDeepAnalysis(w, complianceResult)
+      .then(r => {
+        if (!r) return;
+        setDeepAnalysis(r);
+        onSaveCoachAnalysis?.(w.id, {
+          analysis:    r.analysis,
+          conclusions: r.conclusions,
+          analyzed_at: new Date().toISOString(),
+        });
+      })
+      .catch(() => {})
+      .finally(() => setDeepLoading(false));
+  }
 
   // Route comparison
   const historyWorkouts = history?.history ?? [];
@@ -200,23 +234,23 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
         <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
           <ReactMarkdown components={mdComponents}>{coachTake.next}</ReactMarkdown>
         </div>
+        {deepAnalysis?.analysis && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.65, borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+            {deepAnalysis.analysis}
+          </div>
+        )}
         <div style={{ marginTop: 10 }}>
-          <button onClick={onDeepAnalysis} style={{
+          <button onClick={handleDeepAnalysis} disabled={deepLoading || !!deepAnalysis} style={{
             background: 'var(--bg-raised)',
             border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--r-sm)',
             padding: '6px 10px',
-            color: 'var(--text-secondary)',
+            color: (deepLoading || deepAnalysis) ? 'var(--text-muted)' : 'var(--text-secondary)',
             fontSize: 11,
-            cursor: 'pointer',
-          }}>Deep Analysis</button>
+            cursor: (deepLoading || deepAnalysis) ? 'default' : 'pointer',
+            opacity: deepAnalysis ? 0.45 : 1,
+          }}>{deepLoading ? 'Analyzing…' : deepAnalysis ? 'Analysis saved' : 'Deep Analysis'}</button>
         </div>
-        {deepAnalysisLoading && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>Analyzing...</div>}
-        {deepAnalysisResult && (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.55 }}>
-            <ReactMarkdown components={mdComponents}>{deepAnalysisResult}</ReactMarkdown>
-          </div>
-        )}
       </Card>
 
       {/* Recommendations */}
@@ -225,6 +259,9 @@ export function OverviewTab({ workout: w, onDeepAnalysis, deepAnalysisResult, de
           Recommendations
         </div>
         {w.recommendations.map((r, i) => <RecCard key={i} rec={r} />)}
+        {deepAnalysis?.conclusions?.length > 0 && deepAnalysis.conclusions.map((c, i) => (
+          <RecCard key={`ai-${i}`} rec={{ type: 'info', icon: '🧠', title: 'AI Coach', text: c }} />
+        ))}
       </div>
 
       <ActivityGearCard

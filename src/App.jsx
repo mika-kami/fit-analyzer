@@ -367,9 +367,7 @@ export default function App() {
                 history={workouts}
                 gear={gear}
                 onSaveGearAssignment={handleSaveGearAssignment}
-                onDeepAnalysis={() => runCoachAction('deep_analysis')}
-                deepAnalysisLoading={coachActions.loadingAction === 'deep_analysis'}
-                deepAnalysisResult={coachActions.results?.deep_analysis || ''}
+                onSaveCoachAnalysis={workouts.saveCoachAnalysis}
               />
             )}
             {activeTab === 'charts'   && <ChartsTab   workout={workout.workout} />}

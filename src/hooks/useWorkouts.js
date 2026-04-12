@@ -90,6 +90,7 @@ function fromRow(row) {
     gearNames:       row.summary_json?.gearNames ?? [],
     source:           row.source ?? 'upload',
     fit_path:         row.fit_path ?? null,
+    coachAnalysis:    row.coach_analysis ?? null,
   };
 
   // Fix TE for Strava workouts: edge function may have saved wrong value (0 or 5).
@@ -536,6 +537,24 @@ export function useWorkouts(user, mesocycle = null, gear = []) {
     return saved;
   }, [user, history]);
 
+  // Persist AI coach analysis (verdict and/or deep analysis) for a workout.
+  // Merges with any existing coach_analysis so verdict and deep analysis can be
+  // saved independently without overwriting each other.
+  const saveCoachAnalysis = useCallback(async (workoutId, data) => {
+    if (!user || !workoutId) return;
+    const existing = history.find(w => w.id === workoutId);
+    const merged = { ...(existing?.coachAnalysis ?? {}), ...data };
+
+    const { error: dbErr } = await supabase
+      .from('workouts')
+      .update({ coach_analysis: merged })
+      .eq('id', workoutId)
+      .eq('user_id', user.id);
+
+    if (dbErr) { console.error('[useWorkouts] saveCoachAnalysis failed', dbErr); return; }
+    setHistory(prev => prev.map(w => w.id === workoutId ? { ...w, coachAnalysis: merged } : w));
+  }, [user, history]);
+
   return {
     // Same API as useHistory:
     history, loadingDb, storageOk: !!user,
@@ -543,6 +562,6 @@ export function useWorkouts(user, mesocycle = null, gear = []) {
     // New:
     uploadFit, reload, error, getChatHistory, saveChatMessage, saveGarminActivities,
     updateWorkoutGear, backfillGearToHistory,
-    historicalMaxHr,
+    historicalMaxHr, saveCoachAnalysis,
   };
 }

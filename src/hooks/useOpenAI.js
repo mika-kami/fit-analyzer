@@ -6,7 +6,13 @@ import { buildHistoryDigest, buildWorkoutSnapshot, buildPlanDigest } from '../co
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 const MODEL = import.meta.env.VITE_LLM_MODEL ?? 'gpt-4o-mini';
+const COACH_LLM_MODEL = import.meta.env.VITE_COACH_LLM_MODEL ?? 'gpt-4o';
 const MAX_TOKENS = parseInt(import.meta.env.VITE_LLM_MAX_TOKENS ?? '900', 10);
+
+// GPT-4.x uses max_tokens; GPT-5+ / o-series uses max_completion_tokens
+function tokenParam(model, n) {
+  return model.startsWith('gpt-4') ? { max_tokens: n } : { max_completion_tokens: n };
+}
 const API_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const OW_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
 
@@ -290,6 +296,70 @@ export async function requestAutoVerdict(workout, complianceResult) {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
     return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+// ── Deep session analysis (on-demand, COACH_LLM_MODEL) ──────────────────────
+
+export async function requestDeepAnalysis(workout, complianceResult) {
+  if (!API_KEY || !workout) return null;
+
+  const z1 = Number(workout?.hrZones?.[0]?.pct ?? 0);
+  const z2 = Number(workout?.hrZones?.[1]?.pct ?? 0);
+  const z3 = Number(workout?.hrZones?.[2]?.pct ?? 0);
+  const z4 = Number(workout?.hrZones?.[3]?.pct ?? 0);
+  const z5 = Number(workout?.hrZones?.[4]?.pct ?? 0);
+  const durationMin = Math.round((workout.duration?.active ?? 0) / 60);
+  const distKm = ((workout.distance ?? 0) / 1000).toFixed(1);
+  const sport = workout.sportLabel ?? workout.sport ?? 'workout';
+  const te = workout.trainingEffect?.aerobic?.toFixed(1) ?? '0';
+  const teAn = workout.trainingEffect?.anaerobic?.toFixed(1) ?? '0';
+  const hr = workout.heartRate ?? {};
+  const spd = workout.speed ?? {};
+  const ascent = workout.elevation?.ascent ?? 0;
+  const power = workout.power?.avg ? `avg power ${workout.power.avg} W` : '';
+  const compStr = complianceResult
+    ? `Plan compliance: ${complianceResult.score}% (${complianceResult.verdict.replace('_', ' ')})`
+    : 'No planned session';
+
+  const prompt = `You are an elite endurance coach. Analyze this workout in depth and return a JSON object.
+
+WORKOUT DATA:
+- Sport: ${sport}
+- Date: ${workout.date ?? 'unknown'}
+- Distance: ${distKm} km
+- Duration: ${durationMin} min
+- Avg HR: ${hr.avg ?? '—'} bpm, Max HR: ${hr.max ?? '—'} bpm
+- Avg speed: ${spd.avg?.toFixed(1) ?? '—'} km/h
+- Ascent: ${ascent} m
+${power ? `- ${power}` : ''}
+- Aerobic TE: ${te}/5, Anaerobic TE: ${teAn}/5
+- HR zones: Z1 ${z1.toFixed(0)}%, Z2 ${z2.toFixed(0)}%, Z3 ${z3.toFixed(0)}%, Z4 ${z4.toFixed(0)}%, Z5 ${z5.toFixed(0)}%
+- ${compStr}
+
+Return ONLY valid JSON (no prose outside):
+{
+  "analysis": "4–6 sentences of expert coaching analysis: intensity distribution, metabolic stimulus, execution quality, aerobic vs anaerobic balance, what was done well and what to improve",
+  "conclusions": ["actionable coaching conclusion 1", "conclusion 2", "conclusion 3"]
+}`;
+
+  try {
+    const res = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        model: COACH_LLM_MODEL,
+        response_format: { type: 'json_object' },
+        ...tokenParam(COACH_LLM_MODEL, MAX_TOKENS),
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim() ?? '';
+    return JSON.parse(text);
   } catch {
     return null;
   }

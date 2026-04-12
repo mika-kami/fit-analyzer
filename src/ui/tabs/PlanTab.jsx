@@ -11,9 +11,15 @@ import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 
 const OPENAI_KEY     = import.meta.env.VITE_OPENAI_API_KEY ?? '';
-const AI_PLAN_MODEL  = 'gpt-4o';
+const PLAN_LLM_MODEL  = import.meta.env.VITE_PLAN_LLM_MODEL ?? 'gpt-4o';
+const PLAN_MAX_TOKENS = parseInt(import.meta.env.VITE_PLAN_MAX_TOKENS ?? '16000', 10) || 16000;
 
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
+
+// GPT-4.x uses max_tokens; GPT-5+ / o-series uses max_completion_tokens
+function tokenParam(model, n) {
+  return model.startsWith('gpt-4') ? { max_tokens: n } : { max_completion_tokens: n };
+}
 
 function windDirection(deg) {
   if (deg == null || Number.isNaN(deg)) return '—';
@@ -568,9 +574,9 @@ JSON SCHEMA:
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
         body: JSON.stringify({
-          model:           AI_PLAN_MODEL,
+          model:           PLAN_LLM_MODEL,
           response_format: { type: 'json_object' },
-          max_tokens:      16000,
+          ...tokenParam(PLAN_LLM_MODEL, MAX_TOKENS),
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user',   content: `Generate the 16-week ${sport} training plan. Start date: ${startLabel}. Weekly hours budget: ${profile.weeklyHours ?? 6}h/week.${profile.goalDate ? ` Peak for goal event on ${profile.goalDate}.` : ''} Week 1 day 1 must be ${startIso}.` },

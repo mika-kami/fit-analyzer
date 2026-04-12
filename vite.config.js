@@ -20,11 +20,13 @@ function loadEnvFile(filePath) {
 
 export default defineConfig(({ mode }) => {
   const llmVars = loadEnvFile(resolve(__dirname, '.env_llm'));
+  // Process env (Vercel injects VITE_* here at build time)
+  const processEnv = process.env;
 
-  // Inject VITE_* vars from .env_llm as define replacements
+  // Inject VITE_* vars from .env_llm, but let process.env (Vercel dashboard vars) override
   const define = {};
   for (const [key, value] of Object.entries(llmVars)) {
-    if (key.startsWith('VITE_')) {
+    if (key.startsWith('VITE_') && !(key in processEnv)) {
       define[`import.meta.env.${key}`] = JSON.stringify(value);
     }
   }
