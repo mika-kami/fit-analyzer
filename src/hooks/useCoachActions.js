@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { buildActionPrompt } from '../core/coachPrompts.js';
+import { buildActionPrompt } from '../llm/prompts/index.js';
 import { getWeather, formatWeatherForSystem } from './useOpenAI.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';

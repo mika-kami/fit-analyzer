@@ -9,6 +9,7 @@ import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, refWeeklyKm, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
+import { buildAIMesocycleSystemPrompt } from '../../llm/prompts/index.js';
 
 const OPENAI_KEY      = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const PLAN_LLM_MODEL  = import.meta.env.VITE_PLAN_LLM_MODEL ?? 'gpt-4o';
@@ -70,6 +71,9 @@ export function PlanContextBanner({ meta, mesocycleMeta }) {
   const dt    = meta.detraining;
   const load  = meta.load;
   const phase = meta.phase;
+  const basePct = meta.baseKm > 0
+    ? Math.round((meta.targetWeekKm / meta.baseKm) * 100)
+    : 0;
 
   const phaseColor = {
     full_restart: '#ef4444', base_rebuild: '#f97316', significant: '#fbbf24',
@@ -99,7 +103,7 @@ export function PlanContextBanner({ meta, mesocycleMeta }) {
           <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>WEEK VOLUME</div>
           <div style={{ fontSize: 20, fontWeight: 600, color: phaseColor, fontFamily: 'var(--font-display)' }}>~{meta.targetWeekKm} km</div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            base {meta.baseKm} km × {Math.round(100 / meta.baseKm * meta.targetWeekKm)}%
+            base {meta.baseKm} km × {basePct}%
           </div>
         </div>
       </div>
@@ -306,7 +310,7 @@ function WeekCard({ week, isCurrent, isSelected, onClick }) {
       <div style={{ fontSize: 12, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>{week.targetKm} km</div>
       <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         {sessionIcons.map((icon, i) => (
-          <span key={i} style={{ fontSize: 8, color: week.days[i] ? (PHASE_COLORS[week.days[i].type] ?? phaseColor) : 'var(--text-dim)' }}>{icon}</span>
+          <span key={i} style={{ fontSize: 8, color: week.days[i] ? (TYPE_COLOR[week.days[i].type] ?? phaseColor) : 'var(--text-dim)' }}>{icon}</span>
         ))}
       </div>
     </div>
@@ -529,9 +533,9 @@ export function PlanTab({ workout: w, history, coach }) {
     // Skip if already enriched (any day has an aiTitle)
     if (week.days?.some(d => d.aiTitle)) return;
     // Skip if it's the current week — regenerateMesocycle handles that
-    if (selectedWeekIndex === currentWeekIdx) return;
+    if (selectedWeekIndex === (activeMesocycle?.currentWeekIndex ?? 0)) return;
     if (!activeMesocycle?.meta?.aiGenerated) coach?.enrichWeekDays?.(selectedWeekIndex, week.days, null, histWorkouts, planSport);
-  }, [selectedWeekIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedWeekIndex, activeMesocycle, coach, histWorkouts, planSport]);
 
   const displayedWeek  = activeMesocycle?.weeks?.[selectedWeekIndex] ?? null;
   const currentWeekIdx = activeMesocycle?.currentWeekIndex ?? 0;
@@ -672,73 +676,19 @@ export function PlanTab({ workout: w, history, coach }) {
       we_long:     weekendKm,
     };
 
-    const systemPrompt = `You are an elite endurance coach. Generate a personalized ${planWeeks}-week training mesocycle as JSON.
-
-ATHLETE PROFILE:
-- Sport: ${sport}
-- Goal: ${form.primaryGoal || profile.primaryGoal || 'general fitness improvement'}
-- Goal event date: ${form.useGoalDate ? (form.goalDate || 'none') : 'none'}
-- Available training hours: ${weeklyHours}h/week (hard cap: weekday ${form.hoursWeekday}h, weekend ${form.hoursWeekend}h per session)
-- CURRENT fitness level: ~${weeklyKm} km/week (detraining-adjusted; ramp 5–10%/week toward ${scheduleKm} km/week capacity)
-- Training days: ${form.trainingDays.join(', ')} — all other days must be type "rest" with targetKm 0
-- Long session day: ${form.longSessionDay}
-- Hard/interval day: ${form.hardSessionDay}
-- FTP: ${profile.ftp ? profile.ftp + ' W' : 'unknown'}
-- LTHR: ${profile.lthr ? profile.lthr + ' bpm' : 'unknown'}
-- Weight: ${profile.weightKg ? profile.weightKg + ' kg' : 'unknown'}
-- Age: ${profile.age ?? (profile.birthday ? (() => { const d=new Date(profile.birthday),t=new Date(); let a=t.getFullYear()-d.getFullYear(); if(t.getMonth()-d.getMonth()<0||(t.getMonth()===d.getMonth()&&t.getDate()<d.getDate()))a--; return a; })() : 'unknown')}
-
-CURRENT FITNESS STATE:
-- CTL (42-day chronic fitness): ${load.ctl.toFixed(1)}
-- ATL (7-day acute load): ${load.atl.toFixed(1)}
-- TSB (freshness = CTL - ATL): ${load.tsb.toFixed(1)}
-- Detraining status: ${dt.label} (${dt.daysSince < 999 ? dt.daysSince + ' days since last workout' : 'no history'})
-
-RECENT TRAINING LOG (last 24 sessions):
-${recentSummary}
-
-SESSION KM TARGETS — week 1 base values (scale up each week; recovery weeks = 60%):
-- Weekday recovery:  ${sesKm.wd_recovery} km
-- Weekday aerobic:   ${sesKm.wd_aerobic} km
-- Weekday tempo:     ${sesKm.wd_tempo} km
-- Weekday interval:  ${sesKm.wd_interval} km
-- Weekend recovery:  ${sesKm.we_recovery} km
-- Long ride/run:     ${sesKm.we_long} km  ← HARD CAP, never exceed
-
-OUTPUT RULES:
-- Return ONLY valid JSON, no prose outside it
-- ${planWeeks} weeks total, 7 days each (Mo through Su)
-- "type": rest | recovery | aerobic | tempo | interval | long | test
-- "intensity": rest=0, recovery=15, aerobic=50, long=60, tempo=65, interval=85
-- "targetKm": MUST equal the km stated in "desc". Never exceed session caps above. Rest days = 0.
-- "label": short name WITHOUT km (e.g. "Z2 Endurance", "Sweet spot", "Long ride") — km shown separately
-- "desc": 1–2 sentences: state the exact km, then protocol (zones, HR targets, rep counts)
-- "targetKm" per week = sum of all day targetKm values
-- Every 4th week: recovery week at 60% volume
-- Structure: first 40% base, next 30% build, next 15% peak, last 15% taper
-- Polarized 80/20: 80% Z1–Z2, 20% Z4–Z5
-
-JSON SCHEMA:
-{
-  "weeks": [
-    {
-      "weekNumber": 1,
-      "phase": "base",
-      "isRecovery": false,
-      "targetKm": ${weeklyKm},
-      "focus": "Aerobic base, adapting to load",
-      "days": [
-        { "dayOfWeek": "Mo", "type": "recovery", "label": "Easy recovery", "desc": "${sesKm.wd_recovery} km easy Z1 spin, HR <65% max.", "intensity": 15, "targetKm": ${sesKm.wd_recovery} },
-        { "dayOfWeek": "Tu", "type": "aerobic",  "label": "Z2 Endurance",  "desc": "${sesKm.wd_aerobic} km at Z2, conversational pace.", "intensity": 50, "targetKm": ${sesKm.wd_aerobic} },
-        { "dayOfWeek": "We", "type": "rest",     "label": "Full rest",      "desc": "Rest.", "intensity": 0, "targetKm": 0 },
-        { "dayOfWeek": "Th", "type": "tempo",    "label": "Sweet spot",     "desc": "${sesKm.wd_tempo} km: warm-up → SST block → cool-down.", "intensity": 65, "targetKm": ${sesKm.wd_tempo} },
-        { "dayOfWeek": "Fr", "type": "rest",     "label": "Full rest",      "desc": "Rest.", "intensity": 0, "targetKm": 0 },
-        { "dayOfWeek": "Sa", "type": "long",     "label": "Long ride",      "desc": "${sesKm.we_long} km steady Z2, fuel every 45 min.", "intensity": 60, "targetKm": ${sesKm.we_long} },
-        { "dayOfWeek": "Su", "type": "recovery", "label": "Recovery spin",  "desc": "${sesKm.we_recovery} km Z1 active recovery.", "intensity": 15, "targetKm": ${sesKm.we_recovery} }
-      ]
-    }
-  ]
-}`;
+    const systemPrompt = buildAIMesocycleSystemPrompt({
+      planWeeks,
+      sport,
+      form,
+      profile,
+      weeklyHours,
+      weeklyKm,
+      scheduleKm,
+      load,
+      detraining: dt,
+      recentSummary,
+      sessionKmTargets: sesKm,
+    });
 
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {

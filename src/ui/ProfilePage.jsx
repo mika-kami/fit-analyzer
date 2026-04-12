@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { GearPanel } from './GearPanel.jsx';
 import { flaggedMarkers, ENDURANCE_MARKERS, trendAnalysis, parseLabValuesFromAI } from '../core/labTracker.js';
 import { localDateIso } from '../core/format.js';
+import { MEDICAL_DOC_EXTRACT_PROMPT } from '../llm/prompts/index.js';
 
 function ageFromBirthday(birthday) {
   if (!birthday) return null;
@@ -42,21 +43,12 @@ async function analyzeDocumentWithAI(doc) {
   const isPdf   = type === 'application/pdf';
   const isText  = type.startsWith('text/') || doc.file_name?.endsWith('.txt');
 
-  const EXTRACT_PROMPT = `You are a medical document analyzer for a sports coaching app. Extract clinically relevant findings that affect athletic training and performance.
-
-Output TWO sections:
-1. A single paragraph summary: "Metric: value (status), ..." e.g. "Ferritin: 28 ng/mL (low), Vitamin D: 18 ng/mL (deficient), TSH: 2.1 mIU/L (normal)."
-2. If the document contains lab values, output a JSON block: {"labValues": [{"marker": "ferritin", "value": 28, "unit": "ng/mL", "refLow": 12, "refHigh": 300, "flagged": true}]}
-
-Known markers: ferritin, hemoglobin, vitamin_d, tsh, crp, cortisol_am, testosterone, creatine_kinase, hematocrit, b12.
-If the document is not a medical record, say "Not a medical document." Do not include patient personal data (name, DOB, address, ID numbers).`;
-
   let messages;
 
   if (isImage) {
     const base64 = await blobToBase64(blob);
     messages = [
-      { role: 'system', content: EXTRACT_PROMPT },
+      { role: 'system', content: MEDICAL_DOC_EXTRACT_PROMPT },
       { role: 'user', content: [
         { type: 'image_url', image_url: { url: `data:${type || 'image/jpeg'};base64,${base64}` } },
         { type: 'text', text: 'Extract key medical findings from this document.' },
@@ -65,7 +57,7 @@ If the document is not a medical record, say "Not a medical document." Do not in
   } else if (isPdf) {
     const base64 = await blobToBase64(blob);
     messages = [
-      { role: 'system', content: EXTRACT_PROMPT },
+      { role: 'system', content: MEDICAL_DOC_EXTRACT_PROMPT },
       { role: 'user', content: [
         { type: 'file', file: { filename: doc.file_name, file_data: `data:application/pdf;base64,${base64}` } },
         { type: 'text', text: 'Extract key medical findings from this document.' },
@@ -74,7 +66,7 @@ If the document is not a medical record, say "Not a medical document." Do not in
   } else if (isText) {
     const text = await blob.text();
     messages = [
-      { role: 'system', content: EXTRACT_PROMPT },
+      { role: 'system', content: MEDICAL_DOC_EXTRACT_PROMPT },
       { role: 'user', content: `Extract key medical findings:\n\n${text.slice(0, 8000)}` },
     ];
   } else {

@@ -2,6 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { buildHistoryDigest, buildWorkoutSnapshot, buildPlanDigest } from '../core/coachDigest.js';
+import {
+  buildCoachSystemPrompt,
+  buildAutoVerdictPrompt,
+  buildDeepAnalysisPrompt,
+  buildConversationRecap,
+  PLAN_CHANGE_APPENDIX,
+} from '../llm/prompts/index.js';
 
 const OPENAI_URL = import.meta.env.VITE_LLM_URL ?? 'https://api.openai.com/v1/chat/completions';
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
@@ -203,70 +210,6 @@ function detectRelevantContext(userMessage) {
   };
 }
 
-function buildConversationRecap(messages) {
-  if (!messages?.length) return '';
-  const chunks = messages
-    .filter((m) => m?.role === 'user' || m?.role === 'assistant')
-    .slice(-8)
-    .map((m) => {
-      const raw = String(m?.content ?? '').replace(/\s+/g, ' ').trim();
-      const clip = raw.length > 60 ? `${raw.slice(0, 60)}...` : raw;
-      return `${m.role}: ${clip}`;
-    })
-    .filter(Boolean);
-  if (!chunks.length) return '';
-  return `[CONVERSATION RECAP] Earlier in this chat: ${chunks.join('; ')}`;
-}
-
-function buildSystemPrompt({
-  workout,
-  athleteDigest,
-  weatherData,
-  includeWeather,
-  includeWorkout,
-  includeWorkoutDetails,
-  includeHistory,
-  historyDigest,
-  detailFlags,
-  includeMedicalFocus,
-  planDigest,
-}) {
-  const COACH_IDENTITY = `You are a harsh-but-fair endurance coach. Be direct, use numbers when available, and always prescribe clear next actions.
-Answer in English or Russian, matching the user's language.`;
-
-  const sections = [COACH_IDENTITY];
-  sections.push(`ATHLETE DIGEST:\n${athleteDigest || 'Athlete digest unavailable.'}`);
-
-  if (planDigest) {
-    sections.push(
-      `CURRENT WEEK PLAN (authoritative — computed by training engine):\n${planDigest}\n\nIMPORTANT: When the athlete asks about this week's training or what to do on any day, you MUST refer to this plan. Do NOT generate a new weekly schedule. You may explain, adjust intensity advice, or suggest swaps — but the session types and structure are fixed unless the athlete explicitly asks for a full plan replacement.`
-    );
-  }
-
-  if (includeMedicalFocus) {
-    sections.push('MEDICAL FOCUS: User asked a medical/injury topic. Prioritize safety and practical accommodations.');
-  }
-  if (includeWeather && weatherData) {
-    sections.push(formatWeatherForSystem(weatherData));
-  }
-  if (includeWorkout) {
-    sections.push(buildWorkoutSnapshot(workout));
-  }
-  if (includeWorkout && includeWorkoutDetails) {
-    const detailBlock = buildWorkoutDetails(workout, detailFlags);
-    if (detailBlock) sections.push(detailBlock);
-  }
-  if (includeHistory && historyDigest) {
-    sections.push(`TRAINING TREND:\n${historyDigest}`);
-  }
-
-  if (!workout && !includeHistory) {
-    sections.push('No workout is currently loaded. You can still advise on planning, fueling, recovery, and gear.');
-  }
-
-  return sections.filter(Boolean).join('\n\n');
-}
-
 // ── Auto-verdict (single-shot, non-chat) ─────────────────────────────────────
 
 export async function requestAutoVerdict(workout, complianceResult) {
@@ -280,10 +223,10 @@ export async function requestAutoVerdict(workout, complianceResult) {
     `z1z2:${Math.round(z1 + z2)}%`,
     `hr:${workout.heartRate?.avg}bpm`,
   ].join(' ');
-  const compStr = complianceResult
+  const complianceSummary = complianceResult
     ? `Plan compliance: ${complianceResult.score}% (${complianceResult.verdict})`
     : 'No plan data';
-  const prompt = `Coach. Session: ${snap}. ${compStr}. Return JSON: { line1: '≤12 words — what happened', line2: '≤12 words — what to do next' }`;
+  const prompt = buildAutoVerdictPrompt({ snap, complianceSummary });
   try {
     const res = await fetch(OPENAI_URL, {
       method: 'POST',
@@ -324,26 +267,25 @@ export async function requestDeepAnalysis(workout, complianceResult) {
     ? `Plan compliance: ${complianceResult.score}% (${complianceResult.verdict.replace('_', ' ')})`
     : 'No planned session';
 
-  const prompt = `You are an elite endurance coach. Analyze this workout in depth and return a JSON object.
-
-WORKOUT DATA:
-- Sport: ${sport}
-- Date: ${workout.date ?? 'unknown'}
-- Distance: ${distKm} km
-- Duration: ${durationMin} min
-- Avg HR: ${hr.avg ?? '—'} bpm, Max HR: ${hr.max ?? '—'} bpm
-- Avg speed: ${spd.avg?.toFixed(1) ?? '—'} km/h
-- Ascent: ${ascent} m
-${power ? `- ${power}` : ''}
-- Aerobic TE: ${te}/5, Anaerobic TE: ${teAn}/5
-- HR zones: Z1 ${z1.toFixed(0)}%, Z2 ${z2.toFixed(0)}%, Z3 ${z3.toFixed(0)}%, Z4 ${z4.toFixed(0)}%, Z5 ${z5.toFixed(0)}%
-- ${compStr}
-
-Return ONLY valid JSON (no prose outside):
-{
-  "analysis": "4–6 sentences of expert coaching analysis: intensity distribution, metabolic stimulus, execution quality, aerobic vs anaerobic balance, what was done well and what to improve",
-  "conclusions": ["actionable coaching conclusion 1", "conclusion 2", "conclusion 3"]
-}`;
+  const prompt = buildDeepAnalysisPrompt({
+    sport,
+    date: workout.date ?? 'unknown',
+    distKm,
+    durationMin,
+    avgHr: hr.avg ?? '—',
+    maxHr: hr.max ?? '—',
+    avgSpeedKmh: spd.avg?.toFixed(1) ?? '—',
+    ascentM: ascent,
+    powerLine: power,
+    aerobicTe: te,
+    anaerobicTe: teAn,
+    z1,
+    z2,
+    z3,
+    z4,
+    z5,
+    complianceSummary: compStr,
+  });
 
   try {
     const res = await fetch(OPENAI_URL, {
@@ -456,22 +398,20 @@ export function useOpenAI(workout, recentWorkoutsFn, getChatHistory, saveChatMes
 
       const planDigest = weekDays?.length ? buildPlanDigest(weekDays) : '';
 
-      const systemPrompt = buildSystemPrompt({
-        workout: contextWorkout,
+      const systemPrompt = buildCoachSystemPrompt({
         athleteDigest: athleteDigest || '',
-        weatherData,
-        includeWeather,
-        includeWorkout,
-        includeWorkoutDetails,
-        includeHistory,
-        historyDigest,
-        detailFlags: contextFlags.workoutDetails,
+        weatherBlock: includeWeather && weatherData ? formatWeatherForSystem(weatherData) : '',
+        workoutSnapshot: includeWorkout ? buildWorkoutSnapshot(contextWorkout) : '',
+        workoutDetails: includeWorkout && includeWorkoutDetails
+          ? buildWorkoutDetails(contextWorkout, contextFlags.workoutDetails)
+          : '',
+        historyDigest: includeHistory ? historyDigest : '',
         includeMedicalFocus,
         planDigest,
       });
 
       const finalSystemPrompt = (contextFlags.planChange && planDigest)
-        ? systemPrompt + "\n\nWhen the athlete asks to skip or swap a session: name the specific day and session type, state the training impact in ≤ 10 words (e.g. \"drops this week's interval stimulus\"), then offer the best alternative. Never silently agree to drop a key session."
+        ? systemPrompt + PLAN_CHANGE_APPENDIX
         : systemPrompt;
 
       const priorHistory = messages.filter((m) => !m.streaming).map(({ role, content }) => ({ role, content }));
