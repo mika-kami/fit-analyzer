@@ -14,6 +14,8 @@ const TYPE_ZONE_TARGETS = {
   test:     null,
 };
 
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
 function mean(arr) {
   if (!arr.length) return 0;
   return arr.reduce((s, v) => s + v, 0) / arr.length;
@@ -125,6 +127,14 @@ export function computeCompliance(plannedDay, actualWorkout) {
     score,
     verdict,
     details: {
+      plan: {
+        type: plannedDay.type ?? null,
+        label: plannedDay.aiTitle || plannedDay.label || plannedDay.type || null,
+        desc: plannedDay.desc ?? '',
+        targetKm: planned_km,
+        day: plannedDay.day ?? null,
+        dateIso: plannedDay.dateIso ?? null,
+      },
       distanceDelta: {
         planned: planned_km,
         actual:  parseFloat(actual_km.toFixed(2)),
@@ -175,5 +185,73 @@ export function computeWeeklyCompliance(mesocycleWeek, historyWorkouts) {
     avgScore:       scores.length ? Math.round(mean(scores)) : null,
     missedDays:     plannedDays.length - completed.length,
     overreachDays,
+  };
+}
+
+/**
+ * computeExecutionTrend — aggregate recent planned-session execution quality.
+ * Used by analytics and as an input signal for future-plan updates.
+ *
+ * @param {object[]} historyWorkouts
+ * @param {number} lookbackDays
+ * @returns {{
+ *   plannedSessions: number,
+ *   avgScore: number|null,
+ *   offTargetSessions: number,
+ *   executionLabel: string,
+ *   adaptationFactor: number
+ * }}
+ */
+export function computeExecutionTrend(historyWorkouts = [], lookbackDays = 28) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+
+  const plannedSessions = (historyWorkouts ?? [])
+    .filter((w) => w?.date && new Date(w.date) >= cutoff)
+    .filter((w) => w?.complianceResult?.score != null);
+
+  if (!plannedSessions.length) {
+    return {
+      plannedSessions: 0,
+      avgScore: null,
+      offTargetSessions: 0,
+      executionLabel: 'Unknown',
+      adaptationFactor: 1.0,
+    };
+  }
+
+  const scores = plannedSessions.map((w) => Number(w.complianceResult.score) || 0);
+  const avgScore = Math.round(mean(scores));
+  const offTargetSessions = plannedSessions.filter((w) => {
+    const score = Number(w?.complianceResult?.score ?? 100);
+    const verdict = w?.complianceResult?.verdict;
+    return verdict === 'off_target' || score < 60;
+  }).length;
+
+  let adaptationFactor = 1.0;
+  if (avgScore < 50) adaptationFactor = 0.82;
+  else if (avgScore < 60) adaptationFactor = 0.88;
+  else if (avgScore < 70) adaptationFactor = 0.94;
+  else if (avgScore < 80) adaptationFactor = 0.98;
+  else if (avgScore >= 90 && offTargetSessions === 0 && plannedSessions.length >= 4) adaptationFactor = 1.03;
+
+  // Penalize repeated off-target outcomes to reduce future load progression.
+  adaptationFactor -= Math.min(0.08, offTargetSessions * 0.02);
+  adaptationFactor = clamp(Number(adaptationFactor.toFixed(2)), 0.8, 1.05);
+
+  const executionLabel = avgScore >= 85
+    ? 'Excellent'
+    : avgScore >= 70
+      ? 'Solid'
+      : avgScore >= 55
+        ? 'Needs Adjustment'
+        : 'High Risk';
+
+  return {
+    plannedSessions: plannedSessions.length,
+    avgScore,
+    offTargetSessions,
+    executionLabel,
+    adaptationFactor,
   };
 }

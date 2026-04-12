@@ -476,6 +476,10 @@ export function useWorkouts(user, mesocycle = null, gear = []) {
         model.garminActivityId = item.garmin_activity_id;
         model.source           = 'garmin';
         if (!model.fileName) model.fileName = item.activity_name;
+        const plannedDay = findPlannedDay(mesocycleRef.current, model.date);
+        const complianceResult = plannedDay ? computeCompliance(plannedDay, model) : null;
+        const fp = routeFingerprint(model.timeSeries);
+        const planMesocycleId = mesocycleRef.current?.id ?? null;
 
         // Check for existing: exact garmin_activity_id match, or same date (Strava duplicate)
         const exactMatch = history.find(h => h.garminActivityId === item.garmin_activity_id);
@@ -487,7 +491,15 @@ export function useWorkouts(user, mesocycle = null, gear = []) {
           .filter((gearItem) => gearIds.includes(gearItem.id))
           .map((gearItem) => gearItem.name);
         const row = {
-          ...toRow({ ...model, gearIds, gearNames }, user.id),
+          ...toRow({
+            ...model,
+            complianceResult,
+            routeFingerprint: fp,
+            planMesocycleId,
+            plannedDayDate: plannedDay?.dateIso ?? null,
+            gearIds,
+            gearNames,
+          }, user.id),
           garmin_activity_id: item.garmin_activity_id,
           source: 'garmin',
         };

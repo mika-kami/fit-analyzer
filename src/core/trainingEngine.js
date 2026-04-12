@@ -4,6 +4,7 @@
  * sport-specific volume floors, 8 phase templates.
  * No React dependencies. Fully unit-testable.
  */
+import { computeExecutionTrend } from './complianceEngine.js';
 
 // ─── Training plan engine ────────────────────────────────────────────────────
 //
@@ -573,6 +574,7 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   // Determine peak km from history + detraining
   const refKm      = refWeeklyKm(historyWorkouts);
   const detraining = assessDetraining(historyWorkouts);
+  const execution  = computeExecutionTrend(historyWorkouts, 28);
   const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
   const cfg        = sportConfig(sportObj);
   const speed      = _sportSpeed(cfg.sport);
@@ -590,8 +592,13 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
 
   // baseKm = current fitness level; peakKm = goal for the final build weeks,
   // capped so plan never exceeds the athlete's actual schedule capacity.
-  const baseKm = Math.max(effectiveRefKm * detraining.factor, floor);
-  const peakKm = Math.min(Math.round(baseKm * 1.25), scheduleKm);
+  const executionFloor = Math.round(floor * Math.max(0.82, execution.adaptationFactor));
+  const baseKm = Math.max(
+    effectiveRefKm * detraining.factor * execution.adaptationFactor,
+    executionFloor
+  );
+  const rampMultiplier = execution.avgScore != null && execution.avgScore >= 85 ? 1.28 : 1.22;
+  const peakKm = Math.min(Math.round(baseKm * rampMultiplier), scheduleKm);
 
   // Start mesocycle from the given date, or snap to NEXT Monday by default
   let msStartIso;
@@ -625,7 +632,22 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   return {
     weeks,
     currentWeekIndex,
-    meta: { totalWeeks, peakKm, startDate: msStartIso, endDate: msEndIso, goalDate, goal: profile?.primaryGoal ?? '', sport: profile?.targetSport ?? 'mixed', planStartDate: msStartIso },
+    meta: {
+      totalWeeks,
+      peakKm,
+      startDate: msStartIso,
+      endDate: msEndIso,
+      goalDate,
+      goal: profile?.primaryGoal ?? '',
+      sport: profile?.targetSport ?? 'mixed',
+      planStartDate: msStartIso,
+      execution: {
+        avgScore: execution.avgScore,
+        offTargetSessions: execution.offTargetSessions,
+        plannedSessions: execution.plannedSessions,
+        adaptationFactor: execution.adaptationFactor,
+      },
+    },
   };
 }
 

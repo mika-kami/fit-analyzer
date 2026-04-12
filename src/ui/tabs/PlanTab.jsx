@@ -559,6 +559,27 @@ export function PlanTab({ workout: w, history, coach }) {
     return map;
   }, [histWorkouts]);
 
+  // Missed sessions = planned non-rest day in the past with no uploaded workout.
+  const missedByDate = useMemo(() => {
+    if (!displayedWeek?.days?.length) return {};
+    const completedDates = new Set(histWorkouts.map((w) => w.date));
+    const map = {};
+    for (const day of displayedWeek.days) {
+      if (!day?.dateIso || day.type === 'rest') continue;
+      if (day.dateIso >= todayIso) continue;
+      if (completedDates.has(day.dateIso)) continue;
+      map[day.dateIso] = {
+        score: 0,
+        verdict: 'skipped',
+        details: {
+          note: 'Planned session missed',
+          distanceDelta: { planned: day.targetKm ?? 0, actual: 0, pct: 0 },
+        },
+      };
+    }
+    return map;
+  }, [displayedWeek, histWorkouts, todayIso]);
+
   // Weekly compliance summary
   const weeklyCompliance = useMemo(() => {
     if (!displayedWeek) return null;
@@ -569,6 +590,7 @@ export function PlanTab({ workout: w, history, coach }) {
       completionRate: Math.round((completed.length / plannedDays.length) * 100),
       completed: completed.length,
       planned: plannedDays.length,
+      missed: plannedDays.length - completed.length,
     };
   }, [displayedWeek, histWorkouts]);
 
@@ -886,7 +908,7 @@ export function PlanTab({ workout: w, history, coach }) {
             <div style={{ fontSize: 20, fontWeight: 600, color: phaseColor, fontFamily: 'var(--font-display)' }}>~{displayedWeek?.targetKm ?? 0} km</div>
             {weeklyCompliance && (
               <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {weeklyCompliance.completed}/{weeklyCompliance.planned} sessions · {weeklyCompliance.completionRate}%
+                {weeklyCompliance.completed}/{weeklyCompliance.planned} sessions · {weeklyCompliance.completionRate}%{weeklyCompliance.missed > 0 ? ` · missed ${weeklyCompliance.missed}` : ''}
               </div>
             )}
           </div>
@@ -1030,7 +1052,7 @@ export function PlanTab({ workout: w, history, coach }) {
                 weather={weather.days[Math.round((new Date(day.dateIso) - new Date(todayIso)) / 86400000)]}
                 index={i}
                 revealed={revealed}
-                compliance={complianceByDate[day.dateIso]}
+                compliance={complianceByDate[day.dateIso] ?? missedByDate[day.dateIso]}
               />
             ))}
           </div>

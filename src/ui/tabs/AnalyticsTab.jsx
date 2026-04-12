@@ -20,6 +20,7 @@ import {
   prescribeNextWorkout,
   defaultWorkoutReflection,
 } from '../../core/coachEngine.js';
+import { findPlannedDay, computeCompliance, computeExecutionTrend } from '../../core/complianceEngine.js';
 
 const GRID_COLOR = 'rgba(255,255,255,0.04)';
 const TICK_COLOR = '#3a3d4e';
@@ -118,6 +119,18 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
     }),
     [profile, readiness, trainingStatus, insights, checkin?.weatherScore]
   );
+  const executionTrend = useMemo(
+    () => computeExecutionTrend(workouts, 28),
+    [workouts]
+  );
+  const plannedDayForCurrent = useMemo(
+    () => currentWorkout?.date ? findPlannedDay(coach?.mesocycle, currentWorkout.date) : null,
+    [coach?.mesocycle, currentWorkout?.date]
+  );
+  const complianceForCurrent = useMemo(() => {
+    if (!currentWorkout || !plannedDayForCurrent) return null;
+    return currentWorkout.complianceResult ?? computeCompliance(plannedDayForCurrent, currentWorkout);
+  }, [currentWorkout, plannedDayForCurrent]);
 
   const workoutNoteKey = currentWorkout?.id
     ? String(currentWorkout.id)
@@ -141,6 +154,12 @@ export function AnalyticsTab({ history, onSelectWorkout, coach, currentWorkout }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
       <CoachStatusCard readiness={readiness} trainingStatus={trainingStatus} />
+      <PlanExecutionCard
+        workout={currentWorkout}
+        plannedDay={plannedDayForCurrent}
+        compliance={complianceForCurrent}
+        executionTrend={executionTrend}
+      />
       <WorkoutReflectionCard
         workout={currentWorkout}
         note={noteDraft}
@@ -255,6 +274,123 @@ function CoachStatusCard({ readiness, trainingStatus }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+function PlanExecutionCard({ workout, plannedDay, compliance, executionTrend }) {
+  const score = compliance?.score ?? null;
+  const scoreColor = score == null
+    ? 'var(--text-muted)'
+    : score >= 80
+      ? '#4ade80'
+      : score >= 60
+        ? '#fbbf24'
+        : '#ef4444';
+
+  const verdictLabel = compliance?.verdict === 'nailed_it'
+    ? 'On Target'
+    : compliance?.verdict === 'close'
+      ? 'Close'
+      : compliance?.verdict === 'off_target'
+        ? 'Off Target'
+        : '—';
+
+  const dist = compliance?.details?.distanceDelta;
+  const intensity = compliance?.details?.intensityMatch;
+  const fidelity = compliance?.details?.zoneFidelity;
+
+  return (
+    <Card>
+      <CardLabel>Plan Execution Quality</CardLabel>
+      {!workout && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Open a workout to compare planned vs actual execution.
+        </div>
+      )}
+      {workout && !plannedDay && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          No planned session found for {workout.date}. Execution scoring applies when workout date matches your active plan.
+        </div>
+      )}
+      {workout && plannedDay && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
+            <div style={{
+              background: `${scoreColor}14`,
+              border: `1px solid ${scoreColor}35`,
+              borderRadius: 'var(--r-md)',
+              padding: 'var(--sp-3)',
+            }}>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>EXECUTION SCORE</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 28, lineHeight: 1, color: scoreColor, fontFamily: 'var(--font-display)', fontWeight: 600 }}>{score ?? '—'}</span>
+                <span style={{ fontSize: 12, color: scoreColor, fontFamily: 'var(--font-mono)' }}>% · {verdictLabel}</span>
+              </div>
+              <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-secondary)' }}>
+                Planned: {plannedDay.aiTitle || plannedDay.label || plannedDay.type}
+              </div>
+              {!!plannedDay.desc && (
+                <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {plannedDay.desc}
+                </div>
+              )}
+            </div>
+            <div style={{
+              background: 'var(--bg-overlay)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--r-md)',
+              padding: 'var(--sp-3)',
+            }}>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>RECENT EXECUTION (28D)</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 24, lineHeight: 1, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                  {executionTrend.avgScore != null ? executionTrend.avgScore : '—'}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                  % · {executionTrend.executionLabel}
+                </span>
+              </div>
+              <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-secondary)' }}>
+                Used for `Update future`: progression factor {(executionTrend.adaptationFactor * 100).toFixed(0)}%
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)' }}>
+            <MetricTile
+              label="Distance"
+              value={dist ? `${dist.actual.toFixed(1)} / ${dist.planned.toFixed(1)} km` : '—'}
+              sub={dist?.pct != null ? `${dist.pct}% of plan` : 'No distance target'}
+            />
+            <MetricTile
+              label="Intensity Match"
+              value={intensity ? `${intensity.easyPct}% easy · ${intensity.hiPct}% high` : '—'}
+              sub={intensity?.matched ? 'Within expected profile' : 'Above/under target profile'}
+            />
+            <MetricTile
+              label="Zone Fidelity"
+              value={fidelity?.delta != null ? `${fidelity.delta >= 0 ? '+' : ''}${fidelity.delta}%` : '—'}
+              sub={fidelity?.plannedEasyPct != null ? `vs planned easy ${fidelity.plannedEasyPct}%` : 'No easy-zone target'}
+            />
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function MetricTile({ label, value, sub }) {
+  return (
+    <div style={{
+      background: 'var(--bg-overlay)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--r-sm)',
+      padding: 'var(--sp-3)',
+    }}>
+      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value}</div>
+      <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-secondary)' }}>{sub}</div>
+    </div>
   );
 }
 
