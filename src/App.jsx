@@ -27,7 +27,6 @@ import { PlanTab }      from './ui/tabs/PlanTab.jsx';
 import { AnalyticsTab } from './ui/tabs/AnalyticsTab.jsx';
 import { LapsTab }      from './ui/tabs/LapsTab.jsx';
 import { CoachPanel } from './ui/CoachPanel.jsx';
-import { downloadWorkoutPDF } from './core/pdfReport.js';
 import { computeReadinessScore, computeTrainingStatus, analyzePerformanceLimiters, prescribeNextWorkout } from './core/coachEngine.js';
 import { calcTrainingLoad } from './core/trainingEngine.js';
 import { useAlerts } from './hooks/useAlerts.js';
@@ -57,7 +56,6 @@ export default function App() {
   const [garminOpen, setGarminOpen] = useState(false);
   const [stravaOpen, setStravaOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'saved'
   const [dashboardWeather, setDashboardWeather] = useState(null);
   const [lastCoachAction, setLastCoachAction] = useState('');
 
@@ -208,17 +206,7 @@ export default function App() {
   const handleBack = useCallback(() => {
     workout.reset();
     setScreen('dashboard');
-    setSaveStatus(null);
   }, [workout]);
-
-  const handleSave = useCallback(async () => {
-    if (!workout.workout) return;
-    setSaveStatus('saving');
-    const saved = await workouts.saveWorkout(workout.workout);
-    if (saved) workout.loadFromSummary(saved);
-    setSaveStatus(saved ? 'saved' : null);
-    setTimeout(() => setSaveStatus(null), 2500);
-  }, [workout.workout, workout.loadFromSummary, workouts.saveWorkout]);
 
   const handleLoadSample = useCallback(() => {
     workout.loadSample();
@@ -249,11 +237,6 @@ export default function App() {
     setScreen('detail');
     setActiveTab('plan');
   }, [coach, workouts.history]);
-
-  const handleDownloadPdf = useCallback(() => {
-    if (!workout.workout) return;
-    downloadWorkoutPDF(workout.workout);
-  }, [workout.workout]);
 
   const handleSaveGearAssignment = useCallback(async (workoutId, gearIds) => {
     const updated = await workouts.updateWorkoutGear?.(workoutId, gearIds);
@@ -368,9 +351,6 @@ export default function App() {
             onStrava={() => setStravaOpen(true)}
             stravaStatus={strava.status}
             showBack={true}
-            onSave={handleSave}
-            saveStatus={saveStatus}
-            onPDF={handleDownloadPdf}
           />
           <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5)', animation: 'fadeUp 0.3s var(--ease-snappy)' }}>
             {activeTab === 'overview' && (

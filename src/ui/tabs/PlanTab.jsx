@@ -9,19 +9,9 @@ import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, refWeeklyKm, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
-import { buildAIMesocycleSystemPrompt } from '../../llm/prompts/index.js';
 import { downloadFitWorkout } from '../../core/fitWorkoutDownload.js';
 
-const OPENAI_KEY      = import.meta.env.VITE_OPENAI_API_KEY ?? '';
-const PLAN_LLM_MODEL  = import.meta.env.VITE_PLAN_LLM_MODEL ?? 'gpt-4o';
-const PLAN_MAX_TOKENS = 16000;
-
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
-
-// GPT-4.x uses max_tokens; GPT-5+ / o-series uses max_completion_tokens
-function tokenParam(model, n) {
-  return model.startsWith('gpt-4') ? { max_tokens: n } : { max_completion_tokens: n };
-}
 
 function windDirection(deg) {
   if (deg == null || Number.isNaN(deg)) return '—';
@@ -737,8 +727,7 @@ export function PlanTab({ workout: w, history, coach }) {
     return generateMesocycle(sportProfile, histWorkouts, null);
   }, [coach?.mesocycle, coach?.profile, histWorkouts, planSport]);
 
-  const [aiPlanState, setAiPlanState]     = useState({ loading: false, error: '' });
-  const [planSetupMode, setPlanSetupMode] = useState(null); // null | 'regenerate' | 'ai'
+  const [planSetupMode, setPlanSetupMode] = useState(null); // null | 'regenerate'
   // activeMesocycle = coach.mesocycle (persisted, either template or AI) or local preview
   const activeMesocycle = mesocycle;
 
@@ -875,145 +864,6 @@ export function PlanTab({ workout: w, history, coach }) {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => { const t = setTimeout(() => setRevealed(true), 80); return () => clearTimeout(t); }, []);
 
-  // ── AI plan generation (called after Plan Setup modal confirms) ─────────────
-
-  const generateAIPlan = async (form, startIso) => {
-    if (!OPENAI_KEY) { setAiPlanState({ loading: false, error: 'No OpenAI API key configured.' }); return; }
-    setAiPlanState({ loading: true, error: '' });
-
-    const profile      = coach?.profile ?? {};
-    const load         = calcTrainingLoad(histWorkouts);
-    const dt           = assessDetraining(histWorkouts);
-    const recentSummary = [...histWorkouts]
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 24)
-      .map(w => {
-        const durationSec = w.duration?.active ?? w.duration?.elapsed ?? w.duration_s ?? 0;
-        const durationMin = Math.round(durationSec / 60);
-        const distKm      = ((w.distance ?? 0) / 1000).toFixed(1);
-        const sp          = w.sport ?? w.sportLabel ?? 'workout';
-        const te          = (w.trainingEffect?.aerobic ?? 0).toFixed(1);
-        const hr          = w.heartRate?.avg ? `, HR ${w.heartRate.avg} bpm` : '';
-        return `${w.date}: ${sp}, ${distKm} km, ${durationMin} min${hr}, TE ${te}`;
-      })
-      .join('\n') || 'No recent workouts';
-
-    const sport       = form.sport ?? planSport ?? 'cycling';
-    const weeklyHours = computeWeeklyHours(form);
-    const avgSpeed    = sport === 'cycling' ? 25 : sport === 'running' ? 12 : 25;
-    const scheduleKm  = Math.round(weeklyHours * avgSpeed);   // max capacity
-    const weekdayKm   = Math.round(form.hoursWeekday * avgSpeed);
-    const weekendKm   = Math.round(form.hoursWeekend * avgSpeed);
-    // Start volume: history-based with detraining factor, capped at schedule capacity
-    const histRefKm   = refWeeklyKm(histWorkouts);
-    const startKm     = histRefKm > 0
-      ? Math.min(Math.round(histRefKm * dt.factor), scheduleKm)
-      : Math.round(scheduleKm * dt.factor);
-    const weeklyKm    = Math.max(startKm, Math.round(scheduleKm * 0.20)); // floor at 20% of capacity
-    const planWeeks   = form.useGoalDate && form.goalDate
-      ? Math.max(8, Math.round((new Date(form.goalDate) - new Date(startIso)) / (7 * 86400000)))
-      : (form.planWeeks ?? 16);
-
-    // Per-session km targets for week 1 (base week). AI should scale proportionally for later weeks.
-    const sesKm = {
-      wd_recovery: Math.round(weekdayKm * 0.50),
-      wd_aerobic:  Math.round(weekdayKm * 0.90),
-      wd_tempo:    Math.round(weekdayKm * 0.80),
-      wd_interval: Math.round(weekdayKm * 0.70),
-      we_recovery: Math.round(weekendKm  * 0.45),
-      we_long:     weekendKm,
-    };
-
-    const systemPrompt = buildAIMesocycleSystemPrompt({
-      planWeeks,
-      sport,
-      form,
-      profile,
-      weeklyHours,
-      weeklyKm,
-      scheduleKm,
-      load,
-      detraining: dt,
-      recentSummary,
-      sessionKmTargets: sesKm,
-    });
-
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
-        body: JSON.stringify({
-          model:           PLAN_LLM_MODEL,
-          response_format: { type: 'json_object' },
-          ...tokenParam(PLAN_LLM_MODEL, PLAN_MAX_TOKENS),
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user',   content: `Generate the ${planWeeks}-week ${sport} training plan. Start date: ${startIso}. Week 1 day 1 must be ${startIso}. Long sessions on ${form.longSessionDay}, hard sessions on ${form.hardSessionDay}.` },
-          ],
-        }),
-      });
-      if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
-      const data   = await res.json();
-      const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
-
-      const startD = new Date(startIso + 'T00:00:00Z');
-      const weeks  = (parsed.weeks ?? []).map((week, wi) => {
-        const weekMs = startD.getTime() + wi * 7 * 86400000;
-        const days   = (week.days ?? []).map((d, di) => {
-          const dayD    = new Date(weekMs + di * 86400000);
-          const dateIso = dayD.toISOString().slice(0, 10);
-          const isoDow  = (dayD.getUTCDay() + 6) % 7;
-          const dow3    = DAY_LABELS[isoDow] ?? d.dayOfWeek; // e.g. "Mo"
-          // Enforce schedule: non-training days → rest; training days never rest
-          const isTraining   = form.trainingDays.includes(dow3);
-          const isWeekend    = ['Sa', 'Su'].includes(dow3);
-          const sessionCapKm = isWeekend ? weekendKm : weekdayKm;
-          const aiType  = d.type ?? 'aerobic';
-          const type    = !isTraining ? 'rest' : (aiType === 'rest' ? 'recovery' : aiType);
-          const rawKm   = !isTraining ? 0
-            : aiType === 'rest'
-              ? Math.round(sessionCapKm * 0.5)
-              : Math.min(d.targetKm ?? 0, sessionCapKm);
-          const targetKm = rawKm;
-          // Strip any "(X km)" the AI may have embedded in the label — the UI shows targetKm separately
-          const cleanLabel = (d.label ?? type).replace(/\s*\(\d+(?:\.\d+)?\s*km\)/gi, '').trim();
-          return {
-            ...d,
-            type,
-            targetKm,
-            label:    !isTraining ? 'Full rest' : (aiType === 'rest' ? 'Easy recovery' : cleanLabel),
-            day:    dow3,
-            date:   dateIso.slice(5).replace('-', '/'),
-            dateIso,
-            dow:    isoDow,
-            color:  TYPE_COLOR[type] ?? '#6b7280',
-            intent: SESSION_INTENTS[type] ?? SESSION_INTENTS.aerobic,
-          };
-        });
-        const targetKm = days.reduce((s, d) => s + (d.targetKm ?? 0), 0);
-        return {
-          weekIndex:  wi,
-          phase:      week.phase      ?? 'base',
-          isRecovery: week.isRecovery ?? false,
-          targetKm,
-          focus:      week.focus      ?? '',
-          startDate:  new Date(weekMs).toISOString().slice(0, 10),
-          endDate:    new Date(weekMs + 6 * 86400000).toISOString().slice(0, 10),
-          days,
-        };
-      });
-
-      const todayStr = localDateIso();
-      const currentWeekIndex = Math.max(0, weeks.findIndex(wk => wk.startDate <= todayStr && wk.endDate >= todayStr));
-      const aiMc = { weeks, currentWeekIndex, meta: { totalWeeks: weeks.length, sport, goalDate: form.useGoalDate ? form.goalDate : null, aiGenerated: true } };
-      await coach.saveAIMesocycle(aiMc, histWorkouts);
-      setSelectedWeekIndex(currentWeekIndex);
-      setAiPlanState({ loading: false, error: '' });
-    } catch (e) {
-      setAiPlanState({ loading: false, error: e.message || 'AI plan generation failed' });
-    }
-  };
-
   // ── Plan setup modal confirm ──────────────────────────────────────────────────
 
   const handlePlanSetupConfirm = async (form) => {
@@ -1040,11 +890,8 @@ export function PlanTab({ workout: w, history, coach }) {
       },
     });
 
-    if (mode === 'ai') {
-      generateAIPlan(form, startIso);
-    } else {
-      setPlanSport(form.sport);
-      coach?.regenerateMesocycle?.(histWorkouts, startIso, null, {
+    setPlanSport(form.sport);
+    coach?.regenerateMesocycle?.(histWorkouts, startIso, null, {
         targetSport:    form.sport,
         primaryGoal:    form.primaryGoal,
         goalDate:       form.useGoalDate ? form.goalDate : null,
@@ -1060,13 +907,11 @@ export function PlanTab({ workout: w, history, coach }) {
           hasWattmeter: !!form.hasWattmeter,
         },
       });
-    }
   };
 
   const [confirm, setConfirm] = useState(null);
 
-  const handleRegenerate    = () => setPlanSetupMode('regenerate');
-  const handleGenerateAIPlan = () => setPlanSetupMode('ai');
+  const handleRegenerate = () => setPlanSetupMode('regenerate');
 
   const handleUpdateFuture = () => setConfirm({
     title:        'Update future weeks?',
@@ -1210,11 +1055,6 @@ export function PlanTab({ workout: w, history, coach }) {
           onClick={handleRegenerate}
           style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer' }}
         >Regenerate</button>
-        <button
-          onClick={handleGenerateAIPlan}
-          disabled={aiPlanState.loading}
-          style={{ background: aiPlanState.loading ? 'rgba(168,85,247,0.06)' : 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.4)', borderRadius: 'var(--r-sm)', padding: '4px 10px', color: aiPlanState.loading ? 'rgba(168,85,247,0.5)' : '#a855f7', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: aiPlanState.loading ? 'default' : 'pointer' }}
-        >{aiPlanState.loading ? 'AI generating…' : '✦ AI Plan'}</button>
       </div>
 
       {/* Paused banner */}
@@ -1227,24 +1067,6 @@ export function PlanTab({ workout: w, history, coach }) {
             style={{ background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.35)', borderRadius: 'var(--r-sm)', padding: '3px 10px', fontSize: 11, color: '#4ade80', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
             ▶ Continue plan
           </button>
-        </div>
-      )}
-
-      {/* AI plan active banner */}
-      {activeMesocycle?.meta?.aiGenerated && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
-          <span style={{ fontSize: 11, color: '#a855f7', fontFamily: 'var(--font-mono)' }}>✦ AI-generated {activeMesocycle?.total_weeks ?? activeMesocycle?.weeks?.length ?? 16}-week plan active</span>
-          <button onClick={handleRegenerate}
-            style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.35)', borderRadius: 'var(--r-sm)', padding: '3px 10px', fontSize: 11, color: '#a855f7', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}>
-            Revert to template
-          </button>
-        </div>
-      )}
-
-      {/* AI plan error */}
-      {aiPlanState.error && (
-        <div style={{ fontSize: 11, color: '#ef4444', fontFamily: 'var(--font-mono)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)' }}>
-          {aiPlanState.error}
         </div>
       )}
 

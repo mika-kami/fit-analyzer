@@ -72,9 +72,6 @@ function Btn({ onClick, title, active, accent, children, style: extraStyle }) {
  *   stravaStatus string | null   — 'connected' | other
  *   onReset      fn | null       — back / new file button
  *   resetLabel   string | null   — label for reset button
- *   onSave       fn | null       — save button (detail only)
- *   saveStatus   string | null   — null | 'saving' | 'saved'
- *   onPDF        fn | null
  *   onSignOut    fn | null
  *   children                     — rendered below the top row (e.g. tab bar)
  */
@@ -90,9 +87,6 @@ export function AppHeader({
   stravaStatus,
   onReset,
   resetLabel,
-  onSave,
-  saveStatus,
-  onPDF,
   onSignOut,
   children,
 }) {
@@ -142,29 +136,6 @@ export function AppHeader({
 
           {onProfile && (
             <Btn onClick={onProfile} title="Open profile">Profile</Btn>
-          )}
-
-          {onPDF && (
-            <Btn onClick={onPDF} title="Download PDF report">↓ PDF</Btn>
-          )}
-
-          {onSave && (
-            <button
-              onClick={onSave}
-              disabled={saveStatus === 'saving'}
-              style={btnBase({
-                background: saveStatus === 'saved'
-                  ? 'rgba(74,222,128,0.12)'
-                  : 'rgba(232,168,50,0.08)',
-                border: `1px solid ${saveStatus === 'saved'
-                  ? 'rgba(74,222,128,0.35)'
-                  : 'rgba(232,168,50,0.3)'}`,
-                color: saveStatus === 'saved' ? '#4ade80' : 'var(--accent)',
-                cursor: saveStatus === 'saving' ? 'wait' : 'pointer',
-              })}
-            >
-              {saveStatus === 'saving' ? '…' : saveStatus === 'saved' ? '✓ Saved' : '↓ Save'}
-            </button>
           )}
 
           {onStrava && (
@@ -234,9 +205,6 @@ export function Shell({
   garminStatus,
   onStrava,
   stravaStatus,
-  onSave,
-  saveStatus,
-  onPDF,
   onProfile,
 }) {
   const title    = w ? `${w.sportLabel}${w.bike ? ` — ${w.bike}` : ''}` : 'Training Plan';
@@ -255,9 +223,6 @@ export function Shell({
       stravaStatus={stravaStatus}
       onReset={onReset}
       resetLabel="← History"
-      onSave={onSave}
-      saveStatus={saveStatus}
-      onPDF={onPDF}
     >
       {/* Tab bar */}
       <nav style={{ display: 'flex', gap: 2, padding: '0 var(--sp-6)' }}>
