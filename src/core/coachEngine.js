@@ -37,6 +37,7 @@ export const DEFAULT_MEDICAL_PROFILE = {
   sleepDisorders: '',
 
   // Sport-specific medical
+  hasWattmeter: false,
   lastStressTest: '',
   lastBloodwork: '',
   lastEcg: '',

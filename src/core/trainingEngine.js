@@ -135,6 +135,10 @@ export function sportConfig(workout) {
   const s = (workout?.sport ?? workout?.sportLabel ?? '').toLowerCase();
   const isCycling = s.includes('cycl') || s.includes('bike') || s.includes('велос') || s.includes('road');
   const isRun     = s.includes('run') || s.includes('бег');
+  const hasWattmeter = !!(workout?.hasWattmeter ?? workout?.medical?.hasWattmeter);
+  const ftpVal = Number(workout?.ftp ?? workout?.medical?.ftp ?? 0);
+  const hasFtp = Number.isFinite(ftpVal) && ftpVal > 0;
+  const usePowerTargets = hasWattmeter && hasFtp;
 
   if (isCycling) return {
     sport:        'cycling',
@@ -173,15 +177,21 @@ export function sportConfig(workout) {
         let label, desc;
         if (workMin < 45) {
           label = `Sweet spot — 1×${workMin} min SST (${s} km)`;
-          desc  = `${s} km total: 15 min Z2 warm-up → 1×${workMin} min sweet spot (88–93% FTP, HR ~78–85% max) → 15 min Z1 cool-down.`;
+          desc  = usePowerTargets
+            ? `${s} km total: 15 min Z2 warm-up → 1×${workMin} min sweet spot (88–93% FTP, HR ~78–85% max) → 15 min Z1 cool-down.`
+            : `${s} km total: 15 min Z2 warm-up → 1×${workMin} min upper Z3 / low Z4 (HR ~78–85% max, RPE 7/10) → 15 min Z1 cool-down.`;
         } else if (workMin < 70) {
           const blk = Math.round(workMin / 2);
           label = `Sweet spot — 2×${blk} min SST (${s} km)`;
-          desc  = `${s} km total: 15 min Z2 warm-up → 2×${blk} min SST (5 min Z1 between) → Z2 endurance → 15 min cool-down.`;
+          desc  = usePowerTargets
+            ? `${s} km total: 15 min Z2 warm-up → 2×${blk} min SST (5 min Z1 between) → Z2 endurance → 15 min cool-down.`
+            : `${s} km total: 15 min Z2 warm-up → 2×${blk} min upper Z3 / low Z4 (5 min Z1 between) → Z2 endurance → 15 min cool-down.`;
         } else {
           const blk = Math.round(workMin / 3);
           label = `Sweet spot — 3×${blk} min SST (${s} km)`;
-          desc  = `${s} km total: 15 min Z2 warm-up → 3×${blk} min SST (5 min Z1 between) → Z2 endurance to complete distance → 15 min cool-down.`;
+          desc  = usePowerTargets
+            ? `${s} km total: 15 min Z2 warm-up → 3×${blk} min SST (5 min Z1 between) → Z2 endurance to complete distance → 15 min cool-down.`
+            : `${s} km total: 15 min Z2 warm-up → 3×${blk} min upper Z3 / low Z4 (5 min Z1 between) → Z2 endurance to complete distance → 15 min cool-down.`;
         }
         return { type:'tempo', label, intensity:65, targetKm:s, desc };
       },
@@ -195,8 +205,10 @@ export function sportConfig(workout) {
         else if (workMin < 110) { sets = 3; repMin = 15; recMin = 5; }
         else                    { sets = 4; repMin = 15; recMin = 5; }
         return { type:'interval',
-          label:  `FTP intervals — ${sets}×${repMin} min (${s} km)`, intensity:85, targetKm:s,
-          desc:   `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @FTP (${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
+          label:  `${usePowerTargets ? 'FTP intervals' : 'Threshold intervals'} — ${sets}×${repMin} min (${s} km)`, intensity:85, targetKm:s,
+          desc:   usePowerTargets
+            ? `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @FTP (${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.`
+            : `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @Z4 (HR ~85–90% max, RPE 8/10; ${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
       },
       vo2: (weekKm) => {
         const s       = Math.round(weekKm * 0.32);
@@ -209,7 +221,9 @@ export function sportConfig(workout) {
         else                   { sets = 5; repMin = 6; recMin = 6; }
         return { type:'interval',
           label: `VO₂max — ${sets}×${repMin} min Z5 (${s} km)`, intensity:90, targetKm:s,
-          desc:  `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @VO₂max (>106% FTP / >90% HRmax, ${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
+          desc:  usePowerTargets
+            ? `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @VO₂max (>106% FTP / >90% HRmax, ${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.`
+            : `${s} km total: 20 min Z2 warm-up → ${sets}×${repMin} min @Z5 (>90% HRmax, RPE 9/10, ${recMin} min Z1 recovery) → Z2 endurance to complete distance → 15 min cool-down.` };
       },
       hills: (weekKm) => {
         const s       = Math.round(weekKm * 0.38);
@@ -224,8 +238,10 @@ export function sportConfig(workout) {
       },
       test: (weekKm) => {
         const s = Math.round(weekKm * 0.35);
-        return { type:'test', label:`FTP test ride (${s} km)`, intensity:35, targetKm:s,
-          desc:   `${s} km: 30 min Z2 warm-up → 5 min all-out → 5 min easy → 20 min time-trial effort at maximal sustainable power (record avg power + HR) → easy Z1 home. Do not eat for 2h before.` };
+        return { type:'test', label:`${usePowerTargets ? 'FTP test ride' : 'Threshold test ride'} (${s} km)`, intensity:35, targetKm:s,
+          desc:   usePowerTargets
+            ? `${s} km: 30 min Z2 warm-up → 5 min all-out → 5 min easy → 20 min time-trial effort at maximal sustainable power (record avg power + HR) → easy Z1 home. Do not eat for 2h before.`
+            : `${s} km: 30 min Z2 warm-up → 5 min all-out → 5 min easy → 20 min time-trial effort at maximal sustainable pace (record avg HR + speed) → easy Z1 home. Do not eat for 2h before.` };
       },
     },
   };
@@ -575,7 +591,13 @@ export function generateMesocycle(profile, historyWorkouts = [], startDate = nul
   const refKm      = refWeeklyKm(historyWorkouts);
   const detraining = assessDetraining(historyWorkouts);
   const execution  = computeExecutionTrend(historyWorkouts, 28);
-  const sportObj   = { sport: profile?.targetSport ?? 'running', sportLabel: profile?.targetSport };
+  const sportObj   = {
+    sport: profile?.targetSport ?? 'running',
+    sportLabel: profile?.targetSport,
+    hasWattmeter: !!(profile?.hasWattmeter ?? profile?.medical?.hasWattmeter),
+    ftp: Number(profile?.ftp ?? profile?.medical?.ftp ?? 0) || 0,
+    medical: profile?.medical ?? {},
+  };
   const cfg        = sportConfig(sportObj);
   const speed      = _sportSpeed(cfg.sport);
   // Use the detraining-phase-appropriate floor, not always 'active'

@@ -25,6 +25,7 @@ export function buildAIMesocycleSystemPrompt({
   const goalDate = form.useGoalDate ? (form.goalDate || 'none') : 'none';
   const ftp = profile.ftp ? `${profile.ftp} W` : 'unknown';
   const lthr = profile.lthr ? `${profile.lthr} bpm` : 'unknown';
+  const hasWattmeter = !!(form?.hasWattmeter ?? profile?.hasWattmeter ?? profile?.medical?.hasWattmeter);
   const weight = profile.weightKg ? `${profile.weightKg} kg` : 'unknown';
   const age = profile.age ?? calculateAgeFromBirthday(profile.birthday);
 
@@ -41,6 +42,7 @@ ATHLETE PROFILE:
 - Training days: ${form.trainingDays.join(', ')} — all other days must be type "rest" with targetKm 0
 - Long session day: ${form.longSessionDay}
 - Hard/interval day: ${form.hardSessionDay}
+- Wattmeter available: ${hasWattmeter ? 'yes' : 'no'}
 - FTP: ${ftp}
 - LTHR: ${lthr}
 - Weight: ${weight}
@@ -71,6 +73,7 @@ OUTPUT RULES:
 - "targetKm": MUST equal the km stated in "desc". Never exceed session caps above. Rest days = 0.
 - "label": short name WITHOUT km (e.g. "Z2 Endurance", "Sweet spot", "Long ride") — km shown separately
 - "desc": 1–2 sentences: state the exact km, then protocol (zones, HR targets, rep counts)
+- If wattmeter is "no" OR FTP is "unknown": do NOT use %FTP or power targets. Use HR zones + RPE + cadence guidance.
 - "targetKm" per week = sum of all day targetKm values
 - Every 4th week: recovery week at 60% volume
 - Structure: first 40% base, next 30% build, next 15% peak, last 15% taper

@@ -10,6 +10,7 @@ import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assess
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 import { buildAIMesocycleSystemPrompt } from '../../llm/prompts/index.js';
+import { downloadFitWorkout } from '../../core/fitWorkoutDownload.js';
 
 const OPENAI_KEY      = import.meta.env.VITE_OPENAI_API_KEY ?? '';
 const PLAN_LLM_MODEL  = import.meta.env.VITE_PLAN_LLM_MODEL ?? 'gpt-4o';
@@ -182,10 +183,150 @@ function sessionTags(day) {
   return [];
 }
 
+function hrZoneRange(maxHr, loPct, hiPct) {
+  const lo = Math.round(maxHr * loPct);
+  const hi = Math.round(maxHr * hiPct);
+  return `${lo}-${hi} bpm`;
+}
+
+function parsePlannedMinutesFromText(text = '') {
+  const raw = String(text || '').toLowerCase();
+  if (!raw) return null;
+
+  // Examples: "(~3.0h)", "3 h", "3.5hr", "180 min"
+  const hourMatch = raw.match(/(~?\s*\d+(?:[.,]\d+)?)\s*(h|hr|hrs|hour|hours)\b/);
+  if (hourMatch) {
+    const hours = Number(hourMatch[1].replace(',', '.').replace('~', '').trim());
+    if (Number.isFinite(hours) && hours > 0) return Math.round(hours * 60);
+  }
+
+  const minMatch = raw.match(/(~?\s*\d+(?:[.,]\d+)?)\s*(m|min|mins|minute|minutes)\b/);
+  if (minMatch) {
+    const mins = Number(minMatch[1].replace(',', '.').replace('~', '').trim());
+    if (Number.isFinite(mins) && mins > 0) return Math.round(mins);
+  }
+  return null;
+}
+
+function estimateWorkoutMinutes(day, sport) {
+  // Prefer explicit duration from plan text when available.
+  const fromDesc = parsePlannedMinutesFromText(day?.desc);
+  if (fromDesc != null) return Math.max(30, fromDesc);
+
+  const mps = sport === 'running' ? 3.0 : 5.5; // mirrors fitWorkoutBuilder defaults
+  const distSec = Math.round(((day?.targetKm ?? 0) * 1000) / Math.max(mps, 0.1));
+  return Math.max(30, Math.round(distSec / 60));
+}
+
+function parseStructuredStepsFromDesc(desc = '') {
+  const raw = String(desc || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return [];
+
+  const withoutPrefix = raw.replace(/^~?\s*\d+(?:\.\d+)?\s*km(?:\s*total)?\s*:\s*/i, '');
+  const parts = withoutPrefix
+    .split(/\s*(?:→|->|=>)\s*/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  return parts;
+}
+
+function buildGarminStepGuide(day, sport, maxHr) {
+  const totalMin = estimateWorkoutMinutes(day, sport);
+  const z1 = hrZoneRange(maxHr, 0.50, 0.60);
+  const z2 = hrZoneRange(maxHr, 0.60, 0.70);
+  const z3 = hrZoneRange(maxHr, 0.70, 0.80);
+  const z4 = hrZoneRange(maxHr, 0.80, 0.90);
+  const z5 = hrZoneRange(maxHr, 0.90, 1.00);
+  const title = day.aiTitle || day.label || day.type || 'Workout';
+  const structuredFromDesc = parseStructuredStepsFromDesc(day.desc);
+  const targets = Array.isArray(day.aiCues) ? day.aiCues.filter(Boolean) : [];
+
+  if (structuredFromDesc.length >= 2) {
+    return { title, steps: structuredFromDesc, targets };
+  }
+
+  if (day.type === 'recovery') {
+    return {
+      title,
+      steps: [`Recovery: ${totalMin} min @ Z1 (${z1})`],
+      targets,
+    };
+  }
+  if (day.type === 'aerobic') {
+    const mainMin = Math.max(10, totalMin - 30);
+    return {
+      title,
+      steps: [
+        `Warm-up: 15 min @ Z2 (${z2})`,
+        `Main set: ${mainMin} min @ Z2 (${z2})`,
+        `Cooldown: 15 min @ Z1 (${z1})`,
+      ],
+      targets,
+    };
+  }
+  if (day.type === 'long') {
+    const mainMin = Math.max(10, totalMin - 40);
+    return {
+      title,
+      steps: [
+        `Warm-up: 20 min @ Z2 (${z2})`,
+        `Main set: ${mainMin} min @ Z2 (${z2})`,
+        `Cooldown: 20 min @ Z1 (${z1})`,
+      ],
+      targets,
+    };
+  }
+  if (day.type === 'tempo') {
+    return {
+      title,
+      steps: [
+        `Warm-up: 15 min @ Z2 (${z2})`,
+        `Tempo block: 25 min @ Z3 (${z3})`,
+        `Cooldown: 15 min @ Z1 (${z1})`,
+      ],
+      targets,
+    };
+  }
+  if (day.type === 'interval') {
+    const isVo2 = /vo.*2|vo2|vo₂/i.test(`${day.aiTitle || ''} ${day.label || ''}`);
+    const reps = isVo2 ? 5 : 4;
+    const workMin = isVo2 ? 4 : 8;
+    const workZone = isVo2 ? `Z5 (${z5})` : `Z4 (${z4})`;
+    return {
+      title,
+      steps: [
+        `Warm-up: 15 min @ Z2 (${z2})`,
+        `Main set: ${reps} × ${workMin} min @ ${workZone}`,
+        `Recovery between reps: 4 min @ Z1 (${z1})`,
+        `Cooldown: 15 min @ Z1 (${z1})`,
+      ],
+      targets,
+    };
+  }
+  if (day.type === 'test') {
+    return {
+      title,
+      steps: [`Assessment: ${totalMin} min @ Z2 (${z2}), steady execution`],
+      targets,
+    };
+  }
+
+  return {
+    title,
+    steps: [
+      `Main set: ${totalMin} min, keep targets from session cues`,
+      `Easy finish: 10-15 min @ Z1 (${z1})`,
+    ],
+    targets,
+  };
+}
+
 // ── Day card ─────────────────────────────────────────────────────────────────
 
-function DayCard({ day, weather, index, revealed, compliance }) {
+function DayCard({ day, weather, index, revealed, compliance, planSport, maxHr }) {
   const highlight = day.current;
+  const stepGuide = buildGarminStepGuide(day, planSport, maxHr);
   const compBadge = compliance ? {
     nailed_it:  { color: '#4ade80', label: 'Nailed it' },
     close:      { color: '#fbbf24', label: 'Close' },
@@ -274,6 +415,74 @@ function DayCard({ day, weather, index, revealed, compliance }) {
           boxShadow: highlight ? `0 0 6px ${day.color}55` : 'none',
         }} />
       </div>
+      {day.type !== 'rest' && (
+        <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => downloadFitWorkout(day, planSport, maxHr)}
+              style={{
+                background: 'rgba(96,165,250,0.12)',
+                border: '1px solid rgba(96,165,250,0.35)',
+                borderRadius: 'var(--r-sm)',
+                padding: '4px 10px',
+                color: '#60a5fa',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                cursor: 'pointer',
+              }}
+            >
+              Download .FIT
+            </button>
+          </div>
+          <details style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--r-sm)',
+            padding: '6px 8px',
+          }}>
+            <summary style={{
+              fontSize: 10,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              listStyle: 'none',
+            }}>
+              Workout plan for Garmin
+            </summary>
+            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+              <div style={{
+                background: 'rgba(96,165,250,0.08)',
+                border: '1px solid rgba(96,165,250,0.25)',
+                borderRadius: 'var(--r-sm)',
+                padding: '6px 8px',
+              }}>
+                <div style={{ fontSize: 10, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>{stepGuide.title}</div>
+                <ol style={{ margin: 0, paddingLeft: 16 }}>
+                  {stepGuide.steps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ol>
+                {stepGuide.targets?.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>Targets from plan</div>
+                    <ul style={{ margin: 0, paddingLeft: 14 }}>
+                      {stepGuide.targets.map((target, idx) => (
+                        <li key={idx}>{target}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(day.targetKm ?? 0) > 0 && (
+                  <div style={{ marginTop: 4, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    Planned distance: ~{day.targetKm} km
+                  </div>
+                )}
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
     </div>
   );
 }
@@ -354,6 +563,7 @@ function PlanSetupModal({ mode, profile, defaultSport, onConfirm, onCancel }) {
     hoursWeekend:   profile?.hoursWeekend ?? 3.0,
     longSessionDay: profile?.longSessionDay ?? 'Sa',
     hardSessionDay: profile?.hardSessionDay ?? 'Tu',
+    hasWattmeter:   !!profile?.medical?.hasWattmeter,
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleDay = (d) => setForm(f => ({
@@ -467,6 +677,21 @@ function PlanSetupModal({ mode, profile, defaultSport, onConfirm, onCancel }) {
           </div>
         </div>
 
+        {/* Equipment */}
+        {form.sport === 'cycling' && (
+          <div style={row}>
+            <div style={lbl}>Equipment</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={!!form.hasWattmeter}
+                onChange={(e) => set('hasWattmeter', e.target.checked)}
+              />
+              I have a power meter / wattmeter
+            </label>
+          </div>
+        )}
+
         {/* Weekly hours summary */}
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-raised)', borderRadius: 'var(--r-sm)', padding: '6px 10px' }}>
           {form.trainingDays.length} training days · ~{computeWeeklyHours(form)} h/week
@@ -541,6 +766,7 @@ export function PlanTab({ workout: w, history, coach }) {
   const currentWeekIdx = activeMesocycle?.currentWeekIndex ?? 0;
   const isPreviewMode  = selectedWeekIndex !== currentWeekIdx;
   const todayIso       = localDateIso();
+  const garminMaxHr    = Math.max(100, Number(coach?.profile?.medical?.maxHrTested ?? 180) || 180);
 
   const plan = useMemo(() => {
     if (!displayedWeek) return [];
@@ -807,6 +1033,10 @@ export function PlanTab({ workout: w, history, coach }) {
       hardSessionDay: form.hardSessionDay,
       weeklyHours:    computeWeeklyHours(form),
       targetSport:    form.sport,
+      medical: {
+        ...(coach?.profile?.medical ?? {}),
+        hasWattmeter: !!form.hasWattmeter,
+      },
     });
 
     if (mode === 'ai') {
@@ -823,6 +1053,10 @@ export function PlanTab({ workout: w, history, coach }) {
         hoursWeekend:   form.hoursWeekend,
         longSessionDay: form.longSessionDay,
         hardSessionDay: form.hardSessionDay,
+        medical: {
+          ...(coach?.profile?.medical ?? {}),
+          hasWattmeter: !!form.hasWattmeter,
+        },
       });
     }
   };
@@ -1053,6 +1287,8 @@ export function PlanTab({ workout: w, history, coach }) {
                 index={i}
                 revealed={revealed}
                 compliance={complianceByDate[day.dateIso] ?? missedByDate[day.dateIso]}
+                planSport={planSport}
+                maxHr={garminMaxHr}
               />
             ))}
           </div>
