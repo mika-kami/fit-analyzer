@@ -7,6 +7,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateMesocycle, PHASE_COLORS, PHASE_LABELS, calcTrainingLoad, assessDetraining, refWeeklyKm, TYPE_COLOR, SESSION_INTENTS, DAY_LABELS } from '../../core/trainingEngine.js';
+import { computeExecutionTrend } from '../../core/complianceEngine.js';
+import { scoreReadiness, computeAdaptationLevel, adaptDay, findNextPlannedDay, assessGoalTrajectory } from '../../core/adaptationEngine.js';
 import { fmtDateDM, fmtDateDMY, localDateIso } from '../../core/format.js';
 import { Card, CardLabel } from './OverviewTab.jsx';
 import { downloadFitWorkout } from '../../core/fitWorkoutDownload.js';
@@ -54,6 +56,184 @@ function pickDailyForecastFrom3h(list = [], dayIndex = 0) {
     windDir:      windDirection(best?.wind?.deg),
     weatherLabel: best?.weather?.[0]?.main ?? '',
   };
+}
+
+// ── Signal badge (readiness / TSB / compliance) ───────────────────────────────
+
+function SignalBadge({ label, value, color, sub }) {
+  return (
+    <div style={{
+      background: `${color}10`, border: `1px solid ${color}25`,
+      borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)',
+      minWidth: 72, textAlign: 'center',
+    }}>
+      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 1 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color, fontFamily: 'var(--font-display)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ── Adaptive next workout card ────────────────────────────────────────────────
+
+function AdaptiveWorkoutCard({ planned, adapted, adaptation, readiness, hasCheckin, tsb, complianceAvg, trajectory, todayIso }) {
+  const isToday   = planned?.dateIso === todayIso;
+  const isAdapted = !!(adapted?.adapted);
+  const sessionColor = adapted?.color ?? '#60a5fa';
+
+  const dateLabel = isToday
+    ? 'Today'
+    : planned?.dateIso
+      ? fmtDateDMY(planned.dateIso)
+      : '';
+
+  const levelIcon = {
+    rest:     '● Rest',
+    reduce:   '↓ Reduced',
+    promote:  '↑ Boosted',
+    maintain: '✓ On plan',
+  }[adaptation?.level] ?? '';
+
+  const tsbColor = Number.isFinite(tsb)
+    ? (tsb > 5 ? '#4ade80' : tsb < -15 ? '#ef4444' : '#fbbf24')
+    : '#6b7280';
+  const tsbLabel = Number.isFinite(tsb)
+    ? (tsb > 5 ? 'Fresh' : tsb < -15 ? 'Fatigued' : 'Neutral')
+    : '—';
+
+  const compColor = complianceAvg == null ? '#6b7280'
+    : complianceAvg >= 80 ? '#4ade80'
+    : complianceAvg >= 60 ? '#fbbf24'
+    : '#ef4444';
+  const compLabel = complianceAvg == null ? '—'
+    : complianceAvg >= 80 ? 'Consistent'
+    : complianceAvg >= 60 ? 'Moderate'
+    : 'Low';
+
+  return (
+    <div style={{
+      background:   `${sessionColor}08`,
+      border:       `1px solid ${sessionColor}30`,
+      borderRadius: 'var(--r-md)',
+      padding:      'var(--sp-4)',
+      display:      'flex',
+      flexDirection:'column',
+      gap:          'var(--sp-3)',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', marginBottom: 2 }}>
+            {isToday ? 'TODAY\'S WORKOUT' : 'NEXT WORKOUT'}{isAdapted ? ' · ADAPTED' : ''}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: sessionColor }}>
+            {adapted?.label ?? adapted?.type ?? '—'}
+          </div>
+          {isAdapted && planned && (
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+              Originally: {planned.type}{planned.targetKm > 0 ? ` · ${planned.targetKm} km` : ''}
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{dateLabel}</div>
+          {(adapted?.targetKm ?? 0) > 0 && (
+            <div style={{ fontSize: 18, fontWeight: 700, color: sessionColor, fontFamily: 'var(--font-display)' }}>
+              {adapted.targetKm} km
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Description */}
+      {adapted?.desc && adapted.type !== 'rest' && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, borderLeft: `2px solid ${sessionColor}40`, paddingLeft: 'var(--sp-3)' }}>
+          {adapted.desc}
+        </div>
+      )}
+      {adapted?.type === 'rest' && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Full rest recommended based on today's readiness. Prioritise sleep, hydration, and light stretching.
+        </div>
+      )}
+
+      {/* Signals */}
+      <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+        <SignalBadge
+          label="Readiness"
+          value={readiness.score !== null ? `${readiness.score}/10` : '—'}
+          color={readiness.color ?? '#6b7280'}
+          sub={readiness.label ?? (hasCheckin ? '' : 'No data')}
+        />
+        {Number.isFinite(tsb) && (
+          <SignalBadge
+            label="TSB"
+            value={`${tsb > 0 ? '+' : ''}${tsb.toFixed(0)}`}
+            color={tsbColor}
+            sub={tsbLabel}
+          />
+        )}
+        {complianceAvg !== null && (
+          <SignalBadge
+            label="Compliance"
+            value={`${complianceAvg}%`}
+            color={compColor}
+            sub={compLabel}
+          />
+        )}
+      </div>
+
+      {/* Readiness signal details */}
+      {readiness.factors?.length > 0 && (
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+          {readiness.factors.slice(0, 4).map(f => (
+            <span key={f.key} style={{
+              fontSize: 10, fontFamily: 'var(--font-mono)',
+              color:   f.severity === 'high' ? '#ef4444' : f.severity === 'positive' ? '#4ade80' : '#fbbf24',
+              background: f.severity === 'high' ? 'rgba(239,68,68,0.08)' : f.severity === 'positive' ? 'rgba(74,222,128,0.08)' : 'rgba(251,191,36,0.08)',
+              border: `1px solid ${f.severity === 'high' ? 'rgba(239,68,68,0.25)' : f.severity === 'positive' ? 'rgba(74,222,128,0.25)' : 'rgba(251,191,36,0.25)'}`,
+              borderRadius: 'var(--r-sm)', padding: '2px 6px',
+            }}>{f.label}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Adaptation reason */}
+      {adaptation && (
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)',
+          display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-start',
+        }}>
+          <span style={{ color: adaptation.color, fontWeight: 600, flexShrink: 0 }}>{levelIcon}</span>
+          <span>{adaptation.reason}</span>
+        </div>
+      )}
+
+      {/* No checkin prompt */}
+      {!hasCheckin && (
+        <div style={{
+          fontSize: 11, color: '#fbbf24',
+          background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)',
+          borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          ○ Log today's readiness (Dashboard → Readiness button) for a personalized adaptation
+        </div>
+      )}
+
+      {/* Goal trajectory warning */}
+      {!trajectory?.onTrack && trajectory?.completionRate != null && (
+        <div style={{
+          fontSize: 11, color: '#f97316',
+          background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)',
+          borderRadius: 'var(--r-sm)', padding: 'var(--sp-2) var(--sp-3)',
+        }}>
+          ⚠ {trajectory.message}
+          {trajectory.weeksLeft != null && ` · ${trajectory.weeksLeft} weeks to goal`}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Phase context banner ──────────────────────────────────────────────────────
@@ -757,6 +937,54 @@ export function PlanTab({ workout: w, history, coach }) {
   const todayIso       = localDateIso();
   const garminMaxHr    = Math.max(100, Number(coach?.profile?.medical?.maxHrTested ?? 180) || 180);
 
+  // ── Dynamic adaptation signals ────────────────────────────────────────────
+  const hasCheckin     = coach?.hasDailyCheckin?.(todayIso) ?? false;
+  const todayCheckin   = coach?.getDailyCheckin?.(todayIso) ?? null;
+
+  const trainingLoad   = useMemo(() => calcTrainingLoad(histWorkouts), [histWorkouts]);
+  const executionTrend = useMemo(() => computeExecutionTrend(histWorkouts, 14), [histWorkouts]);
+
+  const nextPlannedDay = useMemo(
+    () => findNextPlannedDay(activeMesocycle, histWorkouts, todayIso),
+    [activeMesocycle, histWorkouts, todayIso]
+  );
+
+  const readiness = useMemo(() => scoreReadiness(todayCheckin), [todayCheckin]);
+
+  const adaptationSportObj = useMemo(() => ({
+    sport:        planSport !== 'mixed' ? planSport : (coach?.profile?.targetSport ?? 'running'),
+    sportLabel:   planSport,
+    hasWattmeter: !!(coach?.profile?.hasWattmeter ?? coach?.profile?.medical?.hasWattmeter),
+    ftp:          Number(coach?.profile?.ftp ?? coach?.profile?.medical?.ftp ?? 0) || 0,
+    medical:      coach?.profile?.medical ?? {},
+  }), [planSport, coach?.profile]);
+
+  const adaptation = useMemo(() => {
+    const lastWorkout = histWorkouts.slice(-1)[0] ?? null;
+    const lastNote    = lastWorkout ? coach?.getWorkoutNote?.(lastWorkout) : null;
+    const goalWeeksLeft = activeMesocycle?.meta?.goalDate
+      ? Math.ceil((new Date(activeMesocycle.meta.goalDate) - new Date(todayIso)) / (7 * 86400000))
+      : null;
+    return computeAdaptationLevel({
+      readinessScore:  readiness.score,
+      tsb:             trainingLoad.tsb,
+      complianceAvg:   executionTrend.avgScore,
+      lastWorkoutPain: Number(lastNote?.pain ?? 0),
+      medicalNotes:    coach?.profile?.injuryNotes ?? '',
+      goalWeeksLeft,
+    });
+  }, [readiness.score, trainingLoad.tsb, executionTrend.avgScore, histWorkouts, coach, activeMesocycle, todayIso]);
+
+  const adaptedNextDay = useMemo(
+    () => adaptDay(nextPlannedDay, adaptation, adaptationSportObj),
+    [nextPlannedDay, adaptation, adaptationSportObj]
+  );
+
+  const goalTrajectory = useMemo(
+    () => assessGoalTrajectory(activeMesocycle, histWorkouts, todayIso),
+    [activeMesocycle, histWorkouts, todayIso]
+  );
+
   const plan = useMemo(() => {
     if (!displayedWeek) return [];
     return displayedWeek.days.map((d, i) => ({
@@ -964,6 +1192,21 @@ export function PlanTab({ workout: w, history, coach }) {
           defaultSport={planSport}
           onConfirm={handlePlanSetupConfirm}
           onCancel={() => setPlanSetupMode(null)}
+        />
+      )}
+
+      {/* Adaptive next workout card */}
+      {adaptedNextDay && !isPaused && (
+        <AdaptiveWorkoutCard
+          planned={nextPlannedDay}
+          adapted={adaptedNextDay}
+          adaptation={adaptation}
+          readiness={readiness}
+          hasCheckin={hasCheckin}
+          tsb={trainingLoad.tsb}
+          complianceAvg={executionTrend.avgScore}
+          trajectory={goalTrajectory}
+          todayIso={todayIso}
         />
       )}
 
