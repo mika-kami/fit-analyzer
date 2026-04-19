@@ -17,7 +17,7 @@ const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY ?? '';
 
 function windDirection(deg) {
   if (deg == null || Number.isNaN(deg)) return '—';
-  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NNW'];
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   const idx = Math.round((((deg % 360) + 360) % 360) / 22.5) % 16;
   return dirs[idx];
 }
@@ -1027,15 +1027,16 @@ export function PlanTab({ workout: w, history, coach }) {
   const weeklyCompliance = useMemo(() => {
     if (!displayedWeek) return null;
     const plannedDays = displayedWeek.days.filter(d => d.type !== 'rest');
-    const completed = plannedDays.filter(d => histWorkouts.some(w => w.date === d.dateIso));
+    const pastDays      = plannedDays.filter(d => d.dateIso && d.dateIso < todayIso);
+    const completed     = pastDays.filter(d => histWorkouts.some(w => w.date === d.dateIso));
     if (!plannedDays.length) return null;
     return {
-      completionRate: Math.round((completed.length / plannedDays.length) * 100),
+      completionRate: pastDays.length > 0 ? Math.round((completed.length / pastDays.length) * 100) : null,
       completed: completed.length,
       planned: plannedDays.length,
-      missed: plannedDays.length - completed.length,
+      missed: pastDays.length - completed.length,
     };
-  }, [displayedWeek, histWorkouts]);
+  }, [displayedWeek, histWorkouts, todayIso]);
 
   const coords = extractWorkoutCoords(w);
 
@@ -1232,7 +1233,7 @@ export function PlanTab({ workout: w, history, coach }) {
             <div style={{ fontSize: 20, fontWeight: 600, color: phaseColor, fontFamily: 'var(--font-display)' }}>~{displayedWeek?.targetKm ?? 0} km</div>
             {weeklyCompliance && (
               <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {weeklyCompliance.completed}/{weeklyCompliance.planned} sessions · {weeklyCompliance.completionRate}%{weeklyCompliance.missed > 0 ? ` · missed ${weeklyCompliance.missed}` : ''}
+                {weeklyCompliance.completed}/{weeklyCompliance.planned} sessions{weeklyCompliance.completionRate != null ? ` · ${weeklyCompliance.completionRate}%` : ''}{weeklyCompliance.missed > 0 ? ` · missed ${weeklyCompliance.missed}` : ''}
               </div>
             )}
           </div>

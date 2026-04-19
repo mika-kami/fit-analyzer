@@ -152,12 +152,15 @@ export default function App() {
       .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
       .then(({ ok, json }) => {
         if (!ok) return;
-        const windMs = Number(json?.wind?.speed ?? 0);
+        const windMs  = Number(json?.wind?.speed ?? 0);
+        const windDeg = json?.wind?.deg ?? null;
+        const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        const windDir = windDeg != null ? dirs[Math.round((((windDeg % 360) + 360) % 360) / 22.5) % 16] : '';
         setDashboardWeather({
           tempC: Math.round(json?.main?.temp ?? 0),
           feelsLikeC: Math.round(json?.main?.feels_like ?? json?.main?.temp ?? 0),
           windKmh: Math.round(windMs * 3.6),
-          windDir: json?.wind?.deg ?? '',
+          windDir,
         });
       })
       .catch(() => {});
